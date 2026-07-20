@@ -1,0 +1,323 @@
+<div id="gridColumnConfigModal" class="modal-backdrop grid-column-config-backdrop" role="dialog" aria-modal="true" aria-labelledby="gridColumnConfigTitle">
+  <div class="modal grid-column-config-modal">
+    <div class="modal-header">
+      <div>
+        <div id="gridColumnConfigTitle" class="modal-title">Cấu hình cột hiển thị</div>
+        <div id="gridColumnConfigSubtitle" class="grid-column-config-subtitle"></div>
+      </div>
+      <button class="close-button" type="button" aria-label="Đóng" onclick="GridColumnConfig.close()">×</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="grid-column-config-note">
+        Chọn các cột cần hiển thị. Thiết lập được lưu trên trình duyệt đang sử dụng và áp dụng riêng cho từng lưới dữ liệu.
+      </div>
+      <div id="gridColumnConfigList" class="grid-column-config-list"></div>
+    </div>
+
+    <div class="modal-footer grid-column-config-footer">
+      <div class="grid-column-config-footer-left">
+        <button class="secondary-button compact-button" type="button" onclick="GridColumnConfig.selectAll()">Chọn tất cả</button>
+        <button class="secondary-button compact-button" type="button" onclick="GridColumnConfig.resetActive()">Mặc định</button>
+      </div>
+      <div class="grid-column-config-footer-right">
+        <button class="cancel-button" type="button" onclick="GridColumnConfig.close()">Huỷ</button>
+        <button class="save-button" type="button" onclick="GridColumnConfig.saveActive()">Áp dụng</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.GridColumnConfig = (function () {
+    const STORAGE_PREFIX = 'thienan.grid.columns.v1.';
+    const registry = {};
+    const volatileSelections = {};
+    let activeGridId = '';
+
+    function register(options) {
+      const config = options || {};
+      const gridId = String(config.gridId || '').trim();
+      const tableId = String(config.tableId || '').trim();
+      const table = document.getElementById(tableId);
+
+      if (!gridId || !table) return;
+
+      const columns = Array.from(table.querySelectorAll('thead th[data-column]')).map(function (header) {
+        const key = String(header.getAttribute('data-column') || '').trim();
+        const label = String(header.getAttribute('data-column-label') || header.textContent || '').trim();
+        const defaultVisible = header.getAttribute('data-default-visible') !== 'false';
+
+        return {
+          key: key,
+          label: label,
+          defaultVisible: defaultVisible
+        };
+      }).filter(function (column) {
+        return column.key;
+      });
+
+      if (!columns.length) return;
+
+      if (registry[gridId] && registry[gridId].observer) {
+        registry[gridId].observer.disconnect();
+      }
+
+      registry[gridId] = {
+        gridId: gridId,
+        tableId: tableId,
+        table: table,
+        buttonId: String(config.buttonId || '').trim(),
+        title: String(config.title || table.getAttribute('data-grid-title') || 'Lưới dữ liệu').trim(),
+        columns: columns,
+        observer: null
+      };
+
+      const observer = new MutationObserver(function () {
+        apply(gridId);
+      });
+
+      const tbody = table.querySelector('tbody');
+      if (tbody) {
+        observer.observe(tbody, {
+          childList: true,
+          subtree: true
+        });
+      }
+
+      registry[gridId].observer = observer;
+      apply(gridId);
+    }
+
+    function getStorageKey(gridId) {
+      return STORAGE_PREFIX + gridId;
+    }
+
+    function getDefaultKeys(config) {
+      const defaults = config.columns.filter(function (column) {
+        return column.defaultVisible;
+      }).map(function (column) {
+        return column.key;
+      });
+
+      return defaults.length ? defaults : [config.columns[0].key];
+    }
+
+    function readVisibleKeys(config) {
+      const validKeys = new Set(config.columns.map(function (column) {
+        return column.key;
+      }));
+
+      if (Array.isArray(volatileSelections[config.gridId])) {
+        return volatileSelections[config.gridId].slice();
+      }
+
+      try {
+        const raw = window.localStorage.getItem(getStorageKey(config.gridId));
+        if (!raw) return getDefaultKeys(config);
+
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return getDefaultKeys(config);
+
+        const visibleKeys = parsed.filter(function (key) {
+          return validKeys.has(key);
+        });
+
+        return visibleKeys.length ? visibleKeys : getDefaultKeys(config);
+      } catch (error) {
+        return getDefaultKeys(config);
+      }
+    }
+
+    function writeVisibleKeys(config, visibleKeys) {
+      volatileSelections[config.gridId] = visibleKeys.slice();
+
+      try {
+        window.localStorage.setItem(
+          getStorageKey(config.gridId),
+          JSON.stringify(visibleKeys)
+        );
+      } catch (error) {
+        // Trình duyệt có thể chặn localStorage. Thiết lập vẫn được áp dụng cho phiên hiện tại.
+      }
+    }
+
+    function removeSavedConfig(config) {
+      delete volatileSelections[config.gridId];
+
+      try {
+        window.localStorage.removeItem(getStorageKey(config.gridId));
+      } catch (error) {
+        // Không cần xử lý thêm nếu trình duyệt chặn localStorage.
+      }
+    }
+
+    function apply(gridId) {
+      const config = registry[gridId];
+      if (!config) return;
+
+      const visibleKeys = readVisibleKeys(config);
+      const visibleSet = new Set(visibleKeys);
+
+      config.table.querySelectorAll('[data-column]').forEach(function (cell) {
+        const key = cell.getAttribute('data-column');
+        cell.hidden = !visibleSet.has(key);
+      });
+
+      config.table.querySelectorAll('tbody td[data-grid-empty]').forEach(function (cell) {
+        cell.colSpan = Math.max(1, visibleKeys.length);
+      });
+
+      config.table.setAttribute('data-visible-column-count', String(visibleKeys.length));
+      config.table.style.minWidth = Math.max(420, visibleKeys.length * 115) + 'px';
+      updateButton(config, visibleKeys.length);
+    }
+
+    function updateButton(config, visibleCount) {
+      if (!config.buttonId) return;
+
+      const button = document.getElementById(config.buttonId);
+      if (!button) return;
+
+      button.innerHTML = '<span aria-hidden="true">⚙</span><span>Cột ' + visibleCount + '/' + config.columns.length + '</span>';
+      button.title = 'Cấu hình cột hiển thị cho ' + config.title;
+      button.setAttribute('aria-label', button.title);
+    }
+
+    function open(gridId) {
+      const config = registry[gridId];
+      if (!config) return;
+
+      activeGridId = gridId;
+      const modal = document.getElementById('gridColumnConfigModal');
+      const subtitle = document.getElementById('gridColumnConfigSubtitle');
+      const list = document.getElementById('gridColumnConfigList');
+      const visibleSet = new Set(readVisibleKeys(config));
+
+      subtitle.textContent = config.title;
+
+      list.innerHTML = config.columns.map(function (column, index) {
+        const checkboxId = 'gridColumnOption_' + index;
+        const checked = visibleSet.has(column.key) ? ' checked' : '';
+
+        return `
+          <label class="grid-column-config-item" for="${escapeAttribute(checkboxId)}">
+            <input
+              id="${escapeAttribute(checkboxId)}"
+              type="checkbox"
+              value="${escapeAttribute(column.key)}"
+              ${checked}
+            >
+            <span class="grid-column-config-checkmark" aria-hidden="true"></span>
+            <span class="grid-column-config-label">${escapeHtml(column.label)}</span>
+          </label>
+        `;
+      }).join('');
+
+      modal.classList.add('show');
+      document.body.classList.add('modal-open');
+
+      const firstCheckbox = list.querySelector('input[type="checkbox"]');
+      if (firstCheckbox) {
+        setTimeout(function () {
+          firstCheckbox.focus();
+        }, 0);
+      }
+    }
+
+    function close() {
+      const modal = document.getElementById('gridColumnConfigModal');
+      if (modal) modal.classList.remove('show');
+      document.body.classList.remove('modal-open');
+      activeGridId = '';
+    }
+
+    function getCheckedKeys() {
+      return Array.from(
+        document.querySelectorAll('#gridColumnConfigList input[type="checkbox"]:checked')
+      ).map(function (checkbox) {
+        return checkbox.value;
+      });
+    }
+
+    function saveActive() {
+      const config = registry[activeGridId];
+      if (!config) return;
+
+      const selectedKeys = getCheckedKeys();
+
+      if (!selectedKeys.length) {
+        showNotification('Cần chọn ít nhất một cột để hiển thị.', 'warning');
+        return;
+      }
+
+      writeVisibleKeys(config, selectedKeys);
+      apply(config.gridId);
+      close();
+    }
+
+    function selectAll() {
+      document.querySelectorAll('#gridColumnConfigList input[type="checkbox"]').forEach(function (checkbox) {
+        checkbox.checked = true;
+      });
+
+    }
+
+    function resetActive() {
+      const config = registry[activeGridId];
+      if (!config) return;
+
+      const defaults = new Set(getDefaultKeys(config));
+
+      document.querySelectorAll('#gridColumnConfigList input[type="checkbox"]').forEach(function (checkbox) {
+        checkbox.checked = defaults.has(checkbox.value);
+      });
+
+      showNotification('Đã chọn lại cấu hình mặc định. Nhấn “Áp dụng” để xác nhận.', 'info');
+    }
+
+    function reset(gridId) {
+      const config = registry[gridId];
+      if (!config) return;
+
+      removeSavedConfig(config);
+      apply(gridId);
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function escapeAttribute(value) {
+      return escapeHtml(value);
+    }
+
+    document.addEventListener('click', function (event) {
+      if (event.target && event.target.id === 'gridColumnConfigModal') {
+        close();
+      }
+    });
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && activeGridId) {
+        close();
+      }
+    });
+
+    return {
+      register: register,
+      apply: apply,
+      open: open,
+      close: close,
+      saveActive: saveActive,
+      selectAll: selectAll,
+      resetActive: resetActive,
+      reset: reset
+    };
+  })();
+</script>

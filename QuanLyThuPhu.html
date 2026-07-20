@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Quản lý thu phí</title>
+
+  <?!= include('AppStyles'); ?>
+
+  <style>
+    .fee-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+      margin-bottom: 22px;
+    }
+
+    .fee-stat-card {
+      background: linear-gradient(180deg, #ffffff, #f8fafc);
+      border: 1px solid #dbeafe;
+      border-radius: 22px;
+      padding: 20px;
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+    }
+
+    .fee-stat-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: #64748b;
+      margin-bottom: 9px;
+    }
+
+    .fee-stat-value {
+      font-size: 28px;
+      font-weight: 800;
+      color: #0f172a;
+      letter-spacing: -0.7px;
+    }
+
+    .fee-stat-sub {
+      margin-top: 7px;
+      font-size: 13px;
+      color: #64748b;
+    }
+
+    .fee-filter-row {
+      display: grid;
+      grid-template-columns: 200px 200px 1fr 130px;
+      gap: 14px;
+      margin-bottom: 20px;
+      align-items: end;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .status-paid {
+      background: #ecfdf5;
+      color: #047857;
+    }
+
+    .status-unpaid {
+      background: #fff7ed;
+      color: #c2410c;
+    }
+
+    .status-partial {
+      background: #fefce8;
+      color: #a16207;
+    }
+
+    .status-over {
+      background: #f3e8ff;
+      color: #7e22ce;
+    }
+
+    .status-temporary {
+      background: #e2e8f0;
+      color: #475569;
+    }
+
+    .fee-modal {
+      max-width: 720px;
+      max-height: calc(100vh - 48px);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .fee-modal .modal-header {
+      min-height: 58px;
+      padding: 13px 20px;
+      flex-shrink: 0;
+    }
+
+    .fee-modal .modal-title {
+      font-size: 20px;
+    }
+
+    .fee-modal .modal-body {
+      padding: 18px 20px;
+      overflow-y: auto;
+    }
+
+    .fee-modal .modal-footer {
+      padding: 14px 20px 18px;
+      flex-shrink: 0;
+      border-top: 1px solid #e2e8f0;
+      background: #ffffff;
+    }
+
+    .fee-form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px 18px;
+    }
+
+    .fee-form-grid .full {
+      grid-column: 1 / -1;
+    }
+
+    .student-info-box {
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      border-radius: 18px;
+      padding: 15px 16px;
+      margin-bottom: 16px;
+    }
+
+    .student-info-name {
+      font-size: 18px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    .student-info-sub {
+      margin-top: 6px;
+      font-size: 13px;
+      color: #0369a1;
+      font-weight: 700;
+    }
+
+    .sheet-name-note {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #64748b;
+      font-weight: 600;
+    }
+
+    input[readonly] {
+      background: #e2e8f0;
+      color: #475569;
+      cursor: not-allowed;
+    }
+
+    .temporary-option {
+      border: 1px solid #cbd5e1;
+      background: #f8fafc;
+      border-radius: 16px;
+      padding: 14px 16px;
+    }
+
+    .temporary-option.active {
+      border-color: #94a3b8;
+      background: #f1f5f9;
+    }
+
+    .checkbox-row {
+      display: flex !important;
+      align-items: flex-start;
+      gap: 11px;
+      margin: 0 !important;
+      cursor: pointer;
+      color: #0f172a !important;
+    }
+
+    .checkbox-row input[type="checkbox"] {
+      width: 19px;
+      height: 19px;
+      min-width: 19px;
+      margin: 1px 0 0;
+      padding: 0;
+      accent-color: #0284c7;
+      cursor: pointer;
+    }
+
+    .checkbox-title {
+      font-size: 14px;
+      font-weight: 800;
+      line-height: 1.45;
+    }
+
+
+
+
+    .receipt-field {
+      background: #f1f5f9 !important;
+      color: #0f172a !important;
+      font-weight: 800;
+    }
+
+    .print-button {
+      height: 42px;
+      border-radius: 14px;
+      padding: 0 18px;
+      border: none;
+      background: #0f766e;
+      color: #ffffff;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    @media (max-width: 900px) {
+      .fee-stat-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .fee-filter-row {
+        grid-template-columns: 1fr;
+      }
+
+      .fee-form-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+  <?!= include('AppTheme'); ?>
+</head>
+
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-logo">TA</div>
+        <div class="brand-title">Thiên Ân Education - Khơi nguồn tri thức</div>
+      </div>
+
+      <div class="session-box">
+        <span class="session-label">Kỳ học:</span>
+        <strong><?= tenKyHoc ?></strong>
+
+        <select class="header-action-select" onchange="handleHeaderAction(this)">
+          <option value="">Tuỳ chọn</option>
+          <option value="" disabled>Cache dữ liệu: <?!= cacheEnabled ? 'Đang bật' : 'Đang tắt' ?></option>
+          <option value="TOGGLE_CACHE"><?!= cacheEnabled ? 'Tắt cache dữ liệu' : 'Bật cache dữ liệu' ?></option>
+          <option value="CLEAR_CACHE">Làm mới dữ liệu</option>
+          <option value="LOGOUT">Đăng xuất</option>
+        </select>
+      </div>
+    </header>
+
+    <nav class="ribbon">
+      <button class="ribbon-button" onclick="goPage('Index')">
+        <span>🏠</span>
+        <span>Trang chính</span>
+      </button>
+
+      <button class="ribbon-button" onclick="goPage('QuanLyHocSinh')">
+        <span>👨‍🎓</span>
+        <span>Quản lý học sinh</span>
+      </button>
+
+      <button class="ribbon-button active" onclick="goPage('QuanLyThuPhu')">
+        <span>💰</span>
+        <span>Quản lý thu phí</span>
+      </button>
+
+
+      <button class="ribbon-button" onclick="goPage('QuanLyThuChi')">
+        <span>💼</span>
+        <span>Quản lý thu chi</span>
+      </button>
+    </nav>
+
+    <main class="main">
+      <section class="page-card">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Quản lý thu phí</div>
+            <div class="page-subtitle">
+              Theo dõi học phí theo tháng, điều chỉnh mức thu và in biên lai.
+            </div>
+            <div id="sheetNameNote" class="sheet-name-note"></div>
+          </div>
+        </div>
+
+        <div class="content">
+          <div class="fee-filter-row">
+            <div class="field">
+              <label>Tháng thu phí</label>
+              <input id="filterMonth" type="month" onchange="loadThuPhiData()">
+            </div>
+
+            <div class="field">
+              <label>Trạng thái</label>
+              <select id="filterPaymentStatus" onchange="renderTable()">
+                <option value="ALL">Tất cả</option>
+                <option value="TEMPORARY">Tạm nghỉ</option>
+                <option value="UNPAID">Chưa thu phí</option>
+                <option value="PARTIAL">Thu một phần</option>
+                <option value="PAID">Đã thu đủ</option>
+                <option value="OVER">Thu dư</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label>Tìm kiếm học sinh</label>
+              <input id="filterKeyword" type="text" placeholder="Nhập tên học sinh hoặc số điện thoại...">
+            </div>
+
+            <button class="secondary-button" onclick="loadThuPhiData()">
+              Lọc dữ liệu
+            </button>
+          </div>
+
+          <div class="fee-stat-grid">
+            <div class="fee-stat-card">
+              <div class="fee-stat-label">Đã thu phí</div>
+              <div id="statPaidCount" class="fee-stat-value">0/0</div>
+              <div id="statPaidText" class="fee-stat-sub">Số học sinh đã có đóng phí trong tháng</div>
+            </div>
+
+            <div class="fee-stat-card">
+              <div class="fee-stat-label">Tổng số tiền thu được</div>
+              <div id="statCollected" class="fee-stat-value">0đ</div>
+              <div class="fee-stat-sub">Tổng tiền đã ghi nhận trong tháng</div>
+            </div>
+
+            <div class="fee-stat-card">
+              <div class="fee-stat-label">Tổng số tiền còn lại</div>
+              <div id="statRemaining" class="fee-stat-value">0đ</div>
+              <div class="fee-stat-sub">Tổng học phí còn phải thu</div>
+            </div>
+          </div>
+
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin:14px 0 16px;">
+            <div class="pill-badge">
+              <span>💰</span>
+              <span id="countText">0 học sinh</span>
+            </div>
+          </div>
+
+          <div class="grid-toolbar">
+            <div class="grid-toolbar-left">
+              <button id="feeColumnButton" class="column-config-button" type="button" onclick="GridColumnConfig.open('fee-list')">
+                <span aria-hidden="true">⚙</span>
+                <span>Cấu hình cột</span>
+              </button>
+            </div>
+
+            <div class="grid-toolbar-right">
+              <label for="feeRowsLimit">Hiển thị</label>
+              <select id="feeRowsLimit" class="rows-select" onchange="applyGridRowsLimit('feeTableWrap', 'feeRowsLimit')">
+                <option value="20" selected>20 dòng</option>
+                <option value="30">30 dòng</option>
+                <option value="50">50 dòng</option>
+                <option value="ALL">Tất cả</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="feeTableWrap" class="table-wrap">
+            <table id="feeDataGrid" data-grid-title="Danh sách thu phí theo tháng">
+              <thead>
+                <tr>
+                  <th data-column="stt">STT</th>
+                  <th data-column="student">Học sinh</th>
+                  <th data-column="receiptNo">Số phiếu</th>
+                  <th data-column="grade">Khối</th>
+                  <th data-column="class">Lớp</th>
+                  <th data-column="monthlyFee">Học phí tháng</th>
+                  <th data-column="collected">Đã thu</th>
+                  <th data-column="remaining">Còn lại</th>
+                  <th data-column="paidFlag">Đã đóng</th>
+                  <th data-column="paidDate">Ngày đóng</th>
+                  <th data-column="moneySource">Nguồn thu</th>
+                  <th data-column="status">Trạng thái</th>
+                  <th data-column="actions">Thao tác</th>
+                </tr>
+              </thead>
+
+              <tbody id="feeTableBody">
+                <tr>
+                  <td data-grid-empty="true" colspan="13">
+                    <div class="empty-box">Đang tải dữ liệu...</div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="feeModal" class="modal-backdrop">
+    <div class="modal fee-modal">
+      <div class="modal-header">
+        <div class="modal-title">Thu học phí</div>
+        <button class="close-button" onclick="closeFeeModal()">×</button>
+      </div>
+
+      <div class="modal-body">
+        <input type="hidden" id="formMaHocSinh">
+
+        <div class="student-info-box">
+          <div id="formStudentName" class="student-info-name">Học sinh</div>
+          <div id="formStudentSub" class="student-info-sub">Thông tin lớp</div>
+        </div>
+
+        <div class="fee-form-grid">
+          <div class="field">
+            <label>Số phiếu</label>
+            <input id="formSoPhieu" class="receipt-field" type="text" readonly placeholder="Hệ thống tự tạo khi lưu">
+          </div>
+
+          <div class="field">
+            <label>Tháng thu phí</label>
+            <input id="formMonthText" type="text" readonly>
+          </div>
+
+          <div class="field">
+            <label>Ngày thu</label>
+            <input id="formNgayThu" type="date">
+          </div>
+
+          <div class="field">
+            <label>Nguồn nhận tiền</label>
+            <select id="formNguonTienThu">
+              <option value="">Chọn nguồn nhận tiền</option>
+            </select>
+          </div>
+
+          <div id="temporaryOption" class="field full temporary-option">
+            <label class="checkbox-row" for="formTamNghi">
+              <input id="formTamNghi" type="checkbox" onchange="handleTamNghiChange()">
+              <span class="checkbox-title">Tạm nghỉ</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label>Học phí tháng</label>
+            <input id="formSoTienPhaiThu" type="text" inputmode="numeric" oninput="formatMoneyInput('formSoTienPhaiThu'); updateFeePreview();" placeholder="Nhập học phí tháng">
+          </div>
+
+          <div class="field">
+            <label>Đã thu</label>
+            <input id="formSoTienDaThu" type="text" inputmode="numeric" oninput="formatMoneyInput('formSoTienDaThu'); updateFeePreview();" placeholder="Nhập số tiền đã thu">
+          </div>
+
+          <div class="field">
+            <label>Còn lại</label>
+            <input id="formConLaiPreview" type="text" readonly>
+          </div>
+
+          <div class="field full">
+            <label>Ghi chú</label>
+            <textarea id="formGhiChu" placeholder="Thông tin bổ sung nếu có"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="cancel-button" onclick="closeFeeModal()">Huỷ</button>
+        <button id="btnSaveFee" class="save-button" onclick="saveThuPhi(false)">Lưu</button>
+        <button class="print-button" onclick="saveThuPhi(true)">Lưu & in</button>
+      </div>
+    </div>
+  </div>
+
+  <?!= include('AppGridConfig'); ?>
+  <?!= include('AppNotification'); ?>
+  <?!= include('AppBusy'); ?>
+
+  <script>
+    const APP_TOKEN = <?!= JSON.stringify(token) ?>;
+    const APP_URL = <?!= JSON.stringify(appUrl) ?>;
+    const APP_CACHE_ENABLED = <?!= JSON.stringify(cacheEnabled) ?>;
+
+    let feeStudents = [];
+    let currentMonthText = '';
+    let currentSheetName = '';
+    let feeBeforeTemporary = 0;
+    let paidBeforeTemporary = 0;
+    let dateBeforeTemporary = '';
+    let moneySources = [];
+    let sourceBeforeTemporary = '';
+    let currentFeeStudent = null;
+
+    document.addEventListener('DOMContentLoaded', function () {
+      GridColumnConfig.register({
+        gridId: 'fee-list',
+        tableId: 'feeDataGrid',
+        buttonId: 'feeColumnButton',
+        title: 'Danh sách thu phí theo tháng'
+      });
+      document.getElementById('filterMonth').value = getCurrentYearMonth();
+      applyGridRowsLimit('feeTableWrap', 'feeRowsLimit');
+
+      document.getElementById('filterKeyword').addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          renderTable();
+        }
+      });
+
+      document.getElementById('filterKeyword').addEventListener('input', function () {
+        renderTable();
+      });
+
+      document.getElementById('feeModal').addEventListener('click', function (event) {
+        if (event.target.id === 'feeModal') {
+          closeFeeModal();
+        }
+      });
+
+      loadThuPhiData();
+    });
+
+    function goPage(page) {
+      window.top.location.href = APP_URL
+        + '?page=' + encodeURIComponent(page)
+        + '&token=' + encodeURIComponent(APP_TOKEN);
+    }
+
+    function handleHeaderAction(select) {
+      const action = select.value;
+      select.value = '';
+
+      if (action === 'LOGOUT') {
+        logoutApp();
+        return;
+      }
+
+      if (action === 'TOGGLE_CACHE') {
+        toggleDataCache();
+        return;
+      }
+
+      if (action === 'CLEAR_CACHE') {
+        clearCacheAndReloadPage();
+      }
+    }
+
+    function logoutApp() {
+      showBusy('Đang đăng xuất...');
+
+      google.script.run
+        .withSuccessHandler(function () {
+          window.top.location.href = APP_URL + '?page=Login';
+        })
+        .withFailureHandler(function () {
+          window.top.location.href = APP_URL + '?page=Login';
+        })
+        .logout(APP_TOKEN);
+    }
+
+    function toggleDataCache() {
+      const nextEnabled = !APP_CACHE_ENABLED;
+
+      showBusy(nextEnabled
+        ? 'Đang bật cache dữ liệu và nạp dữ liệu mới...'
+        : 'Đang tắt cache dữ liệu...');
+
+      google.script.run
+        .withSuccessHandler(function () {
+          window.top.location.reload();
+        })
+        .withFailureHandler(function (error) {
+          hideBusy();
+          showNotification(getErrorMessage(error), 'error');
+        })
+        .setDataCacheEnabled(APP_TOKEN, nextEnabled);
+    }
+
+    function clearCacheAndReloadPage() {
+      showBusy(APP_CACHE_ENABLED
+        ? 'Đang xoá cache cũ và nạp lại dữ liệu mới...'
+        : 'Đang tải lại dữ liệu trực tiếp từ Google Sheet...');
+
+      google.script.run
+        .withSuccessHandler(function () {
+          window.top.location.reload();
+        })
+        .withFailureHandler(function (error) {
+          hideBusy();
+          showNotification(getErrorMessage(error), 'error');
+        })
+        .clearCacheAndReload(APP_TOKEN);
+    }
+
+    function getCurrentYearMonth() {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+
+      return year + '-' + month;
+    }
+
+    function getTodayInput() {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+
+      return year + '-' + month + '-' + day;
+    }
+
+    function loadThuPhiData() {
+      const yearMonth = document.getElementById('filterMonth').value;
+
+      showBusy('Đang tải dữ liệu thu phí...');
+
+      google.script.run
+        .withSuccessHandler(function (res) {
+          const data = parseServerJson(res);
+
+          hideBusy();
+
+          feeStudents = data.students || [];
+          moneySources = data.sources || [];
+          renderMoneySourceSelect();
+          currentMonthText = data.monthText || '';
+          currentSheetName = data.sheetName || '';
+
+          document.getElementById('sheetNameNote').textContent = currentSheetName
+            ? 'Danh sách tháng đã chốt và đang lưu tại sheet: ' + currentSheetName
+            : '';
+
+          renderSummary(data.summary || {});
+          renderTable();
+        })
+        .withFailureHandler(function (error) {
+          hideBusy();
+          showMessage(getErrorMessage(error), 'error');
+        })
+        .getQuanLyThuPhiData(APP_TOKEN, yearMonth);
+    }
+
+    function renderMoneySourceSelect() {
+      const select = document.getElementById('formNguonTienThu');
+      const current = select.value;
+      select.innerHTML = '<option value="">Chọn nguồn nhận tiền</option>';
+
+      moneySources.forEach(function (item) {
+        select.appendChild(new Option(item.tenNguonTien, item.maNguonTien));
+      });
+
+      if (current && Array.from(select.options).some(function (option) {
+        return option.value === current;
+      })) {
+        select.value = current;
+      }
+    }
+
+    function renderSummary(summary) {
+      const paidCount = summary.paidCount || 0;
+      const totalStudents = summary.totalStudents || 0;
+      const temporaryLeaveCount = summary.temporaryLeaveCount || 0;
+
+      document.getElementById('statPaidCount').textContent = paidCount + '/' + totalStudents;
+      document.getElementById('statPaidText').textContent =
+        'Đã thu ' + paidCount + '/' + totalStudents + ' học sinh' +
+        (temporaryLeaveCount > 0 ? ' · Tạm nghỉ ' + temporaryLeaveCount : '');
+
+      document.getElementById('statCollected').textContent = formatMoney(summary.totalCollected || 0);
+      document.getElementById('statRemaining').textContent = formatMoney(summary.totalRemaining || 0);
+
+      if (Number(summary.unassignedCount || 0) > 0) {
+        showMessage(
+          'Có ' + summary.unassignedCount + ' khoản đã thu nhưng chưa xác định nguồn tiền. Vui lòng cập nhật lại.',
+          'error'
+        );
+      }
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('feeTableBody');
+      const keyword = normalizeText(document.getElementById('filterKeyword').value);
+      const paymentStatus = document.getElementById('filterPaymentStatus').value;
+
+      let list = feeStudents.slice();
+
+      if (paymentStatus === 'TEMPORARY') {
+        list = list.filter(item => item.tamNghi === true);
+      }
+
+      if (paymentStatus === 'UNPAID') {
+        list = list.filter(item => !item.tamNghi && Number(item.soTienDaThu || 0) <= 0);
+      }
+
+      if (paymentStatus === 'PARTIAL') {
+        list = list.filter(item => {
+          const hocPhi = Number(item.hocPhi || 0);
+          const daThu = Number(item.soTienDaThu || 0);
+          return !item.tamNghi && daThu > 0 && hocPhi > 0 && daThu < hocPhi;
+        });
+      }
+
+      if (paymentStatus === 'PAID') {
+        list = list.filter(item => {
+          const hocPhi = Number(item.hocPhi || 0);
+          const daThu = Number(item.soTienDaThu || 0);
+          return !item.tamNghi && hocPhi > 0 && daThu === hocPhi;
+        });
+      }
+
+      if (paymentStatus === 'OVER') {
+        list = list.filter(item => {
+          const hocPhi = Number(item.hocPhi || 0);
+          const daThu = Number(item.soTienDaThu || 0);
+          return !item.tamNghi && hocPhi > 0 && daThu > hocPhi;
+        });
+      }
+
+      if (keyword) {
+        list = list.filter(item => {
+          const text = normalizeText(
+            item.hoTen + ' ' +
+            item.sdtPhuHuynh + ' ' +
+            item.tenLop + ' ' +
+            item.tenKhoi
+          );
+
+          return text.indexOf(keyword) !== -1;
+        });
+      }
+
+      document.getElementById('countText').textContent = list.length + ' học sinh';
+
+      if (list.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td data-grid-empty="true" colspan="13">
+              <div class="empty-box">Không có học sinh phù hợp với bộ lọc hiện tại.</div>
+            </td>
+          </tr>
+        `;
+        GridColumnConfig.apply('fee-list');
+        return;
+      }
+
+      tbody.innerHTML = list.map((item, index) => {
+        const daDongText = !item.tamNghi && Number(item.soTienDaThu || 0) > 0 ? 'Có' : 'Không';
+
+        return `
+          <tr>
+            <td data-column="stt">${index + 1}</td>
+
+            <td data-column="student">
+              <div class="student-name">${escapeHtml(item.hoTen)}</div>
+              <div style="font-size:12px;color:#64748b;margin-top:4px;">${escapeHtml(item.sdtPhuHuynh || '')}</div>
+            </td>
+
+            <td data-column="receiptNo"><strong>${escapeHtml(item.soPhieu || '')}</strong></td>
+            <td data-column="grade">${escapeHtml(item.tenKhoi || item.khoi || '')}</td>
+            <td data-column="class"><span class="class-badge">${escapeHtml(item.tenLop || item.lop || '')}</span></td>
+
+            <td data-column="monthlyFee"><strong>${formatMoney(item.hocPhi || 0)}</strong></td>
+            <td data-column="collected"><strong>${formatMoney(item.soTienDaThu || 0)}</strong></td>
+            <td data-column="remaining"><strong>${formatMoney(item.conLai || 0)}</strong></td>
+
+            <td data-column="paidFlag">${escapeHtml(daDongText)}</td>
+            <td data-column="paidDate">${escapeHtml(item.ngayThuDisplay || '')}</td>
+            <td data-column="moneySource">${escapeHtml(item.tenNguonTien || '')}</td>
+            <td data-column="status">${renderStatus(item.trangThai)}</td>
+
+            <td data-column="actions">
+              <div class="action-group">
+                <button class="mini-button edit" onclick="openFeeModal('${escapeAttribute(item.maHocSinh)}')">
+                  ${item.tamNghi || Number(item.soTienDaThu || 0) > 0 ? 'Cập nhật' : 'Thu phí'}
+                </button>
+                ${item.soPhieu && !item.tamNghi && Number(item.soTienDaThu || 0) > 0
+                  ? `<button class="mini-button" onclick="printTuitionReceipt('${escapeAttribute(item.maHocSinh)}')">In</button>`
+                  : ''}
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+      GridColumnConfig.apply('fee-list');
+    }
+
+    function openFeeModal(maHocSinh) {
+      const item = feeStudents.find(student => student.maHocSinh === maHocSinh);
+
+      if (!item) {
+        showMessage('Không tìm thấy học sinh cần thu phí.', 'error');
+        return;
+      }
+
+      currentFeeStudent = item;
+      document.getElementById('formMaHocSinh').value = item.maHocSinh;
+      document.getElementById('formSoPhieu').value = item.soPhieu || '';
+      document.getElementById('formStudentName').textContent = item.hoTen;
+      document.getElementById('formStudentSub').textContent =
+        (item.tenKhoi || item.khoi || '') + ' - ' +
+        (item.tenLop || item.lop || '') +
+        ' | Tháng ' + currentMonthText;
+
+      feeBeforeTemporary = Number(item.hocPhiGoc || item.hocPhi || 0);
+      paidBeforeTemporary = item.tamNghi
+        ? feeBeforeTemporary
+        : Number(item.soTienDaThu || 0);
+      dateBeforeTemporary = item.ngayThu || getTodayInput();
+      sourceBeforeTemporary = item.maNguonTien || '';
+
+      document.getElementById('formMonthText').value = currentMonthText;
+      document.getElementById('formTamNghi').checked = item.tamNghi === true;
+      document.getElementById('formNgayThu').value = item.tamNghi
+        ? ''
+        : (item.ngayThu || getTodayInput());
+      document.getElementById('formSoTienPhaiThu').value = formatMoneyInputValue(
+        item.tamNghi ? 0 : Number(item.hocPhi || 0)
+      );
+      document.getElementById('formSoTienDaThu').value = formatMoneyInputValue(
+        item.tamNghi
+          ? 0
+          : (Number(item.soTienDaThu || 0) > 0
+            ? item.soTienDaThu
+            : item.hocPhi || 0)
+      );
+
+      document.getElementById('formNguonTienThu').value = item.tamNghi
+        ? ''
+        : sourceBeforeTemporary;
+      document.getElementById('formGhiChu').value = item.ghiChu || '';
+
+      applyTemporaryState(item.tamNghi === true, false);
+      updateFeePreview();
+      document.getElementById('feeModal').classList.add('show');
+    }
+
+    function handleTamNghiChange() {
+      const checked = document.getElementById('formTamNghi').checked;
+      applyTemporaryState(checked, true);
+    }
+
+    function applyTemporaryState(checked, rememberCurrentValues) {
+      const option = document.getElementById('temporaryOption');
+      const feeInput = document.getElementById('formSoTienPhaiThu');
+      const paidInput = document.getElementById('formSoTienDaThu');
+      const dateInput = document.getElementById('formNgayThu');
+      const sourceSelect = document.getElementById('formNguonTienThu');
+
+      option.classList.toggle('active', checked);
+
+      if (checked) {
+        if (rememberCurrentValues) {
+          const currentFee = Number(getMoneyRawValue('formSoTienPhaiThu') || 0);
+          const currentPaid = Number(getMoneyRawValue('formSoTienDaThu') || 0);
+
+          if (currentFee > 0) feeBeforeTemporary = currentFee;
+          paidBeforeTemporary = currentPaid;
+          dateBeforeTemporary = dateInput.value || getTodayInput();
+          sourceBeforeTemporary = sourceSelect.value || '';
+        }
+
+        feeInput.value = '0';
+        paidInput.value = '0';
+        dateInput.value = '';
+        sourceSelect.value = '';
+
+        feeInput.disabled = true;
+        paidInput.disabled = true;
+        dateInput.disabled = true;
+        sourceSelect.disabled = true;
+      } else {
+        feeInput.disabled = false;
+        paidInput.disabled = false;
+        dateInput.disabled = false;
+        sourceSelect.disabled = false;
+
+        if (rememberCurrentValues) {
+          feeInput.value = formatMoneyInputValue(feeBeforeTemporary || 0);
+          paidInput.value = formatMoneyInputValue(
+            paidBeforeTemporary > 0 ? paidBeforeTemporary : feeBeforeTemporary || 0
+          );
+          dateInput.value = dateBeforeTemporary || getTodayInput();
+          sourceSelect.value = sourceBeforeTemporary || '';
+        }
+      }
+
+      updateFeePreview();
+    }
+
+    function updateFeePreview() {
+      const tamNghi = document.getElementById('formTamNghi').checked;
+      const hocPhi = tamNghi ? 0 : Number(getMoneyRawValue('formSoTienPhaiThu') || 0);
+      const daThu = tamNghi ? 0 : Number(getMoneyRawValue('formSoTienDaThu') || 0);
+      const conLai = Math.max(hocPhi - daThu, 0);
+
+      document.getElementById('formConLaiPreview').value = formatMoneyInputValue(conLai);
+    }
+
+    function closeFeeModal() {
+      document.getElementById('feeModal').classList.remove('show');
+    }
+
+    function saveThuPhi(printAfter) {
+      const btn = document.getElementById('btnSaveFee');
+      const tamNghi = document.getElementById('formTamNghi').checked;
+
+      const data = {
+        maHocSinh: document.getElementById('formMaHocSinh').value,
+        yearMonth: document.getElementById('filterMonth').value,
+        hocPhi: tamNghi ? '0' : (getMoneyRawValue('formSoTienPhaiThu') || '0'),
+        soTienDaThu: tamNghi ? '0' : (getMoneyRawValue('formSoTienDaThu') || '0'),
+        tamNghi: tamNghi,
+        ngayThu: tamNghi ? '' : document.getElementById('formNgayThu').value,
+        maNguonTien: tamNghi ? '' : document.getElementById('formNguonTienThu').value,
+        ghiChu: document.getElementById('formGhiChu').value.trim()
+      };
+
+      if (!tamNghi && getMoneyRawValue('formSoTienPhaiThu') === '') {
+        showNotification('Vui lòng nhập học phí tháng.', 'warning');
+        return;
+      }
+
+      if (!tamNghi && Number(data.soTienDaThu || 0) > 0 && !data.ngayThu) {
+        showNotification('Vui lòng nhập ngày thu.', 'warning');
+        return;
+      }
+
+      if (!tamNghi && Number(data.soTienDaThu || 0) > 0 && !data.maNguonTien) {
+        showNotification('Vui lòng chọn nguồn nhận tiền.', 'warning');
+        return;
+      }
+
+      const pendingPrintWindow = printAfter && !tamNghi && Number(data.soTienDaThu || 0) > 0
+        ? window.open('', '_blank', 'width=850,height=900')
+        : null;
+      if (printAfter && !tamNghi && Number(data.soTienDaThu || 0) > 0 && !pendingPrintWindow) {
+        showNotification('Trình duyệt đang chặn cửa sổ in. Phiếu vẫn sẽ được lưu.', 'warning');
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Đang lưu...';
+      showBusy(tamNghi ? 'Đang cập nhật trạng thái tạm nghỉ...' : 'Đang lưu phiếu thu học phí...');
+
+      google.script.run
+        .withSuccessHandler(function (res) {
+          const result = parseServerJson(res) || {};
+          btn.disabled = false;
+          btn.textContent = 'Lưu';
+          hideBusy();
+
+          const savedItem = Object.assign({}, currentFeeStudent || {}, {
+            soPhieu: result.soPhieu || document.getElementById('formSoPhieu').value || '',
+            hocPhi: Number(data.hocPhi || 0),
+            soTienDaThu: Number(data.soTienDaThu || 0),
+            conLai: Math.max(Number(data.hocPhi || 0) - Number(data.soTienDaThu || 0), 0),
+            tamNghi: tamNghi,
+            ngayThu: data.ngayThu,
+            ngayThuDisplay: formatDateDisplayClient(data.ngayThu),
+            maNguonTien: data.maNguonTien,
+            tenNguonTien: getMoneySourceName(data.maNguonTien),
+            ghiChu: data.ghiChu,
+            monthText: currentMonthText
+          });
+
+          document.getElementById('formSoPhieu').value = savedItem.soPhieu;
+          closeFeeModal();
+          showMessage(result.message || 'Đã lưu thông tin thu phí.', 'success');
+
+          if (printAfter && !tamNghi && savedItem.soPhieu && savedItem.soTienDaThu > 0) {
+            printTuitionReceiptDocument(savedItem, pendingPrintWindow);
+          }
+
+          loadThuPhiData();
+        })
+        .withFailureHandler(function (error) {
+          btn.disabled = false;
+          btn.textContent = 'Lưu';
+          hideBusy();
+          if (pendingPrintWindow) pendingPrintWindow.close();
+          showNotification(getErrorMessage(error), 'error');
+        })
+        .saveThuPhiHocSinh(APP_TOKEN, data);
+    }
+
+    function getMoneySourceName(code) {
+      const found = moneySources.find(item => item.maNguonTien === code);
+      return found ? found.tenNguonTien : '';
+    }
+
+    function formatDateDisplayClient(value) {
+      if (!value) return '';
+      const parts = String(value).split('-');
+      return parts.length === 3 ? parts[2] + '/' + parts[1] + '/' + parts[0] : value;
+    }
+
+    function printTuitionReceipt(maHocSinh) {
+      const item = feeStudents.find(student => student.maHocSinh === maHocSinh);
+      if (!item || !item.soPhieu || item.tamNghi || Number(item.soTienDaThu || 0) <= 0) {
+        showNotification('Học sinh chưa có biên lai hợp lệ để in.', 'warning');
+        return;
+      }
+      printTuitionReceiptDocument(Object.assign({}, item, { monthText: currentMonthText }));
+    }
+
+    function printTuitionReceiptDocument(item, existingWindow) {
+      const amount = Number(item.soTienDaThu || 0);
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escapeHtml('Biên lai ' + (item.soPhieu || ''))}</title><style>
+        @page{size:A5 portrait;margin:12mm}*{box-sizing:border-box}body{font-family:"Times New Roman",serif;color:#111;margin:0}.sheet{border:1px solid #111;padding:18px 22px;min-height:185mm}.org{text-align:center;font-size:13px;font-weight:700;text-transform:uppercase}.title{text-align:center;font-size:25px;font-weight:800;margin-top:16px}.number{text-align:center;font-size:14px;margin-top:5px}.line{display:grid;grid-template-columns:150px 1fr;gap:8px;margin-top:13px;font-size:15px}.label{font-weight:700}.amount{font-size:18px;font-weight:800}.words{font-style:italic}.signatures{display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;margin-top:36px;font-size:14px}.signatures strong{display:block;margin-bottom:48px}.footer{margin-top:20px;font-size:12px;color:#555}
+      </style></head><body><div class="sheet"><div class="org">THIÊN ÂN EDUCATION</div><div class="title">BIÊN LAI THU HỌC PHÍ</div><div class="number">Số: <strong>${escapeHtml(item.soPhieu || '')}</strong> &nbsp; | &nbsp; Ngày: <strong>${escapeHtml(item.ngayThuDisplay || formatDateDisplayClient(item.ngayThu) || '')}</strong></div>
+      <div class="line"><div class="label">Học sinh:</div><div><strong>${escapeHtml(item.hoTen || '')}</strong></div></div>
+      <div class="line"><div class="label">Lớp:</div><div>${escapeHtml((item.tenKhoi || item.khoi || '') + ' - ' + (item.tenLop || item.lop || ''))}</div></div>
+      <div class="line"><div class="label">Tháng thu phí:</div><div>${escapeHtml(item.monthText || currentMonthText || '')}</div></div>
+      <div class="line"><div class="label">Học phí tháng:</div><div>${formatMoney(item.hocPhi || 0)}</div></div>
+      <div class="line"><div class="label">Số tiền đã thu:</div><div class="amount">${formatMoney(amount)}</div></div>
+      <div class="line"><div class="label">Bằng chữ:</div><div class="words">${escapeHtml(numberToVietnameseWords(amount))}</div></div>
+      <div class="line"><div class="label">Nguồn nhận:</div><div>${escapeHtml(item.tenNguonTien || '')}</div></div>
+      ${item.ghiChu ? `<div class="line"><div class="label">Ghi chú:</div><div>${escapeHtml(item.ghiChu)}</div></div>` : ''}
+      <div class="signatures"><div><strong>Người lập phiếu</strong><span>(Ký, ghi rõ họ tên)</span></div><div><strong>Người nộp tiền</strong><span>(Ký, ghi rõ họ tên)</span></div><div><strong>Người thu tiền</strong><span>(Ký, ghi rõ họ tên)</span></div></div>
+      <div class="footer">Biên lai được tạo từ hệ thống quản lý.</div></div><script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>`;
+      const printWindow = existingWindow || window.open('', '_blank', 'width=850,height=900');
+      if (!printWindow) {
+        showNotification('Trình duyệt đang chặn cửa sổ in. Vui lòng cho phép cửa sổ bật lên.', 'warning');
+        return;
+      }
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+    }
+
+    function numberToVietnameseWords(value) {
+      const n = Math.floor(Number(value || 0));
+      if (!n) return 'Không đồng';
+      const digits = ['không','một','hai','ba','bốn','năm','sáu','bảy','tám','chín'];
+      function readThree(num, full) {
+        const h = Math.floor(num / 100);
+        const t = Math.floor((num % 100) / 10);
+        const u = num % 10;
+        const result = [];
+        if (h > 0 || full) result.push(digits[h] + ' trăm');
+        if (t > 1) {
+          result.push(digits[t] + ' mươi');
+          if (u === 1) result.push('mốt');
+          else if (u === 5) result.push('lăm');
+          else if (u > 0) result.push(digits[u]);
+        } else if (t === 1) {
+          result.push('mười');
+          if (u === 5) result.push('lăm');
+          else if (u > 0) result.push(digits[u]);
+        } else if (u > 0) {
+          if (h > 0 || full) result.push('lẻ');
+          result.push(digits[u]);
+        }
+        return result.join(' ');
+      }
+      const units = ['', ' nghìn', ' triệu', ' tỷ', ' nghìn tỷ', ' triệu tỷ'];
+      const groups = [];
+      let remaining = n;
+      while (remaining > 0) {
+        groups.push(remaining % 1000);
+        remaining = Math.floor(remaining / 1000);
+      }
+      const output = [];
+      for (let i = groups.length - 1; i >= 0; i--) {
+        if (groups[i] === 0) continue;
+        output.push(readThree(groups[i], i < groups.length - 1 && groups[i] < 100) + units[i]);
+      }
+      const text = output.join(' ').replace(/\s+/g, ' ').trim();
+      return text.charAt(0).toUpperCase() + text.slice(1) + ' đồng';
+    }
+
+    function applyGridRowsLimit(wrapId, selectId) {
+      const wrap = document.getElementById(wrapId);
+      const select = document.getElementById(selectId);
+      const value = select.value;
+
+      if (value === 'ALL') {
+        wrap.style.maxHeight = 'none';
+        return;
+      }
+
+      const rows = Number(value) || 20;
+      wrap.style.maxHeight = (52 * rows + 48) + 'px';
+    }
+
+    function renderStatus(status) {
+      let cls = 'status-unpaid';
+
+      if (status === 'Đã thu đủ' || status === 'Đã thu') {
+        cls = 'status-paid';
+      }
+
+      if (status === 'Thu một phần') {
+        cls = 'status-partial';
+      }
+
+      if (status === 'Thu dư') {
+        cls = 'status-over';
+      }
+
+      if (status === 'Tạm nghỉ') {
+        cls = 'status-temporary';
+      }
+
+      return `<span class="status-pill ${cls}">${escapeHtml(status || 'Chưa thu')}</span>`;
+    }
+
+    function formatMoney(value) {
+      const number = Number(String(value || 0).replace(/[^\d]/g, ''));
+
+      return number.toLocaleString('vi-VN') + 'đ';
+    }
+
+    function formatMoneyInput(id) {
+      const input = document.getElementById(id);
+      const raw = input.value.replace(/[^\d]/g, '');
+
+      if (!raw) {
+        input.value = '';
+        return;
+      }
+
+      input.value = Number(raw).toLocaleString('vi-VN');
+    }
+
+    function formatMoneyInputValue(value) {
+      const raw = String(value || '').replace(/[^\d]/g, '');
+
+      if (!raw) return '';
+
+      return Number(raw).toLocaleString('vi-VN');
+    }
+
+    function getMoneyRawValue(id) {
+      return document.getElementById(id).value.replace(/[^\d]/g, '');
+    }
+
+    function normalizeText(value) {
+      return String(value || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
+    }
+
+    function getErrorMessage(error) {
+      if (!error) return 'Có lỗi không xác định.';
+      if (error.message) return error.message;
+      return String(error);
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function escapeAttribute(value) {
+      return String(value || '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+  </script>
+</body>
+</html>

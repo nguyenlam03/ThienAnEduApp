@@ -1,0 +1,367 @@
+<style>
+  .app-notification-container {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 100000;
+    width: min(420px, calc(100vw - 32px));
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    pointer-events: none;
+  }
+
+  .app-notification {
+    --notification-accent: #0284c7;
+    --notification-soft: #e0f2fe;
+    --notification-text: #075985;
+    position: relative;
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) 30px;
+    gap: 12px;
+    align-items: start;
+    overflow: hidden;
+    padding: 15px 14px 17px;
+    border: 1px solid rgba(148, 163, 184, 0.34);
+    border-left: 5px solid var(--notification-accent);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.98);
+    color: #0f172a;
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+    opacity: 0;
+    transform: translate3d(34px, 0, 0) scale(0.98);
+    transition: opacity 220ms ease, transform 220ms ease;
+    pointer-events: auto;
+    backdrop-filter: blur(12px);
+  }
+
+  .app-notification.show {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  .app-notification.hiding {
+    opacity: 0;
+    transform: translate3d(34px, 0, 0) scale(0.98);
+  }
+
+  .app-notification.success {
+    --notification-accent: #16a34a;
+    --notification-soft: #dcfce7;
+    --notification-text: #166534;
+  }
+
+  .app-notification.error {
+    --notification-accent: #dc2626;
+    --notification-soft: #fee2e2;
+    --notification-text: #991b1b;
+  }
+
+  .app-notification.warning {
+    --notification-accent: #d97706;
+    --notification-soft: #fef3c7;
+    --notification-text: #92400e;
+  }
+
+  .app-notification.info {
+    --notification-accent: #0284c7;
+    --notification-soft: #e0f2fe;
+    --notification-text: #075985;
+  }
+
+  .app-notification-icon {
+    width: 42px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--notification-soft);
+    color: var(--notification-text);
+    font-size: 20px;
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .app-notification-content {
+    min-width: 0;
+    padding-top: 1px;
+  }
+
+  .app-notification-title {
+    margin: 0 0 3px;
+    color: #0f172a;
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1.35;
+  }
+
+  .app-notification-message {
+    margin: 0;
+    color: #475569;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    white-space: pre-line;
+  }
+
+  .app-notification-close {
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+    font-size: 22px;
+    line-height: 1;
+    transition: background 160ms ease, color 160ms ease;
+  }
+
+  .app-notification-close:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+  }
+
+  .app-notification-progress {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 4px;
+    background: rgba(148, 163, 184, 0.18);
+  }
+
+  .app-notification-progress::after {
+    content: '';
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: var(--notification-accent);
+    transform-origin: left center;
+    animation: app-notification-countdown var(--notification-duration, 5000ms) linear forwards;
+  }
+
+  @keyframes app-notification-countdown {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+  }
+
+  @media (max-width: 640px) {
+    .app-notification-container {
+      right: 12px;
+      bottom: 12px;
+      width: calc(100vw - 24px);
+      gap: 9px;
+    }
+
+    .app-notification {
+      grid-template-columns: 38px minmax(0, 1fr) 28px;
+      gap: 10px;
+      padding: 13px 12px 15px;
+      border-radius: 14px;
+    }
+
+    .app-notification-icon {
+      width: 38px;
+      height: 38px;
+      font-size: 18px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .app-notification {
+      transition: none;
+    }
+  }
+</style>
+
+<div
+  id="appNotificationContainer"
+  class="app-notification-container"
+  aria-live="polite"
+  aria-atomic="false"
+></div>
+
+<script>
+  (function (global) {
+    'use strict';
+
+    const DEFAULT_DURATION = 5000;
+    const MAX_VISIBLE = 5;
+    const TYPE_CONFIG = {
+      success: { title: 'Thành công', icon: '✓' },
+      error: { title: 'Có lỗi xảy ra', icon: '!' },
+      warning: { title: 'Lưu ý', icon: '!' },
+      info: { title: 'Thông tin', icon: 'i' }
+    };
+
+    let sequence = 0;
+    const activeNotifications = new Map();
+
+    function normalizeType(type) {
+      const value = String(type || 'info').toLowerCase();
+      return TYPE_CONFIG[value] ? value : 'info';
+    }
+
+    function ensureContainer() {
+      let container = document.getElementById('appNotificationContainer');
+
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'appNotificationContainer';
+        container.className = 'app-notification-container';
+        container.setAttribute('aria-live', 'polite');
+        container.setAttribute('aria-atomic', 'false');
+        document.body.appendChild(container);
+      }
+
+      return container;
+    }
+
+    function removeOldestIfNeeded(container) {
+      while (container.children.length >= MAX_VISIBLE) {
+        const oldest = container.firstElementChild;
+        if (!oldest) return;
+        closeNotification(oldest.dataset.notificationId, true);
+      }
+    }
+
+    function showNotification(message, type, options) {
+      const text = String(message == null ? '' : message).trim();
+      if (!text) return '';
+
+      const normalizedType = normalizeType(type);
+      const config = TYPE_CONFIG[normalizedType];
+      const settings = options && typeof options === 'object' ? options : {};
+      const parsedDuration = Number(settings.duration);
+      const duration = Number.isFinite(parsedDuration) && parsedDuration > 0
+        ? parsedDuration
+        : DEFAULT_DURATION;
+      const id = 'notification-' + Date.now() + '-' + (++sequence);
+      const container = ensureContainer();
+
+      removeOldestIfNeeded(container);
+
+      const notification = document.createElement('div');
+      notification.id = id;
+      notification.dataset.notificationId = id;
+      notification.className = 'app-notification ' + normalizedType;
+      notification.setAttribute('role', normalizedType === 'error' ? 'alert' : 'status');
+      notification.style.setProperty('--notification-duration', duration + 'ms');
+
+      const icon = document.createElement('div');
+      icon.className = 'app-notification-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.textContent = config.icon;
+
+      const content = document.createElement('div');
+      content.className = 'app-notification-content';
+
+      const title = document.createElement('div');
+      title.className = 'app-notification-title';
+      title.textContent = settings.title || config.title;
+
+      const messageElement = document.createElement('div');
+      messageElement.className = 'app-notification-message';
+      messageElement.textContent = text;
+
+      content.appendChild(title);
+      content.appendChild(messageElement);
+
+      const closeButton = document.createElement('button');
+      closeButton.type = 'button';
+      closeButton.className = 'app-notification-close';
+      closeButton.setAttribute('aria-label', 'Đóng thông báo');
+      closeButton.textContent = '×';
+      closeButton.addEventListener('click', function () {
+        closeNotification(id);
+      });
+
+      const progress = document.createElement('div');
+      progress.className = 'app-notification-progress';
+      progress.setAttribute('aria-hidden', 'true');
+
+      notification.appendChild(icon);
+      notification.appendChild(content);
+      notification.appendChild(closeButton);
+      notification.appendChild(progress);
+      container.appendChild(notification);
+
+      const timer = global.setTimeout(function () {
+        closeNotification(id);
+      }, duration);
+
+      activeNotifications.set(id, {
+        element: notification,
+        timer: timer
+      });
+
+      global.requestAnimationFrame(function () {
+        notification.classList.add('show');
+      });
+
+      return id;
+    }
+
+    function closeNotification(id, immediate) {
+      const record = activeNotifications.get(id);
+      const element = record ? record.element : document.getElementById(id);
+
+      if (record && record.timer) {
+        global.clearTimeout(record.timer);
+      }
+
+      activeNotifications.delete(id);
+      if (!element) return;
+
+      if (immediate) {
+        element.remove();
+        return;
+      }
+
+      element.classList.remove('show');
+      element.classList.add('hiding');
+      global.setTimeout(function () {
+        element.remove();
+      }, 240);
+    }
+
+    function clearNotifications() {
+      Array.from(activeNotifications.keys()).forEach(function (id) {
+        closeNotification(id, true);
+      });
+
+      const container = document.getElementById('appNotificationContainer');
+      if (container) container.replaceChildren();
+    }
+
+    global.AppNotification = {
+      show: showNotification,
+      close: closeNotification,
+      clear: clearNotifications,
+      duration: DEFAULT_DURATION
+    };
+
+    global.showNotification = showNotification;
+
+    // Giữ tương thích với các màn hình hiện hành đang gọi showMessage/hideMessage.
+    global.showMessage = function (text, type) {
+      return showNotification(text, type || 'info');
+    };
+
+    global.hideMessage = function () {
+      clearNotifications();
+    };
+
+    // Lớp bảo vệ để các lệnh alert cũ hoặc được bổ sung sau này cũng hiển thị dạng notification.
+    global.alert = function (message) {
+      showNotification(message, 'warning');
+    };
+  })(window);
+</script>

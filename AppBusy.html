@@ -1,0 +1,40 @@
+<div id="globalBusy" class="busy-backdrop">
+  <div class="busy-card">
+    <div class="busy-spinner"></div>
+    <div class="busy-title">Đang xử lý dữ liệu</div>
+    <div id="globalBusyText" class="busy-text">Vui lòng chờ trong giây lát...</div>
+  </div>
+</div>
+
+<script>
+  function showBusy(text) {
+    const busy = document.getElementById('globalBusy');
+    const busyText = document.getElementById('globalBusyText');
+
+    if (busyText) {
+      busyText.textContent = text || 'Vui lòng chờ trong giây lát...';
+    }
+
+    if (busy) {
+      busy.classList.add('show');
+    }
+  }
+
+  function hideBusy() {
+    const busy = document.getElementById('globalBusy');
+
+    if (busy) {
+      busy.classList.remove('show');
+    }
+  }
+
+  function parseServerJson(res) {
+    if (!res) return null;
+
+    if (typeof res === 'string') {
+      return JSON.parse(res);
+    }
+
+    return res;
+  }
+</script>

@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Quản lý học sinh</title>
+
+  <?!= include('AppStyles'); ?>
+
+  <style>
+    .student-modal {
+      max-width: 980px;
+      max-height: calc(100vh - 48px);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .student-modal .modal-header {
+      min-height: 58px;
+      padding: 13px 20px;
+      flex-shrink: 0;
+    }
+
+    .student-modal .modal-title {
+      font-size: 20px;
+    }
+
+    .student-modal .modal-body {
+      padding: 18px 20px;
+      overflow-y: auto;
+    }
+
+    .student-modal .modal-footer {
+      padding: 14px 20px 18px;
+      flex-shrink: 0;
+      border-top: 1px solid #e2e8f0;
+      background: #ffffff;
+    }
+
+    .student-form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 13px 16px;
+    }
+
+    .student-form-grid .full {
+      grid-column: 1 / -1;
+    }
+
+    .student-form-grid .span-2 {
+      grid-column: span 2;
+    }
+
+    .multi-select {
+      position: relative;
+      width: 100%;
+    }
+
+    .multi-select-display {
+      min-height: 46px;
+      border: 1px solid #cbd5e1;
+      background: #f8fafc;
+      border-radius: 14px;
+      padding: 9px 44px 9px 13px;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 7px;
+      cursor: pointer;
+      color: #0f172a;
+      font-size: 14px;
+      font-weight: 500;
+      outline: none;
+    }
+
+    .multi-select-display:focus {
+      background: #ffffff;
+      border-color: #0ea5e9;
+      box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.14);
+    }
+
+    .multi-select-display:after {
+      content: "▾";
+      position: absolute;
+      right: 16px;
+      top: 12px;
+      color: #334155;
+      font-size: 15px;
+    }
+
+    .multi-placeholder {
+      color: #64748b;
+    }
+
+    .multi-tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #e0f2fe;
+      color: #0369a1;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .multi-select-panel {
+      position: absolute;
+      z-index: 1200;
+      top: calc(100% + 8px);
+      left: 0;
+      right: 0;
+      display: none;
+      background: #ffffff;
+      border: 1px solid #bae6fd;
+      border-radius: 16px;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+      padding: 10px;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+
+    .multi-select.open .multi-select-panel {
+      display: block;
+    }
+
+    .multi-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 11px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      color: #334155;
+    }
+
+    .multi-option:hover {
+      background: #f0f9ff;
+    }
+
+    .multi-option input {
+      width: 18px;
+      height: 18px;
+      padding: 0;
+    }
+
+    .money-help {
+      margin-top: 5px;
+      font-size: 12px;
+      color: #64748b;
+      line-height: 1.45;
+    }
+
+    .fee-update-card {
+      border: 1px solid #bae6fd;
+      background: #f0f9ff;
+      border-radius: 16px;
+      padding: 14px 16px;
+    }
+
+    .checkbox-row {
+      display: flex !important;
+      align-items: flex-start;
+      gap: 11px;
+      margin: 0 !important;
+      cursor: pointer;
+      color: #0f172a !important;
+    }
+
+    .checkbox-row input[type="checkbox"] {
+      width: 19px;
+      height: 19px;
+      min-width: 19px;
+      margin: 1px 0 0;
+      padding: 0;
+      accent-color: #0284c7;
+      cursor: pointer;
+    }
+
+    .checkbox-title {
+      font-size: 14px;
+      font-weight: 800;
+      line-height: 1.45;
+    }
+
+    .checkbox-help {
+      margin-top: 7px;
+      padding-left: 30px;
+      font-size: 12px;
+      line-height: 1.55;
+      color: #475569;
+    }
+
+    @media (max-width: 900px) {
+      .student-modal {
+        max-height: calc(100vh - 24px);
+      }
+
+      .student-form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .student-form-grid .span-2 {
+        grid-column: 1 / -1;
+      }
+    }
+  </style>
+  <?!= include('AppTheme'); ?>
+</head>
+
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-logo">TA</div>
+        <div class="brand-title">Thiên Ân Education - Khơi nguồn tri thức</div>
+      </div>
+
+      <div class="session-box">
+        <span class="session-label">Kỳ học:</span>
+        <strong><?= tenKyHoc ?></strong>
+
+        <select class="header-action-select" onchange="handleHeaderAction(this)">
+          <option value="">Tuỳ chọn</option>
+          <option value="" disabled>Cache dữ liệu: <?!= cacheEnabled ? 'Đang bật' : 'Đang tắt' ?></option>
+          <option value="TOGGLE_CACHE"><?!= cacheEnabled ? 'Tắt cache dữ liệu' : 'Bật cache dữ liệu' ?></option>
+          <option value="CLEAR_CACHE">Làm mới dữ liệu</option>
+          <option value="LOGOUT">Đăng xuất</option>
+        </select>
+      </div>
+    </header>
+
+    <nav class="ribbon">
+      <button class="ribbon-button" onclick="goPage('Index')">
+        <span>🏠</span>
+        <span>Trang chính</span>
+      </button>
+
+      <button class="ribbon-button active" onclick="goPage('QuanLyHocSinh')">
+        <span>👨‍🎓</span>
+        <span>Quản lý học sinh</span>
+      </button>
+
+      <button class="ribbon-button" onclick="goPage('QuanLyThuPhu')">
+        <span>💰</span>
+        <span>Quản lý thu phí</span>
+      </button>
+
+
+      <button class="ribbon-button" onclick="goPage('QuanLyThuChi')">
+        <span>💼</span>
+        <span>Quản lý thu chi</span>
+      </button>
+    </nav>
+
+    <main class="main">
+      <section class="page-card">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Quản lý học sinh</div>
+            <div class="page-subtitle">
+              Quản lý hồ sơ học sinh, lớp học và học phí áp dụng.
+            </div>
+          </div>
+
+          <button class="primary-button" onclick="openAddForm()">
+            + Thêm học sinh
+          </button>
+        </div>
+
+        <div class="content">
+          <div style="display:grid; grid-template-columns:180px 220px 1fr 130px; gap:14px; margin-bottom:18px; align-items:end;">
+            <div class="field">
+              <label>Khối</label>
+              <select id="filterKhoi" onchange="handleFilterKhoiChange()">
+                <option value="">Tất cả khối</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label>Lớp</label>
+              <select id="filterLop" onchange="loadHocSinh()">
+                <option value="">Tất cả lớp</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label>Tìm kiếm</label>
+              <input id="filterKeyword" type="text" placeholder="Nhập tên học sinh, số điện thoại...">
+            </div>
+
+            <button class="secondary-button" onclick="loadHocSinh()">
+              Lọc dữ liệu
+            </button>
+          </div>
+
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin:14px 0 16px;">
+            <div class="pill-badge">
+              <span>👨‍🎓</span>
+              <span id="countText">0 học sinh</span>
+            </div>
+          </div>
+
+          <div class="grid-toolbar">
+            <div class="grid-toolbar-left">
+              <button id="studentColumnButton" class="column-config-button" type="button" onclick="GridColumnConfig.open('student-list')">
+                <span aria-hidden="true">⚙</span>
+                <span>Cấu hình cột</span>
+              </button>
+            </div>
+
+            <div class="grid-toolbar-right">
+              <label for="studentRowsLimit">Hiển thị</label>
+              <select id="studentRowsLimit" class="rows-select" onchange="applyGridRowsLimit('studentTableWrap', 'studentRowsLimit')">
+                <option value="20" selected>20 dòng</option>
+                <option value="30">30 dòng</option>
+                <option value="50">50 dòng</option>
+                <option value="ALL">Tất cả</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="studentTableWrap" class="table-wrap">
+            <table id="studentDataGrid" data-grid-title="Danh sách học sinh">
+              <thead>
+                <tr>
+                  <th data-column="stt">STT</th>
+                  <th data-column="student">Học sinh</th>
+                  <th data-column="grade">Khối</th>
+                  <th data-column="class">Lớp</th>
+                  <th data-column="term">Kỳ học</th>
+                  <th data-column="joinDate">Ngày vào</th>
+                  <th data-column="gender">Giới tính</th>
+                  <th data-column="parentPhone">SĐT phụ huynh</th>
+                  <th data-column="tuition">Học phí</th>
+                  <th data-column="note">Ghi chú</th>
+                  <th data-column="actions">Thao tác</th>
+                </tr>
+              </thead>
+
+              <tbody id="studentTableBody">
+                <tr>
+                  <td data-grid-empty="true" colspan="11">
+                    <div class="empty-box">Đang tải dữ liệu...</div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="studentModal" class="modal-backdrop">
+    <div class="modal student-modal">
+      <div class="modal-header">
+        <div id="modalTitle" class="modal-title">Thêm học sinh</div>
+        <button class="close-button" onclick="closeModal()">×</button>
+      </div>
+
+      <div class="modal-body">
+        <input type="hidden" id="formMaHocSinh">
+        <input type="hidden" id="formDiaChi" value="">
+
+        <div class="student-form-grid">
+          <div class="field full">
+            <label>Kỳ học <span style="color:#dc2626">*</span></label>
+
+            <div id="kyHocMultiSelect" class="multi-select">
+              <div id="kyHocDisplay" class="multi-select-display" tabindex="0" onclick="toggleKyHocDropdown()">
+                <span class="multi-placeholder">Chọn kỳ học</span>
+              </div>
+
+              <div id="kyHocPanel" class="multi-select-panel"></div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Khối <span style="color:#dc2626">*</span></label>
+            <select id="formKhoi" onchange="handleFormKhoiChange()">
+              <option value="">Chọn khối</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Lớp <span style="color:#dc2626">*</span></label>
+            <select id="formLop">
+              <option value="">Chọn lớp</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Sắp xếp</label>
+            <input id="formSapXep" type="number" min="1" placeholder="Ví dụ: 1, 2, 3...">
+          </div>
+
+          <div class="field">
+            <label>Học phí</label>
+            <input
+              id="formHocPhi"
+              type="text"
+              inputmode="numeric"
+              list="hocPhiOptions"
+              placeholder="Chọn hoặc nhập học phí"
+              oninput="formatHocPhiInput()"
+            >
+
+            <datalist id="hocPhiOptions">
+              <option value="1800000">1.800.000</option>
+              <option value="2000000">2.000.000</option>
+              <option value="2400000">2.400.000</option>
+            </datalist>
+
+            <div class="money-help">
+              Cấp 1 mặc định 1.800.000, cấp 2 mặc định 2.000.000. Vẫn có thể nhập số khác.
+            </div>
+          </div>
+
+          <div id="thuPhiUpdateBox" class="field full fee-update-card">
+            <label class="checkbox-row" for="formCapNhatThuPhi">
+              <input id="formCapNhatThuPhi" type="checkbox">
+              <span class="checkbox-title">Cập nhật thu phí tháng hiện tại</span>
+            </label>
+            <div class="checkbox-help">
+              Khi chọn, học sinh mới sẽ được thêm ngay vào sheet thu phí tháng
+              <strong id="formThuPhiMonthLabel"></strong> để có thể thu phí trong tháng này.
+              Tùy chọn này chỉ áp dụng khi thêm học sinh mới.
+            </div>
+          </div>
+
+          <div class="field span-2">
+            <label>Họ tên học sinh <span style="color:#dc2626">*</span></label>
+            <input id="formHoTen" type="text" placeholder="Nhập họ tên học sinh">
+          </div>
+
+          <div class="field">
+            <label>Giới tính</label>
+            <select id="formGioiTinh">
+              <option value="">Chưa chọn</option>
+              <option value="Nam">Nam</option>
+              <option value="Nữ">Nữ</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Ngày vào</label>
+            <input id="formNgaySinh" type="date">
+          </div>
+
+          <div class="field span-2">
+            <label>SĐT phụ huynh</label>
+            <input id="formSdtPhuHuynh" type="text" placeholder="Ví dụ: 0912345678">
+          </div>
+
+          <div class="field full">
+            <label>Ghi chú học sinh</label>
+            <textarea id="formGhiChu" placeholder="Ghi chú thêm nếu có"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="cancel-button" onclick="closeModal()">Huỷ</button>
+        <button id="btnSave" class="save-button" onclick="saveHocSinh()">Lưu học sinh</button>
+      </div>
+    </div>
+  </div>
+
+  <?!= include('AppGridConfig'); ?>
+  <?!= include('AppNotification'); ?>
+  <?!= include('AppBusy'); ?>
+
+  <script>
+    const APP_TOKEN = <?!= JSON.stringify(token) ?>;
+    const APP_URL = <?!= JSON.stringify(appUrl) ?>;
+    const APP_CACHE_ENABLED = <?!= JSON.stringify(cacheEnabled) ?>;
+    const APP_MAKYHOC = <?!= JSON.stringify(maKyHoc) ?>;
+
+    let kyHocList = [];
+    let khoiList = [];
+    let lopList = [];
+    let studentList = [];
+
+    document.addEventListener('DOMContentLoaded', function () {
+      GridColumnConfig.register({
+        gridId: 'student-list',
+        tableId: 'studentDataGrid',
+        buttonId: 'studentColumnButton',
+        title: 'Danh sách học sinh'
+      });
+      applyGridRowsLimit('studentTableWrap', 'studentRowsLimit');
+      document.getElementById('formThuPhiMonthLabel').textContent = getCurrentMonthDisplay();
+      initPage();
+
+      document.getElementById('filterKeyword').addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          loadHocSinh();
+        }
+      });
+
+      document.getElementById('studentModal').addEventListener('click', function (event) {
+        if (event.target.id === 'studentModal') {
+          closeModal();
+        }
+      });
+
+      document.addEventListener('click', function (event) {
+        const multi = document.getElementById('kyHocMultiSelect');
+
+        if (multi && !multi.contains(event.target)) {
+          multi.classList.remove('open');
+        }
+      });
+    });
+
+    function getCurrentYearMonth() {
+      const now = new Date();
+      return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    }
+
+    function getCurrentMonthDisplay() {
+      const now = new Date();
+      return String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear();
+    }
+
+    function goPage(page) {
+      window.top.location.href = APP_URL
+        + '?page=' + encodeURIComponent(page)
+        + '&token=' + encodeURIComponent(APP_TOKEN);
+    }
+
+    function handleHeaderAction(select) {
+      const action = select.value;
+      select.value = '';
+
+      if (action === 'LOGOUT') {
+        logoutApp();
+        return;
+      }
+
+      if (action === 'TOGGLE_CACHE') {
+        toggleDataCache();
+        return;
+      }
+
+      if (action === 'CLEAR_CACHE') {
+        clearCacheAndReloadPage();
+      }
+    }
+
+    function logoutApp() {
+      showBusy('Đang đăng xuất...');
+
+      google.script.run
+        .withSuccessHandler(function () {
+          window.top.location.href = APP_URL + '?page=Login';
+        })
+        .withFailureHandler(function () {
+          window.top.location.href = APP_URL + '?page=Login';
+        })
+        .logout(APP_TOKEN);
+    }
+
+    function toggleDataCache() {
+      const nextEnabled = !APP_CACHE_ENABLED;
+
+      showBusy(nextEnabled
+        ? 'Đang bật cache dữ liệu và nạp dữ liệu mới...'
+        : 'Đang tắt cache dữ liệu...');
+
+      google.script.run
+        .withSuccessHandler(function () {
+          window.top.location.reload();
+        })
+        .withFailureHandler(function (error) {
+          hideBusy();
+          showNotification(getErrorMessage(error), 'error');
+        })
+        .setDataCacheEnabled(APP_TOKEN, nextEnabled);
+    }
+
+    function clearCacheAndReloadPage() {
+      showBusy(APP_CACHE_ENABLED
+        ? 'Đang xoá cache cũ và nạp lại dữ liệu mới...'
+        : 'Đang tải lại dữ liệu trực tiếp từ Google Sheet...');
+
+      google.script.run
+        .withSuccessHandler(function () {
+          window.top.location.reload();
+        })
+        .withFailureHandler(function (error) {
+          hideBusy();
+          showNotification(getErrorMessage(error), 'error');
+        })
+        .clearCacheAndReload(APP_TOKEN);
+    }
+
+    function initPage() {
+      showBusy('Đang tải dữ liệu ban đầu...');
+
+      google.script.run
+        .withSuccessHandler(function (res) {
+          const data = parseServerJson(res);
+
+          kyHocList = data.kyHocList || [];
+          khoiList = data.khoiList || [];
+          lopList = data.lopList || [];
+
+          renderKhoiSelect('filterKhoi', true);
+          renderLopSelect('filterLop', '', true);
+
+          renderKhoiSelect('formKhoi', false);
+          renderLopSelect('formLop', '', false);
+
+          renderKyHocDropdown([APP_MAKYHOC]);
+
+          hideBusy();
+          loadHocSinh();
+        })
+        .withFailureHandler(function (error) {
+          hideBusy();
+          showMessage(getErrorMessage(error), 'error');
+        })
+        .getInitialHocSinhData(APP_TOKEN);
+    }
+
+    function renderKhoiSelect(elementId, includeAll) {
+      const select = document.getElementById(elementId);
+      select.innerHTML = '';
+
+      select.appendChild(new Option(includeAll ? 'Tất cả khối' : 'Chọn khối', ''));
+
+      khoiList.forEach(function (item) {
+        select.appendChild(new Option(item.tenKhoi, item.khoi));
+      });
+    }
+
+    function renderLopSelect(elementId, khoi, includeAll, selectedValue) {
+      const select = document.getElementById(elementId);
+      select.innerHTML = '';
+
+      select.appendChild(new Option(includeAll ? 'Tất cả lớp' : 'Chọn lớp', ''));
+
+      lopList
+        .filter(function (item) {
+          return !khoi || item.khoi === khoi;
+        })
+        .forEach(function (item) {
+          const option = new Option(item.tenLop, item.maLop);
+
+          if (selectedValue && selectedValue === item.maLop) {
+            option.selected = true;
+          }
+
+          select.appendChild(option);
+        });
+    }
+
+    function handleFilterKhoiChange() {
+      const khoi = document.getElementById('filterKhoi').value;
+      renderLopSelect('filterLop', khoi, true);
+      loadHocSinh();
+    }
+
+    function handleFormKhoiChange(selectedLop) {
+      const khoi = document.getElementById('formKhoi').value;
+      renderLopSelect('formLop', khoi, false, selectedLop);
+      applyDefaultHocPhiByKhoi();
+    }
+
+    function applyDefaultHocPhiByKhoi() {
+      const maHocSinh = document.getElementById('formMaHocSinh').value;
+      const khoi = Number(document.getElementById('formKhoi').value);
+
+      if (maHocSinh) return;
+
+      if (khoi >= 1 && khoi <= 5) {
+        document.getElementById('formHocPhi').value = '1.800.000';
+        return;
+      }
+
+      if (khoi >= 6 && khoi <= 9) {
+        document.getElementById('formHocPhi').value = '2.000.000';
+      }
+    }
+
+    function toggleKyHocDropdown() {
+      document.getElementById('kyHocMultiSelect').classList.toggle('open');
+    }
+
+    function renderKyHocDropdown(selectedIds) {
+      selectedIds = selectedIds || [];
+
+      const panel = document.getElementById('kyHocPanel');
+      panel.innerHTML = '';
+
+      if (!kyHocList || kyHocList.length === 0) {
+        panel.innerHTML = '<div style="padding:10px;font-size:13px;color:#64748b;">Chưa có dữ liệu kỳ học.</div>';
+        updateKyHocDisplay();
+        return;
+      }
+
+      kyHocList.forEach(function (item) {
+        const checked = selectedIds.indexOf(item.maKyHoc) !== -1 ? 'checked' : '';
+
+        panel.innerHTML += `
+          <label class="multi-option">
+            <input
+              type="checkbox"
+              name="formKyHoc"
+              value="${escapeHtml(item.maKyHoc)}"
+              ${checked}
+              onchange="updateKyHocDisplay()"
+            >
+            <span>${escapeHtml(item.tenKyHoc)}</span>
+          </label>
+        `;
+      });
+
+      updateKyHocDisplay();
+    }
+
+    function updateKyHocDisplay() {
+      const display = document.getElementById('kyHocDisplay');
+      const selectedIds = getSelectedKyHocIds();
+
+      if (!selectedIds.length) {
+        display.innerHTML = '<span class="multi-placeholder">Chọn kỳ học</span>';
+        return;
+      }
+
+      const selectedNames = selectedIds.map(function (id) {
+        const found = kyHocList.find(function (item) {
+          return item.maKyHoc === id;
+        });
+
+        return found ? found.tenKyHoc : id;
+      });
+
+      display.innerHTML = selectedNames.map(function (name) {
+        return `<span class="multi-tag">${escapeHtml(name)}</span>`;
+      }).join('');
+    }
+
+    function getSelectedKyHocIds() {
+      return Array.from(document.querySelectorAll('input[name="formKyHoc"]:checked'))
+        .map(function (input) {
+          return input.value;
+        });
+    }
+
+    function loadHocSinh() {
+      const filters = {
+        khoi: document.getElementById('filterKhoi').value,
+        lop: document.getElementById('filterLop').value,
+        keyword: document.getElementById('filterKeyword').value
+      };
+
+      showBusy('Đang tải danh sách học sinh...');
+
+      google.script.run
+        .withSuccessHandler(function (res) {
+          studentList = parseServerJson(res) || [];
+          renderStudentTable();
+          hideBusy();
+        })
+        .withFailureHandler(function (error) {
+          hideBusy();
+          showMessage(getErrorMessage(error), 'error');
+        })
+        .getHocSinhList(APP_TOKEN, filters);
+    }
+
+    function renderStudentTable() {
+      const tbody = document.getElementById('studentTableBody');
+      const countText = document.getElementById('countText');
+
+      countText.textContent = studentList.length + ' học sinh';
+
+      if (studentList.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td data-grid-empty="true" colspan="11">
+              <div class="empty-box">Chưa có học sinh phù hợp với bộ lọc hiện tại.</div>
+            </td>
+          </tr>
+        `;
+        GridColumnConfig.apply('student-list');
+        return;
+      }
+
+      tbody.innerHTML = studentList.map(function (item, index) {
+        const lopName = getLopName(item.lop);
+        const khoiName = getKhoiName(item.khoi);
+        const kyHocNames = item.kyHocNames || [];
+
+        return `
+          <tr>
+            <td data-column="stt">${index + 1}</td>
+
+            <td data-column="student">
+              <div class="student-name">${escapeHtml(item.hoTen)}</div>
+            </td>
+
+            <td data-column="grade">${escapeHtml(khoiName)}</td>
+            <td data-column="class"><span class="class-badge">${escapeHtml(lopName)}</span></td>
+            <td data-column="term">${renderKyHocBadges(kyHocNames)}</td>
+            <td data-column="joinDate">${escapeHtml(item.ngaySinhDisplay || '')}</td>
+            <td data-column="gender">${escapeHtml(item.gioiTinh || '')}</td>
+            <td data-column="parentPhone">${escapeHtml(item.sdtPhuHuynh || '')}</td>
+            <td data-column="tuition"><strong>${formatMoney(item.hocPhi || '')}</strong></td>
+            <td data-column="note">${escapeHtml(item.ghiChu || '')}</td>
+
+            <td data-column="actions">
+              <div class="action-group">
+                <button class="mini-button edit" onclick="openEditForm('${escapeAttribute(item.maHocSinh)}')">Sửa</button>
+                <button class="mini-button delete" onclick="deleteHocSinhById('${escapeAttribute(item.maHocSinh)}')">Xoá</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+      GridColumnConfig.apply('student-list');
+    }
+
+    function openAddForm() {
+      document.getElementById('modalTitle').textContent = 'Thêm học sinh';
+      document.getElementById('formMaHocSinh').value = '';
+      document.getElementById('formDiaChi').value = '';
+
+      renderKyHocDropdown([APP_MAKYHOC]);
+
+      document.getElementById('formKhoi').value = '';
+      handleFormKhoiChange();
+
+      document.getElementById('formSapXep').value = '';
+      document.getElementById('formHocPhi').value = '';
+      document.getElementById('formHoTen').value = '';
+      document.getElementById('formNgaySinh').value = '';
+      document.getElementById('formGioiTinh').value = '';
+      document.getElementById('formSdtPhuHuynh').value = '';
+      document.getElementById('formGhiChu').value = '';
+
+      document.getElementById('thuPhiUpdateBox').hidden = false;
+      document.getElementById('formCapNhatThuPhi').checked = false;
+      document.getElementById('formThuPhiMonthLabel').textContent = getCurrentMonthDisplay();
+
+      document.getElementById('studentModal').classList.add('show');
+
+      setTimeout(function () {
+        document.getElementById('kyHocDisplay').focus();
+      }, 100);
+    }
+
+    function openEditForm(maHocSinh) {
+      const item = studentList.find(function (student) {
+        return student.maHocSinh === maHocSinh;
+      });
+
+      if (!item) {
+        showMessage('Không tìm thấy học sinh cần sửa.', 'error');
+        return;
+      }
+
+      document.getElementById('modalTitle').textContent = 'Sửa học sinh';
+      document.getElementById('formMaHocSinh').value = item.maHocSinh || '';
+      document.getElementById('formDiaChi').value = '';
+
+      renderKyHocDropdown(item.kyHocIds && item.kyHocIds.length ? item.kyHocIds : [APP_MAKYHOC]);
+
+      document.getElementById('formKhoi').value = item.khoi || '';
+      renderLopSelect('formLop', item.khoi || '', false, item.lop);
+
+      document.getElementById('formSapXep').value = item.sapXep || '';
+      document.getElementById('formHocPhi').value = item.hocPhi ? formatMoneyInputValue(item.hocPhi) : '';
+      document.getElementById('formHoTen').value = item.hoTen || '';
+      document.getElementById('formNgaySinh').value = item.ngaySinh || '';
+      document.getElementById('formGioiTinh').value = item.gioiTinh || '';
+      document.getElementById('formSdtPhuHuynh').value = item.sdtPhuHuynh || '';
+      document.getElementById('formGhiChu').value = item.ghiChu || '';
+
+      document.getElementById('formCapNhatThuPhi').checked = false;
+      document.getElementById('thuPhiUpdateBox').hidden = true;
+
+      document.getElementById('studentModal').classList.add('show');
+    }
+
+    function closeModal() {
+      document.getElementById('studentModal').classList.remove('show');
+      document.getElementById('kyHocMultiSelect').classList.remove('open');
+    }
+
+    function saveHocSinh() {
+      const btnSave = document.getElementById('btnSave');
+
+      const hocSinh = {
+        maHocSinh: document.getElementById('formMaHocSinh').value,
+        kyHocIds: getSelectedKyHocIds(),
+        sapXep: document.getElementById('formSapXep').value,
+        khoi: document.getElementById('formKhoi').value,
+        lop: document.getElementById('formLop').value,
+        hocPhi: getHocPhiRawValue(),
+        hoTen: document.getElementById('formHoTen').value.trim(),
+        ngaySinh: document.getElementById('formNgaySinh').value,
+        gioiTinh: document.getElementById('formGioiTinh').value,
+        sdtPhuHuynh: document.getElementById('formSdtPhuHuynh').value.trim(),
+        diaChi: '',
+        ghiChu: document.getElementById('formGhiChu').value.trim(),
+        capNhatThuPhi: !document.getElementById('formMaHocSinh').value &&
+          document.getElementById('formCapNhatThuPhi').checked,
+        thuPhiYearMonth: getCurrentYearMonth()
+      };
+
+      if (hocSinh.kyHocIds.length === 0) {
+        showNotification('Vui lòng chọn ít nhất một kỳ học.', 'warning');
+        return;
+      }
+
+      if (hocSinh.capNhatThuPhi && hocSinh.kyHocIds.indexOf(APP_MAKYHOC) === -1) {
+        showNotification('Muốn cập nhật thu phí tháng hiện tại, vui lòng chọn kỳ học đang đăng nhập.', 'warning');
+        return;
+      }
+
+      if (!hocSinh.khoi) {
+        showNotification('Vui lòng chọn khối.', 'warning');
+        return;
+      }
+
+      if (!hocSinh.lop) {
+        showNotification('Vui lòng chọn lớp.', 'warning');
+        return;
+      }
+
+      if (!hocSinh.hoTen) {
+        showNotification('Vui lòng nhập họ tên học sinh.', 'warning');
+        return;
+      }
+
+      if (hocSinh.sdtPhuHuynh && !/^0\d{9}$/.test(hocSinh.sdtPhuHuynh)) {
+        showNotification('Số điện thoại phụ huynh phải gồm 10 số và bắt đầu bằng số 0.', 'warning');
+        return;
+      }
+
+      btnSave.disabled = true;
+      btnSave.textContent = 'Đang lưu...';
+
+      showBusy(hocSinh.capNhatThuPhi
+        ? 'Đang lưu học sinh và cập nhật thu phí tháng hiện tại...'
+        : 'Đang lưu thông tin học sinh...');
+
+      google.script.run
+        .withSuccessHandler(function (res) {
+          const data = parseServerJson(res);
+
+          btnSave.disabled = false;
+          btnSave.textContent = 'Lưu học sinh';
+
+          hideBusy();
+          closeModal();
+
+          showMessage(data.message || 'Đã lưu dữ liệu.', 'success');
+          loadHocSinh();
+        })
+        .withFailureHandler(function (error) {
+          btnSave.disabled = false;
+          btnSave.textContent = 'Lưu học sinh';
+
+          hideBusy();
+          showNotification(getErrorMessage(error), 'error');
+        })
+        .saveHocSinh(APP_TOKEN, hocSinh);
+    }
+
+    function deleteHocSinhById(maHocSinh) {
+      const item = studentList.find(function (student) {
+        return student.maHocSinh === maHocSinh;
+      });
+
+      if (!item) {
+        showMessage('Không tìm thấy học sinh cần xoá.', 'error');
+        return;
+      }
+
+      const ok = confirm('Bạn có chắc muốn xoá học sinh "' + item.hoTen + '" không?');
+
+      if (!ok) return;
+
+      showBusy('Đang xoá học sinh...');
+
+      google.script.run
+        .withSuccessHandler(function (res) {
+          const data = parseServerJson(res);
+
+          hideBusy();
+          showMessage(data.message || 'Đã xoá học sinh.', 'success');
+          loadHocSinh();
+        })
+        .withFailureHandler(function (error) {
+          hideBusy();
+          showMessage(getErrorMessage(error), 'error');
+        })
+        .deleteHocSinh(APP_TOKEN, maHocSinh);
+    }
+
+    function formatHocPhiInput() {
+      const input = document.getElementById('formHocPhi');
+      const raw = input.value.replace(/[^\d]/g, '');
+
+      if (!raw) {
+        input.value = '';
+        return;
+      }
+
+      input.value = Number(raw).toLocaleString('vi-VN');
+    }
+
+    function formatMoneyInputValue(value) {
+      const raw = String(value || '').replace(/[^\d]/g, '');
+
+      if (!raw) return '';
+
+      return Number(raw).toLocaleString('vi-VN');
+    }
+
+    function getHocPhiRawValue() {
+      return document.getElementById('formHocPhi').value.replace(/[^\d]/g, '');
+    }
+
+    function applyGridRowsLimit(wrapId, selectId) {
+      const wrap = document.getElementById(wrapId);
+      const select = document.getElementById(selectId);
+      const value = select.value;
+
+      if (value === 'ALL') {
+        wrap.style.maxHeight = 'none';
+        return;
+      }
+
+      const rows = Number(value) || 20;
+      wrap.style.maxHeight = (52 * rows + 48) + 'px';
+    }
+
+    function getKhoiName(khoi) {
+      const found = khoiList.find(function (item) {
+        return item.khoi === khoi;
+      });
+
+      return found ? found.tenKhoi : khoi;
+    }
+
+    function getLopName(maLop) {
+      const found = lopList.find(function (item) {
+        return item.maLop === maLop;
+      });
+
+      return found ? found.tenLop : maLop;
+    }
+
+    function renderKyHocBadges(kyHocNames) {
+      if (!kyHocNames || kyHocNames.length === 0) return '';
+
+      return kyHocNames.map(function (name) {
+        return `<span class="pill-badge" style="margin:2px 4px 2px 0;">${escapeHtml(name)}</span>`;
+      }).join('');
+    }
+
+    function formatMoney(value) {
+      if (value === '' || value === null || value === undefined) return '';
+
+      const number = Number(String(value).replace(/[^\d]/g, ''));
+
+      if (isNaN(number)) return escapeHtml(value);
+
+      return number.toLocaleString('vi-VN') + 'đ';
+    }
+
+    function getErrorMessage(error) {
+      if (!error) return 'Có lỗi không xác định.';
+      if (error.message) return error.message;
+      return String(error);
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function escapeAttribute(value) {
+      return String(value || '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+  </script>
+</body>
+</html>

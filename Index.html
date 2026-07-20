@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Trang chính</title>
+
+  <?!= include('AppStyles'); ?>
+
+  <style>
+    .welcome-card {
+      width: 100%;
+      max-width: none;
+      min-width: 0;
+      margin: 0;
+      background: #ffffff;
+      border-radius: 22px;
+      padding: 30px;
+      border: 1px solid #dbeafe;
+      box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+    }
+
+    .welcome-title {
+      font-size: 34px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 12px;
+      letter-spacing: -0.8px;
+    }
+
+    .welcome-desc {
+      width: 100%;
+      max-width: none;
+      font-size: 16px;
+      line-height: 1.8;
+      color: #64748b;
+    }
+
+    .quick-grid {
+      margin-top: 28px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .quick-card {
+      border: 1px solid #dbeafe;
+      background: linear-gradient(180deg, #ffffff, #f8fafc);
+      border-radius: 22px;
+      padding: 22px;
+    }
+
+    .quick-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 16px;
+      background: #e0f2fe;
+      color: #0284c7;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      margin-bottom: 14px;
+    }
+
+    .quick-title {
+      font-size: 17px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .quick-desc {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #64748b;
+    }
+
+    @media (max-width: 800px) {
+      .quick-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .welcome-card {
+        border-radius: 16px;
+        padding: 22px 16px;
+      }
+
+      .welcome-title {
+        font-size: 27px;
+      }
+    }
+
+    html[data-app-theme="artistic"] .welcome-card {
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(247, 253, 250, 0.98));
+    }
+
+    html[data-app-theme="artistic"] .quick-card:nth-child(2n) .quick-icon {
+      background: #dcf3e7;
+      color: #008f55;
+    }
+  </style>
+  <?!= include('AppTheme'); ?>
+</head>
+
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-logo">TA</div>
+        <div class="brand-title">Thiên Ân Education - Khơi nguồn tri thức</div>
+      </div>
+
+      <div class="session-box">
+        <span class="session-label">Kỳ học:</span>
+        <strong><?= tenKyHoc ?></strong>
+
+        <label class="header-theme-picker" for="headerThemeSelect">
+          <span class="header-theme-label">Giao diện:</span>
+          <select
+            id="headerThemeSelect"
+            class="header-theme-select"
+            data-theme-select
+            onchange="changeAppTheme(this.value)"
+          >
+            <option value="default">Mặc định</option>
+            <option value="artistic">Artistic Expression</option>
+          </select>
+        </label>
+
+        <select class="header-action-select" onchange="handleHeaderAction(this)">
+          <option value="">Tuỳ chọn</option>
+          <option value="" disabled>Cache dữ liệu: <?!= cacheEnabled ? 'Đang bật' : 'Đang tắt' ?></option>
+          <option value="TOGGLE_CACHE"><?!= cacheEnabled ? 'Tắt cache dữ liệu' : 'Bật cache dữ liệu' ?></option>
+          <option value="CLEAR_CACHE">Làm mới dữ liệu</option>
+          <option value="LOGOUT">Đăng xuất</option>
+        </select>
+      </div>
+    </header>
+
+    <nav class="ribbon">
+      <button class="ribbon-button active" onclick="goPage('Index')">
+        <span>🏠</span>
+        <span>Trang chính</span>
+      </button>
+
+      <button class="ribbon-button" onclick="goPage('QuanLyHocSinh')">
+        <span>👨‍🎓</span>
+        <span>Quản lý học sinh</span>
+      </button>
+
+      <button class="ribbon-button" onclick="goPage('QuanLyThuPhu')">
+        <span>💰</span>
+        <span>Quản lý thu phí</span>
+      </button>
+
+
+      <button class="ribbon-button" onclick="goPage('QuanLyThuChi')">
+        <span>💼</span>
+        <span>Quản lý thu chi</span>
+      </button>
+    </nav>
+
+    <main class="main">
+      <section class="welcome-card">
+        <div class="welcome-title">
+          Chào mừng đến hệ thống quản lý
+        </div>
+
+        <div class="welcome-desc">
+          Từ thanh menu phía trên, người dùng có thể truy cập nhanh vào các phân hệ quản lý.
+          Hệ thống xử lý dữ liệu theo lô và cho phép bật hoặc tắt cache tại menu Tuỳ chọn.
+        </div>
+
+        <div class="quick-grid">
+          <div class="quick-card">
+            <div class="quick-icon">👨‍🎓</div>
+            <div class="quick-title">Quản lý học sinh</div>
+            <div class="quick-desc">
+              Xem danh sách học sinh theo khối, lớp. Thêm, sửa và xoá thông tin học sinh.
+            </div>
+          </div>
+
+          <div class="quick-card">
+            <div class="quick-icon">💰</div>
+            <div class="quick-title">Quản lý thu phí</div>
+            <div class="quick-desc">
+              Ghi nhận học phí từng học sinh theo tháng, theo dõi đã thu và còn lại.
+            </div>
+          </div>
+
+          <div class="quick-card" onclick="goPage('QuanLyThuChi')" style="cursor:pointer;">
+            <div class="quick-icon">💼</div>
+            <div class="quick-title">Quản lý thu chi</div>
+            <div class="quick-desc">
+              Ghi nhận khoản thu, khoản chi, theo dõi sổ quỹ, danh mục và báo cáo tài chính theo kỳ học.
+            </div>
+          </div>
+
+          <div class="quick-card">
+            <div class="quick-icon">📊</div>
+            <div class="quick-title">Báo cáo tổng hợp</div>
+            <div class="quick-desc">
+              Báo cáo học sinh và học phí tổng hợp sẽ tiếp tục được bổ sung sau.
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <?!= include('AppNotification'); ?>
+  <?!= include('AppBusy'); ?>
+
+  <script>
+    const APP_TOKEN = <?!= JSON.stringify(token) ?>;
+    const APP_URL = <?!= JSON.stringify(appUrl) ?>;
+    const APP_CACHE_ENABLED = <?!= JSON.stringify(cacheEnabled) ?>;
+
+    document.addEventListener('DOMContentLoaded', function () {
+      AppTheme.bindSelect(document.getElementById('headerThemeSelect'));
+    });
+
+    function changeAppTheme(theme) {
+      const appliedTheme = AppTheme.set(theme);
+      const themeName = appliedTheme === 'artistic'
+        ? 'Artistic Expression'
+        : 'Mặc định';
+
+      showNotification('Đã chuyển sang giao diện ' + themeName + '.', 'success');
+    }
+
+    function goPage(page) {
+      window.top.location.href = APP_URL
+        + '?page=' + encodeURIComponent(page)
+        + '&token=' + encodeURIComponent(APP_TOKEN);
+    }
+
+    function handleHeaderAction(select) {
+      const action = select.value;
+      select.value = '';
+
+      if (action === 'LOGOUT') {
+        logoutApp();
+        return;
+      }
+
+      if (action === 'TOGGLE_CACHE') {
+        toggleDataCache();
+        return;
+      }
+
+      if (action === 'CLEAR_CACHE') {
+        clearCacheAndReloadPage();
+      }
+    }
+
+    function logoutApp() {
+      showBusy('Đang đăng xuất...');
+
+      google.script.run
+        .withSuccessHandler(function () {
+          window.top.location.href = APP_URL + '?page=Login';
+        })
+        .withFailureHandler(function () {
+          window.top.location.href = APP_URL + '?page=Login';
+        })
+        .logout(APP_TOKEN);
+    }
+
+    function toggleDataCache() {
+      const nextEnabled = !APP_CACHE_ENABLED;
+
+      showBusy(nextEnabled
+        ? 'Đang bật cache dữ liệu và nạp dữ liệu mới...'
+        : 'Đang tắt cache dữ liệu...');
+
+      google.script.run
+        .withSuccessHandler(function () {
+          window.top.location.reload();
+        })
+        .withFailureHandler(function (error) {
+          hideBusy();
+          showNotification(getErrorMessage(error), 'error');
+        })
+        .setDataCacheEnabled(APP_TOKEN, nextEnabled);
+    }
+
+    function clearCacheAndReloadPage() {
+      showBusy(APP_CACHE_ENABLED
+        ? 'Đang xoá cache cũ và nạp lại dữ liệu mới...'
+        : 'Đang tải lại dữ liệu trực tiếp từ Google Sheet...');
+
+      google.script.run
+        .withSuccessHandler(function () {
+          window.top.location.reload();
+        })
+        .withFailureHandler(function (error) {
+          hideBusy();
+          showNotification(getErrorMessage(error), 'error');
+        })
+        .clearCacheAndReload(APP_TOKEN);
+    }
+
+    function getErrorMessage(error) {
+      if (!error) return 'Có lỗi không xác định.';
+      if (error.message) return error.message;
+      return String(error);
+    }
+  </script>
+</body>
+</html>
