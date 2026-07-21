@@ -4,28 +4,77 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-google-apps-script-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   deploy:
+    name: Deploy Apps Script
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v7
         with:
-          node-version: '18'
+          node-version: "20"
+          package-manager-cache: false
 
-      - name: Install Clasp
-        run: npm install -g @google/clasp
+      - name: Install clasp
+        run: npm install --global @google/clasp@3.3.0
 
-      - name: Authenticate Clasp
-        # Sử dụng cat << 'EOF' thay vì echo để tránh lỗi định dạng JSON
+      - name: Create clasp credentials
+        shell: bash
+        env:
+          CLASP_CREDENTIALS: ${{ secrets.CLASP_CREDENTIALS }}
         run: |
-          cat << 'EOF' > ~/.clasprc.json
-          ${{ secrets.CLASP_CREDENTIALS }}
-          EOF
+          set -euo pipefail
 
-      - name: Push to GAS
-        run: clasp push -f
+          if [ -z "$CLASP_CREDENTIALS" ]; then
+            echo "::error::Secret CLASP_CREDENTIALS chưa được cấu hình."
+            exit 1
+          fi
+
+          printf '%s' "$CLASP_CREDENTIALS" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+
+          node -e "
+            JSON.parse(
+              require('fs').readFileSync(
+                process.env.HOME + '/.clasprc.json',
+                'utf8'
+              )
+            );
+            console.log('CLASP credentials JSON is valid.');
+          "
+
+      - name: Validate Apps Script configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ ! -f ".clasp.json" ]; then
+            echo "::error::Không tìm thấy file .clasp.json trong thư mục gốc."
+            exit 1
+          fi
+
+          node -e "
+            JSON.parse(
+              require('fs').readFileSync('.clasp.json', 'utf8')
+            );
+            console.log('.clasp.json is valid.');
+          "
+
+      - name: Push to Google Apps Script
+        run: clasp push --force
