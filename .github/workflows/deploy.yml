@@ -3,7 +3,7 @@ name: Deploy to Google Apps Script
 on:
   push:
     branches:
-      - main # Chạy action khi có thay đổi được đẩy lên nhánh main
+      - main
 
 jobs:
   deploy:
@@ -21,9 +21,11 @@ jobs:
         run: npm install -g @google/clasp
 
       - name: Authenticate Clasp
-        # Tạo lại file .clasprc.json trong môi trường server của GitHub bằng Secret đã lưu
+        # Sử dụng cat << 'EOF' thay vì echo để tránh lỗi định dạng JSON
         run: |
-          echo '${{ secrets.CLASP_CREDENTIALS }}' > ~/.clasprc.json
+          cat << 'EOF' > ~/.clasprc.json
+          ${{ secrets.CLASP_CREDENTIALS }}
+          EOF
 
       - name: Push to GAS
         run: clasp push -f
