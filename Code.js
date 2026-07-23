@@ -535,6 +535,155 @@ function getHocSinhList(token, filters) {
   return json;
 }
 
+function saveHocSinhOrder(token, orderedStudentIds) {
+  const session = requireSession_(token);
+  const orderedIds = Array.isArray(orderedStudentIds)
+    ? orderedStudentIds.map(id => String(id || '').trim()).filter(id => id)
+    : [];
+
+  if (!orderedIds.length) {
+    throw new Error('Danh sách sắp xếp không có học sinh.');
+  }
+
+  if (new Set(orderedIds).size !== orderedIds.length) {
+    throw new Error('Danh sách sắp xếp có học sinh bị trùng.');
+  }
+
+  const lock = LockService.getScriptLock();
+
+  if (!lock.tryLock(30000)) {
+    throw new Error('Hệ thống đang có người cập nhật danh sách học sinh. Vui lòng thao tác lại.');
+  }
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(SHEET_HOCSINH);
+
+    if (!sheet || sheet.getLastRow() < 2) {
+      throw new Error('Chưa có dữ liệu học sinh để sắp xếp.');
+    }
+
+    const values = sheet.getDataRange().getValues();
+    const headers = values[0].map(header => String(header || '').trim());
+    const index = buildHeaderIndex_(headers);
+
+    if (index.MaHocSinh === undefined || index.SapXep === undefined) {
+      throw new Error('Sheet học sinh thiếu cột MaHocSinh hoặc SapXep.');
+    }
+
+    const relationRows = readObjectsNoCache_(SHEET_HOCSINH_KYHOC);
+    const mappedIds = {};
+
+    relationRows.forEach(row => {
+      if (
+        String(row.MaKyHoc || '').trim() === session.maKyHoc &&
+        String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED'
+      ) {
+        const id = String(row.MaHocSinh || '').trim();
+        if (id) mappedIds[id] = true;
+      }
+    });
+
+    const hasCurrentMapping = Object.keys(mappedIds).length > 0;
+    const currentStudentIds = values.slice(1).reduce((ids, row) => {
+      const id = String(row[index.MaHocSinh] || '').trim();
+      const status = index.TrangThai === undefined
+        ? 'ACTIVE'
+        : String(row[index.TrangThai] || '').trim().toUpperCase();
+      const rowKyHoc = index.MaKyHoc === undefined
+        ? ''
+        : String(row[index.MaKyHoc] || '').trim();
+
+      if (!id || status === 'DELETED') return ids;
+
+      const belongsToCurrentKyHoc =
+        !!mappedIds[id] ||
+        rowKyHoc === session.maKyHoc ||
+        (!hasCurrentMapping && !rowKyHoc);
+
+      if (belongsToCurrentKyHoc) ids.push(id);
+      return ids;
+    }, []);
+
+    const currentIdMap = currentStudentIds.reduce((map, id) => {
+      map[id] = true;
+      return map;
+    }, {});
+
+    if (
+      orderedIds.length !== currentStudentIds.length ||
+      orderedIds.some(id => !currentIdMap[id])
+    ) {
+      throw new Error('Danh sách học sinh đã thay đổi. Vui lòng đóng cửa sổ sắp xếp và tải lại dữ liệu.');
+    }
+
+    const orderMap = orderedIds.reduce((map, id, position) => {
+      map[id] = position + 1;
+      return map;
+    }, {});
+    const now = new Date();
+
+    for (let i = 1; i < values.length; i++) {
+      const id = String(values[i][index.MaHocSinh] || '').trim();
+      if (!orderMap[id]) continue;
+
+      values[i][index.SapXep] = orderMap[id];
+      if (index.UpdatedAt !== undefined) values[i][index.UpdatedAt] = now;
+    }
+
+    sheet
+      .getRange(2, 1, values.length - 1, headers.length)
+      .setValues(values.slice(1));
+
+    ss.getSheets().forEach(monthSheet => {
+      if (!/^Thang\d{2}\.\d{4}$/.test(monthSheet.getName()) || monthSheet.getLastRow() < 2) {
+        return;
+      }
+
+      const monthValues = monthSheet.getDataRange().getValues();
+      const monthHeaders = monthValues[0].map(header => String(header || '').trim());
+      const monthIndex = buildHeaderIndex_(monthHeaders);
+
+      if (
+        monthIndex.MaHocSinh === undefined ||
+        monthIndex.MaKyHoc === undefined ||
+        monthIndex.SapXep === undefined
+      ) {
+        return;
+      }
+
+      let monthChanged = false;
+
+      for (let i = 1; i < monthValues.length; i++) {
+        const id = String(monthValues[i][monthIndex.MaHocSinh] || '').trim();
+        const maKyHoc = String(monthValues[i][monthIndex.MaKyHoc] || '').trim();
+
+        if (maKyHoc !== session.maKyHoc || !orderMap[id]) continue;
+        if (number_(monthValues[i][monthIndex.SapXep]) === orderMap[id]) continue;
+
+        monthValues[i][monthIndex.SapXep] = orderMap[id];
+        monthChanged = true;
+      }
+
+      if (monthChanged) {
+        monthSheet
+          .getRange(2, 1, monthValues.length - 1, monthHeaders.length)
+          .setValues(monthValues.slice(1));
+      }
+    });
+  } finally {
+    lock.releaseLock();
+  }
+
+  bumpDataVersion_();
+
+  return jsonResponse_({
+    success: true,
+    updatedCount: orderedIds.length,
+    message: 'Đã cập nhật thứ tự ' + orderedIds.length + ' học sinh.'
+  });
+}
+
 function saveHocSinh(token, hocSinh) {
   const session = requireSession_(token);
 
