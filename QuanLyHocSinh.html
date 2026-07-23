@@ -195,14 +195,29 @@
     }
 
     .sort-student-modal {
-      max-width: 720px;
+      max-width: 1040px;
+      height: min(760px, calc(100vh - 48px));
       max-height: calc(100vh - 48px);
       display: flex;
       flex-direction: column;
     }
 
+    .sort-student-modal .modal-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 16px 18px 18px;
+      overflow: hidden;
+    }
+
+    .sort-student-modal .modal-header,
+    .sort-student-modal .modal-footer {
+      flex-shrink: 0;
+    }
+
     .sort-student-help {
-      margin-bottom: 14px;
+      margin-bottom: 12px;
       padding: 12px 14px;
       border: 1px solid #bae6fd;
       border-radius: 14px;
@@ -212,10 +227,155 @@
       line-height: 1.55;
     }
 
+    .sort-student-workspace {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 250px minmax(0, 1fr);
+      gap: 14px;
+    }
+
+    .sort-tree-panel,
+    .sort-list-panel {
+      min-height: 0;
+      border: 1px solid #dbeafe;
+      border-radius: 16px;
+      background: #f8fafc;
+      overflow: hidden;
+    }
+
+    .sort-tree-panel {
+      padding: 10px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    .sort-tree-button {
+      width: 100%;
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      border: 0;
+      border-radius: 11px;
+      background: transparent;
+      color: #334155;
+      cursor: pointer;
+      padding: 8px 10px;
+      text-align: left;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .sort-tree-button:hover {
+      background: #e0f2fe;
+      color: #0369a1;
+    }
+
+    .sort-tree-button.active {
+      background: #0284c7;
+      color: #ffffff;
+      box-shadow: 0 7px 16px rgba(2, 132, 199, 0.22);
+    }
+
+    .sort-tree-level {
+      margin-top: 7px;
+    }
+
+    .sort-tree-level > .sort-tree-button {
+      font-weight: 800;
+    }
+
+    .sort-tree-children {
+      position: relative;
+      display: grid;
+      gap: 3px;
+      margin: 3px 0 6px 17px;
+      padding-left: 11px;
+      border-left: 1px solid #bae6fd;
+    }
+
+    .sort-tree-count {
+      min-width: 25px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.16);
+      font-size: 11px;
+      text-align: center;
+    }
+
+    .sort-tree-button.active .sort-tree-count {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .sort-list-panel {
+      display: flex;
+      flex-direction: column;
+      background: #ffffff;
+    }
+
+    .sort-list-header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 52px;
+      padding: 10px 14px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .sort-list-title {
+      color: #0f172a;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .sort-list-count {
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .sort-list-scroll {
+      min-height: 0;
+      flex: 1;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 12px;
+    }
+
     .sort-student-list {
       display: grid;
-      gap: 9px;
+      gap: 14px;
       min-height: 80px;
+    }
+
+    .sort-class-group {
+      display: grid;
+      gap: 8px;
+    }
+
+    .sort-class-heading {
+      position: sticky;
+      top: -12px;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 4px 7px;
+      background: rgba(255, 255, 255, 0.96);
+      color: #0369a1;
+      font-size: 12px;
+      font-weight: 800;
+      backdrop-filter: blur(8px);
+    }
+
+    .sort-class-items {
+      display: grid;
+      gap: 8px;
     }
 
     .sort-student-item {
@@ -321,13 +481,37 @@
       }
 
       .sort-student-modal {
+        height: calc(100vh - 24px);
         max-height: calc(100vh - 24px);
+      }
+
+      .sort-student-workspace {
+        grid-template-columns: 190px minmax(0, 1fr);
       }
 
       .sort-student-item {
         grid-template-columns: 26px 36px minmax(0, 1fr) auto;
         gap: 8px;
         padding: 10px 9px;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .sort-student-modal .modal-body {
+        overflow-y: auto;
+      }
+
+      .sort-student-workspace {
+        height: auto;
+        grid-template-columns: 1fr;
+      }
+
+      .sort-tree-panel {
+        max-height: 210px;
+      }
+
+      .sort-list-panel {
+        min-height: 420px;
       }
     }
   </style>
@@ -607,9 +791,20 @@
 
       <div class="modal-body">
         <div class="sort-student-help">
-          Kéo và thả học sinh để thay đổi thứ tự. Bạn cũng có thể dùng nút mũi tên; vị trí từ trên xuống dưới sẽ được lưu vào trường <strong>SapXep</strong>.
+          Chọn cấp hoặc lớp ở cây bên trái, sau đó kéo thả học sinh trong cùng một lớp. Thứ tự luôn được ưu tiên theo <strong>Cấp 1 → Cấp 2 → Lớp → SapXep</strong>.
         </div>
-        <div id="sortStudentList" class="sort-student-list"></div>
+        <div class="sort-student-workspace">
+          <aside id="sortStudentTree" class="sort-tree-panel" aria-label="Cây cấp và lớp"></aside>
+          <section class="sort-list-panel">
+            <div class="sort-list-header">
+              <div id="sortStudentViewTitle" class="sort-list-title">Tất cả học sinh</div>
+              <div id="sortStudentViewCount" class="sort-list-count">0 học sinh</div>
+            </div>
+            <div class="sort-list-scroll">
+              <div id="sortStudentList" class="sort-student-list"></div>
+            </div>
+          </section>
+        </div>
       </div>
 
       <div class="modal-footer">
@@ -634,6 +829,7 @@
     let lopList = [];
     let studentList = [];
     let sortStudentList = [];
+    let sortStudentView = { type: 'ALL', value: '' };
 
     document.addEventListener('DOMContentLoaded', function () {
       GridColumnConfig.register({
@@ -989,9 +1185,11 @@
       google.script.run
         .withSuccessHandler(function (res) {
           sortStudentList = parseServerJson(res) || [];
+          sortStudentView = { type: 'ALL', value: '' };
           renderSortStudentList();
           hideBusy();
           document.getElementById('sortStudentModal').classList.add('show');
+          document.body.classList.add('modal-open');
         })
         .withFailureHandler(function (error) {
           hideBusy();
@@ -1002,37 +1200,177 @@
 
     function closeSortStudentModal() {
       document.getElementById('sortStudentModal').classList.remove('show');
+      document.body.classList.remove('modal-open');
+    }
+
+    function getSortStudentGroupKey(item) {
+      return String(item.khoi || '') + '|' + String(item.lop || '');
+    }
+
+    function getSortClassList() {
+      const classMap = {};
+
+      lopList.forEach(function (item) {
+        classMap[String(item.khoi || '') + '|' + String(item.maLop || '')] = {
+          khoi: String(item.khoi || ''),
+          maLop: String(item.maLop || ''),
+          tenLop: item.tenLop || item.maLop || '',
+          thuTu: Number(item.thuTu) || 999
+        };
+      });
+
+      sortStudentList.forEach(function (item) {
+        const key = getSortStudentGroupKey(item);
+        if (classMap[key]) return;
+
+        classMap[key] = {
+          khoi: String(item.khoi || ''),
+          maLop: String(item.lop || ''),
+          tenLop: getLopName(item.lop) || item.lop || 'Chưa xếp lớp',
+          thuTu: 999
+        };
+      });
+
+      return Object.keys(classMap).map(function (key) {
+        const item = classMap[key];
+        item.groupKey = key;
+        item.level = Number(item.khoi) >= 1 && Number(item.khoi) <= 5 ? 1 : 2;
+        item.studentCount = sortStudentList.filter(function (student) {
+          return getSortStudentGroupKey(student) === key;
+        }).length;
+        return item;
+      }).filter(function (item) {
+        return item.studentCount > 0;
+      }).sort(function (a, b) {
+        const gradeCompare = (Number(a.khoi) || 999) - (Number(b.khoi) || 999);
+        if (gradeCompare !== 0) return gradeCompare;
+        if (a.thuTu !== b.thuTu) return a.thuTu - b.thuTu;
+        return a.tenLop.localeCompare(b.tenLop, 'vi');
+      });
+    }
+
+    function renderSortStudentTree() {
+      const tree = document.getElementById('sortStudentTree');
+      const classes = getSortClassList();
+      const total = sortStudentList.length;
+      const allActive = sortStudentView.type === 'ALL' ? ' active' : '';
+      let html = `
+        <button class="sort-tree-button${allActive}" type="button" onclick="selectSortStudentView('ALL', '')">
+          <span>☰ Tất cả</span>
+          <span class="sort-tree-count">${total}</span>
+        </button>
+      `;
+
+      [1, 2].forEach(function (level) {
+        const levelClasses = classes.filter(function (item) {
+          return item.level === level;
+        });
+        const levelCount = levelClasses.reduce(function (sum, item) {
+          return sum + item.studentCount;
+        }, 0);
+        const levelActive = sortStudentView.type === 'LEVEL' && Number(sortStudentView.value) === level
+          ? ' active'
+          : '';
+
+        html += `
+          <div class="sort-tree-level">
+            <button class="sort-tree-button${levelActive}" type="button" onclick="selectSortStudentView('LEVEL', '${level}')">
+              <span>▾ Cấp ${level}</span>
+              <span class="sort-tree-count">${levelCount}</span>
+            </button>
+            <div class="sort-tree-children">
+              ${levelClasses.map(function (item) {
+                const active = sortStudentView.type === 'CLASS' && sortStudentView.value === item.groupKey
+                  ? ' active'
+                  : '';
+                return `
+                  <button class="sort-tree-button${active}" type="button" onclick="selectSortStudentView('CLASS', '${escapeAttribute(item.groupKey)}')">
+                    <span>${escapeHtml(item.tenLop)}</span>
+                    <span class="sort-tree-count">${item.studentCount}</span>
+                  </button>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      });
+
+      tree.innerHTML = html;
+    }
+
+    function selectSortStudentView(type, value) {
+      sortStudentView = { type: type, value: value };
+      renderSortStudentList();
+    }
+
+    function getVisibleSortClasses() {
+      return getSortClassList().filter(function (item) {
+        if (sortStudentView.type === 'ALL') return true;
+        if (sortStudentView.type === 'LEVEL') return item.level === Number(sortStudentView.value);
+        return item.groupKey === sortStudentView.value;
+      });
+    }
+
+    function getSortViewTitle(visibleClasses) {
+      if (sortStudentView.type === 'ALL') return 'Tất cả học sinh';
+      if (sortStudentView.type === 'LEVEL') return 'Học sinh Cấp ' + sortStudentView.value;
+      return visibleClasses.length ? visibleClasses[0].tenLop : 'Danh sách học sinh';
     }
 
     function renderSortStudentList() {
       const list = document.getElementById('sortStudentList');
+      const visibleClasses = getVisibleSortClasses();
+      const visibleCount = visibleClasses.reduce(function (sum, item) {
+        return sum + item.studentCount;
+      }, 0);
 
-      if (!sortStudentList.length) {
+      renderSortStudentTree();
+      document.getElementById('sortStudentViewTitle').textContent = getSortViewTitle(visibleClasses);
+      document.getElementById('sortStudentViewCount').textContent = visibleCount + ' học sinh';
+
+      if (!visibleCount) {
         list.innerHTML = '<div class="empty-box">Chưa có học sinh để sắp xếp.</div>';
-        document.getElementById('btnSaveStudentOrder').disabled = true;
+        document.getElementById('btnSaveStudentOrder').disabled = sortStudentList.length === 0;
         return;
       }
 
       document.getElementById('btnSaveStudentOrder').disabled = false;
-      list.innerHTML = sortStudentList.map(function (item, index) {
+      list.innerHTML = visibleClasses.map(function (classItem) {
+        const students = sortStudentList.filter(function (item) {
+          return getSortStudentGroupKey(item) === classItem.groupKey;
+        });
+
         return `
-          <div
-            class="sort-student-item"
-            draggable="true"
-            data-student-id="${escapeHtml(item.maHocSinh)}"
-            ondragstart="handleSortDragStart(event)"
-            ondragover="handleSortDragOver(event)"
-            ondragend="handleSortDragEnd(event)"
-          >
-            <span class="sort-drag-handle" aria-hidden="true">⋮⋮</span>
-            <span class="sort-position">${index + 1}</span>
-            <div>
-              <div class="sort-student-name">${escapeHtml(item.hoTen)}</div>
-              <div class="sort-student-meta">${escapeHtml(getKhoiName(item.khoi))} · ${escapeHtml(getLopName(item.lop))}</div>
+          <div class="sort-class-group">
+            <div class="sort-class-heading">
+              <span>${escapeHtml(classItem.tenLop)} · ${escapeHtml(getKhoiName(classItem.khoi))}</span>
+              <span>${students.length} học sinh</span>
             </div>
-            <div class="sort-move-actions">
-              <button class="sort-move-button" type="button" title="Di chuyển lên" ${index === 0 ? 'disabled' : ''} onclick="moveSortStudent('${escapeAttribute(item.maHocSinh)}', -1)">↑</button>
-              <button class="sort-move-button" type="button" title="Di chuyển xuống" ${index === sortStudentList.length - 1 ? 'disabled' : ''} onclick="moveSortStudent('${escapeAttribute(item.maHocSinh)}', 1)">↓</button>
+            <div class="sort-class-items" data-group-key="${escapeHtml(classItem.groupKey)}">
+              ${students.map(function (item, index) {
+                return `
+                  <div
+                    class="sort-student-item"
+                    draggable="true"
+                    data-student-id="${escapeHtml(item.maHocSinh)}"
+                    data-group-key="${escapeHtml(classItem.groupKey)}"
+                    ondragstart="handleSortDragStart(event)"
+                    ondragover="handleSortDragOver(event)"
+                    ondragend="handleSortDragEnd(event)"
+                  >
+                    <span class="sort-drag-handle" aria-hidden="true">⋮⋮</span>
+                    <span class="sort-position">${index + 1}</span>
+                    <div>
+                      <div class="sort-student-name">${escapeHtml(item.hoTen)}</div>
+                      <div class="sort-student-meta">${escapeHtml(getKhoiName(item.khoi))} · ${escapeHtml(getLopName(item.lop))}</div>
+                    </div>
+                    <div class="sort-move-actions">
+                      <button class="sort-move-button" type="button" title="Di chuyển lên" ${index === 0 ? 'disabled' : ''} onclick="moveSortStudent('${escapeAttribute(item.maHocSinh)}', -1)">↑</button>
+                      <button class="sort-move-button" type="button" title="Di chuyển xuống" ${index === students.length - 1 ? 'disabled' : ''} onclick="moveSortStudent('${escapeAttribute(item.maHocSinh)}', 1)">↓</button>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
             </div>
           </div>
         `;
@@ -1052,55 +1390,83 @@
       const dragging = document.querySelector('.sort-student-item.dragging');
       const target = event.currentTarget;
       if (!dragging || dragging === target) return;
+      if (dragging.dataset.groupKey !== target.dataset.groupKey) return;
 
       const rect = target.getBoundingClientRect();
       const insertAfter = event.clientY > rect.top + rect.height / 2;
       target.parentNode.insertBefore(dragging, insertAfter ? target.nextSibling : target);
-      updateSortPositionsFromDom();
+      updateSortPositionsFromDom(target.dataset.groupKey);
     }
 
     function handleSortDragEnd(event) {
+      const groupKey = event.currentTarget.dataset.groupKey;
       event.currentTarget.classList.remove('dragging');
-      syncSortStudentListFromDom();
+      syncSortGroupFromDom(groupKey);
       renderSortStudentList();
     }
 
-    function updateSortPositionsFromDom() {
-      document.querySelectorAll('#sortStudentList .sort-student-item').forEach(function (item, index) {
+    function getGroupDomItems(groupKey) {
+      return Array.from(document.querySelectorAll('#sortStudentList .sort-student-item')).filter(function (item) {
+        return item.dataset.groupKey === groupKey;
+      });
+    }
+
+    function updateSortPositionsFromDom(groupKey) {
+      getGroupDomItems(groupKey).forEach(function (item, index) {
         item.querySelector('.sort-position').textContent = index + 1;
       });
     }
 
-    function syncSortStudentListFromDom() {
-      const ids = Array.from(document.querySelectorAll('#sortStudentList .sort-student-item'))
-        .map(function (item) {
-          return item.dataset.studentId;
-        });
+    function applySortGroupOrder(groupKey, ids) {
       const map = sortStudentList.reduce(function (result, item) {
         result[item.maHocSinh] = item;
         return result;
       }, {});
+      const groupIndexes = [];
 
-      sortStudentList = ids.map(function (id) {
-        return map[id];
-      }).filter(Boolean);
+      sortStudentList.forEach(function (item, index) {
+        if (getSortStudentGroupKey(item) === groupKey) groupIndexes.push(index);
+      });
+
+      groupIndexes.forEach(function (listIndex, index) {
+        if (map[ids[index]]) sortStudentList[listIndex] = map[ids[index]];
+      });
+    }
+
+    function syncSortGroupFromDom(groupKey) {
+      const ids = getGroupDomItems(groupKey).map(function (item) {
+        return item.dataset.studentId;
+      });
+      applySortGroupOrder(groupKey, ids);
     }
 
     function moveSortStudent(maHocSinh, direction) {
-      const currentIndex = sortStudentList.findIndex(function (item) {
+      const student = sortStudentList.find(function (item) {
         return item.maHocSinh === maHocSinh;
       });
+      if (!student) return;
+
+      const groupKey = getSortStudentGroupKey(student);
+      const groupIds = sortStudentList.filter(function (item) {
+        return getSortStudentGroupKey(item) === groupKey;
+      }).map(function (item) {
+        return item.maHocSinh;
+      });
+      const currentIndex = groupIds.indexOf(maHocSinh);
       const nextIndex = currentIndex + direction;
 
-      if (currentIndex < 0 || nextIndex < 0 || nextIndex >= sortStudentList.length) return;
+      if (currentIndex < 0 || nextIndex < 0 || nextIndex >= groupIds.length) return;
 
-      const moved = sortStudentList.splice(currentIndex, 1)[0];
-      sortStudentList.splice(nextIndex, 0, moved);
+      const movedId = groupIds.splice(currentIndex, 1)[0];
+      groupIds.splice(nextIndex, 0, movedId);
+      applySortGroupOrder(groupKey, groupIds);
       renderSortStudentList();
     }
 
     function saveStudentOrder() {
-      syncSortStudentListFromDom();
+      document.querySelectorAll('#sortStudentList .sort-class-items').forEach(function (group) {
+        syncSortGroupFromDom(group.dataset.groupKey);
+      });
 
       const orderedIds = sortStudentList.map(function (item) {
         return item.maHocSinh;

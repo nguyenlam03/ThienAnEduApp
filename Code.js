@@ -617,8 +617,20 @@ function saveHocSinhOrder(token, orderedStudentIds) {
       throw new Error('Danh sách học sinh đã thay đổi. Vui lòng đóng cửa sổ sắp xếp và tải lại dữ liệu.');
     }
 
-    const orderMap = orderedIds.reduce((map, id, position) => {
-      map[id] = position + 1;
+    const studentGroupMap = values.slice(1).reduce((map, row) => {
+      const id = String(row[index.MaHocSinh] || '').trim();
+      if (!id || !currentIdMap[id]) return map;
+
+      const khoi = index.Khoi === undefined ? '' : String(row[index.Khoi] || '').trim();
+      const lop = index.Lop === undefined ? '' : String(row[index.Lop] || '').trim();
+      map[id] = khoi + '|' + lop;
+      return map;
+    }, {});
+    const nextOrderByGroup = {};
+    const orderMap = orderedIds.reduce((map, id) => {
+      const groupKey = studentGroupMap[id] || '|';
+      nextOrderByGroup[groupKey] = number_(nextOrderByGroup[groupKey]) + 1;
+      map[id] = nextOrderByGroup[groupKey];
       return map;
     }, {});
     const now = new Date();
@@ -3538,14 +3550,6 @@ function writeObjectsToSheet_(sheetName, objects, requiredHeaders) {
 }
 
 function compareStudentSort_(a, b) {
-  const sortA = number_(a.sapXep || a.SapXep);
-  const sortB = number_(b.sapXep || b.SapXep);
-
-  const finalA = sortA > 0 ? sortA : 999999;
-  const finalB = sortB > 0 ? sortB : 999999;
-
-  if (finalA !== finalB) return finalA - finalB;
-
   const khoiA = Number(a.khoi || a.Khoi || 999);
   const khoiB = Number(b.khoi || b.Khoi || 999);
 
@@ -3555,6 +3559,14 @@ function compareStudentSort_(a, b) {
   const lopB = String(b.lop || b.Lop || '');
 
   if (lopA !== lopB) return lopA.localeCompare(lopB, 'vi');
+
+  const sortA = number_(a.sapXep || a.SapXep);
+  const sortB = number_(b.sapXep || b.SapXep);
+
+  const finalA = sortA > 0 ? sortA : 999999;
+  const finalB = sortB > 0 ? sortB : 999999;
+
+  if (finalA !== finalB) return finalA - finalB;
 
   return String(a.hoTen || a.HoTen || '').localeCompare(String(b.hoTen || b.HoTen || ''), 'vi');
 }
