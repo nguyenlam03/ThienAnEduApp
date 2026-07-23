@@ -3552,6 +3552,11 @@ function writeObjectsToSheet_(sheetName, objects, requiredHeaders) {
 function compareStudentSort_(a, b) {
   const khoiA = Number(a.khoi || a.Khoi || 999);
   const khoiB = Number(b.khoi || b.Khoi || 999);
+  const capA = khoiA >= 1 && khoiA <= 5 ? 1 : (khoiA >= 6 && khoiA <= 9 ? 2 : 999);
+  const capB = khoiB >= 1 && khoiB <= 5 ? 1 : (khoiB >= 6 && khoiB <= 9 ? 2 : 999);
+
+  // Thứ tự bắt buộc: Cấp 1 -> Cấp 2, lớp 1 -> 9, rồi mới đến SapXep.
+  if (capA !== capB) return capA - capB;
 
   if (khoiA !== khoiB) return khoiA - khoiB;
 
