@@ -422,6 +422,10 @@ function getKhoiList_() {
 
 function getLopList_() {
   const rows = readObjects_(SHEET_LOP);
+  const khoiOrderMap = getKhoiList_().reduce((map, item, index) => {
+    map[item.khoi] = number_(item.thuTu) || index + 1;
+    return map;
+  }, {});
 
   return rows
     .filter(row => String(row.TrangThai || '').trim().toUpperCase() === 'ACTIVE')
@@ -432,7 +436,9 @@ function getLopList_() {
       thuTu: Number(row.ThuTu) || 999
     }))
     .sort((a, b) => {
-      if (a.khoi !== b.khoi) return Number(a.khoi) - Number(b.khoi);
+      if (a.khoi !== b.khoi) {
+        return number_(khoiOrderMap[a.khoi] || 999) - number_(khoiOrderMap[b.khoi] || 999);
+      }
       return a.thuTu - b.thuTu;
     });
 }
@@ -617,15 +623,20 @@ function saveHocSinhOrder(token, orderedStudentIds) {
       throw new Error('Danh sách học sinh đã thay đổi. Vui lòng đóng cửa sổ sắp xếp và tải lại dữ liệu.');
     }
 
+    const lopOrderMap = getLopList_().reduce((map, item) => {
+      map[String(item.khoi || '') + '|' + String(item.maLop || '')] = number_(item.thuTu);
+      return map;
+    }, {});
     const studentGroupMap = values.slice(1).reduce((map, row) => {
       const id = String(row[index.MaHocSinh] || '').trim();
       if (!id || !currentIdMap[id]) return map;
 
       const khoi = index.Khoi === undefined ? '' : String(row[index.Khoi] || '').trim();
       const lop = index.Lop === undefined ? '' : String(row[index.Lop] || '').trim();
+      const groupKey = khoi + '|' + lop;
       map[id] = {
-        groupKey: khoi + '|' + lop,
-        khoi: Number(khoi)
+        groupKey: groupKey,
+        classNumber: number_(lopOrderMap[groupKey])
       };
       return map;
     }, {});
@@ -633,8 +644,8 @@ function saveHocSinhOrder(token, orderedStudentIds) {
     const orderMap = orderedIds.reduce((map, id) => {
       const group = studentGroupMap[id];
 
-      if (!group || group.khoi < 1 || group.khoi > 9) {
-        throw new Error('Học sinh có khối không hợp lệ. Chỉ hỗ trợ khối 1 đến khối 9.');
+      if (!group || group.classNumber < 1 || group.classNumber > 9) {
+        throw new Error('Lớp học thiếu thứ tự hợp lệ. Cột ThuTu trong sheet Lop phải từ 1 đến 9.');
       }
 
       const position = number_(nextOrderByGroup[group.groupKey]);
@@ -643,7 +654,7 @@ function saveHocSinhOrder(token, orderedStudentIds) {
         throw new Error('Mỗi lớp chỉ hỗ trợ tối đa 100 vị trí sắp xếp.');
       }
 
-      map[id] = group.khoi * 100 + position;
+      map[id] = group.classNumber * 100 + position;
       nextOrderByGroup[group.groupKey] = position + 1;
       return map;
     }, {});
@@ -764,12 +775,21 @@ function saveHocSinh(token, hocSinh) {
     throw new Error('Lớp không thuộc khối đã chọn.');
   }
 
+  const lock = LockService.getScriptLock();
+
+  if (!lock.tryLock(30000)) {
+    throw new Error('Hệ thống đang có người cập nhật học sinh. Vui lòng thao tác lại.');
+  }
+
+  let newId = maHocSinh;
+  let existed = false;
+
+  try {
   const now = new Date();
   const rows = readObjectsNoCache_(SHEET_HOCSINH);
-  let newId = maHocSinh;
 
-  const khoiNumber = Number(khoi);
-  const sortRangeStart = khoiNumber * 100;
+  const classNumber = number_(validLop.thuTu);
+  const sortRangeStart = classNumber * 100;
   const sortRangeEnd = sortRangeStart + 99;
   const requestedSort = number_(sapXep);
   const requestedSortUsed = rows.some(row => {
@@ -780,8 +800,8 @@ function saveHocSinh(token, hocSinh) {
       number_(row.SapXep) === requestedSort;
   });
 
-  if (khoiNumber < 1 || khoiNumber > 9) {
-    throw new Error('Chỉ hỗ trợ sắp xếp học sinh từ khối 1 đến khối 9.');
+  if (classNumber < 1 || classNumber > 9) {
+    throw new Error('Lớp học thiếu thứ tự hợp lệ. Cột ThuTu trong sheet Lop phải từ 1 đến 9.');
   }
 
   if (requestedSort < sortRangeStart || requestedSort > sortRangeEnd || requestedSortUsed) {
@@ -812,7 +832,7 @@ function saveHocSinh(token, hocSinh) {
     sapXep = String(availableSort);
   }
 
-  const existed = rows.some(row => {
+  existed = rows.some(row => {
     return String(row.MaHocSinh || '').trim() === maHocSinh &&
       String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED';
   });
@@ -866,6 +886,9 @@ function saveHocSinh(token, hocSinh) {
 
   writeObjectsToSheet_(SHEET_HOCSINH, updatedRows, getHocSinhHeaders_());
   saveHocSinhKyHoc_(newId, kyHocIds, hocPhi);
+  } finally {
+    lock.releaseLock();
+  }
 
   // Đổi phiên bản trước khi đọc lại dữ liệu để bảo đảm không dùng cache cũ.
   bumpDataVersion_();
@@ -3617,13 +3640,14 @@ function compareStudentSort_(a, b) {
   // Mọi danh sách học sinh ưu tiên SapXep tăng dần: 100-199, 200-299, ... 900-999.
   if (finalA !== finalB) return finalA - finalB;
 
-  const khoiA = Number(a.khoi || a.Khoi || 999);
-  const khoiB = Number(b.khoi || b.Khoi || 999);
-
-  if (khoiA !== khoiB) return khoiA - khoiB;
-
   const lopA = String(a.lop || a.Lop || '');
   const lopB = String(b.lop || b.Lop || '');
+  const lopMatchA = lopA.match(/([1-9])/);
+  const lopMatchB = lopB.match(/([1-9])/);
+  const classNumberA = lopMatchA ? Number(lopMatchA[1]) : Math.floor(finalA / 100);
+  const classNumberB = lopMatchB ? Number(lopMatchB[1]) : Math.floor(finalB / 100);
+
+  if (classNumberA !== classNumberB) return classNumberA - classNumberB;
 
   if (lopA !== lopB) return lopA.localeCompare(lopB, 'vi');
 

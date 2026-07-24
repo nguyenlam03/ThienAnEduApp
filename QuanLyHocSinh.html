@@ -712,7 +712,7 @@
 
           <div class="field">
             <label>Lớp <span style="color:#dc2626">*</span></label>
-            <select id="formLop">
+            <select id="formLop" onchange="applySapXepRangeByLop()">
               <option value="">Chọn lớp</option>
             </select>
           </div>
@@ -1035,15 +1035,19 @@
       const khoi = document.getElementById('formKhoi').value;
       renderLopSelect('formLop', khoi, false, selectedLop);
       applyDefaultHocPhiByKhoi();
-      applySapXepRangeByKhoi();
+      applySapXepRangeByLop();
     }
 
-    function applySapXepRangeByKhoi() {
-      const khoi = Number(document.getElementById('formKhoi').value);
+    function applySapXepRangeByLop() {
+      const maLop = document.getElementById('formLop').value;
+      const lop = lopList.find(function (item) {
+        return item.maLop === maLop;
+      });
+      const classNumber = lop ? Number(lop.thuTu) : 0;
       const input = document.getElementById('formSapXep');
       const help = document.getElementById('formSapXepHelp');
 
-      if (khoi < 1 || khoi > 9) {
+      if (classNumber < 1 || classNumber > 9) {
         input.min = '100';
         input.max = '999';
         input.placeholder = 'Tự cấp theo lớp nếu để trống';
@@ -1051,7 +1055,7 @@
         return;
       }
 
-      const start = khoi * 100;
+      const start = classNumber * 100;
       const end = start + 99;
       input.min = String(start);
       input.max = String(end);
@@ -1250,7 +1254,8 @@
           khoi: String(item.khoi || ''),
           maLop: String(item.maLop || ''),
           tenLop: item.tenLop || item.maLop || '',
-          thuTu: Number(item.thuTu) || 999
+          thuTu: Number(item.thuTu) || 999,
+          classNumber: Number(item.thuTu) || 0
         };
       });
 
@@ -1258,11 +1263,13 @@
         const key = getSortStudentGroupKey(item);
         if (classMap[key]) return;
 
+        const classMatch = String(item.lop || '').match(/([1-9])/);
         classMap[key] = {
           khoi: String(item.khoi || ''),
           maLop: String(item.lop || ''),
           tenLop: getLopName(item.lop) || item.lop || 'Chưa xếp lớp',
-          thuTu: 999
+          thuTu: classMatch ? Number(classMatch[1]) : 999,
+          classNumber: classMatch ? Number(classMatch[1]) : 0
         };
       });
 
@@ -1276,8 +1283,10 @@
       }).filter(function (item) {
         return item.studentCount > 0;
       }).sort(function (a, b) {
-        const gradeCompare = (Number(a.khoi) || 999) - (Number(b.khoi) || 999);
-        if (gradeCompare !== 0) return gradeCompare;
+        const khoiA = khoiList.find(function (item) { return item.khoi === a.khoi; });
+        const khoiB = khoiList.find(function (item) { return item.khoi === b.khoi; });
+        const khoiCompare = Number(khoiA ? khoiA.thuTu : 999) - Number(khoiB ? khoiB.thuTu : 999);
+        if (khoiCompare !== 0) return khoiCompare;
         if (a.thuTu !== b.thuTu) return a.thuTu - b.thuTu;
         return a.tenLop.localeCompare(b.tenLop, 'vi');
       });
@@ -1295,33 +1304,35 @@
         </button>
       `;
 
-      const grades = classes.map(function (item) {
-        return Number(item.khoi);
-      }).filter(function (grade, index, list) {
-        return grade >= 1 && grade <= 9 && list.indexOf(grade) === index;
+      const khoiValues = classes.map(function (item) {
+        return item.khoi;
+      }).filter(function (khoi, index, list) {
+        return khoi && list.indexOf(khoi) === index;
       }).sort(function (a, b) {
-        return a - b;
+        const khoiA = khoiList.find(function (item) { return item.khoi === a; });
+        const khoiB = khoiList.find(function (item) { return item.khoi === b; });
+        return Number(khoiA ? khoiA.thuTu : 999) - Number(khoiB ? khoiB.thuTu : 999);
       });
 
-      grades.forEach(function (grade) {
-        const gradeClasses = classes.filter(function (item) {
-          return Number(item.khoi) === grade;
+      khoiValues.forEach(function (khoi) {
+        const khoiClasses = classes.filter(function (item) {
+          return item.khoi === khoi;
         });
-        const gradeCount = gradeClasses.reduce(function (sum, item) {
+        const khoiCount = khoiClasses.reduce(function (sum, item) {
           return sum + item.studentCount;
         }, 0);
-        const gradeActive = sortStudentView.type === 'GRADE' && Number(sortStudentView.value) === grade
+        const khoiActive = sortStudentView.type === 'KHOI' && sortStudentView.value === khoi
           ? ' active'
           : '';
 
         html += `
           <div class="sort-tree-level">
-            <button class="sort-tree-button${gradeActive}" type="button" onclick="selectSortStudentView('GRADE', '${grade}')">
-              <span>▾ Khối ${grade}</span>
-              <span class="sort-tree-count">${gradeCount}</span>
+            <button class="sort-tree-button${khoiActive}" type="button" onclick="selectSortStudentView('KHOI', '${escapeAttribute(khoi)}')">
+              <span>▾ ${escapeHtml(getKhoiName(khoi))}</span>
+              <span class="sort-tree-count">${khoiCount}</span>
             </button>
             <div class="sort-tree-children">
-              ${gradeClasses.map(function (item) {
+              ${khoiClasses.map(function (item) {
                 const active = sortStudentView.type === 'CLASS' && sortStudentView.value === item.groupKey
                   ? ' active'
                   : '';
@@ -1348,14 +1359,14 @@
     function getVisibleSortClasses() {
       return getSortClassList().filter(function (item) {
         if (sortStudentView.type === 'ALL') return true;
-        if (sortStudentView.type === 'GRADE') return Number(item.khoi) === Number(sortStudentView.value);
+        if (sortStudentView.type === 'KHOI') return item.khoi === sortStudentView.value;
         return item.groupKey === sortStudentView.value;
       });
     }
 
     function getSortViewTitle(visibleClasses) {
       if (sortStudentView.type === 'ALL') return 'Tất cả học sinh';
-      if (sortStudentView.type === 'GRADE') return 'Học sinh Khối ' + sortStudentView.value;
+      if (sortStudentView.type === 'KHOI') return 'Học sinh ' + getKhoiName(sortStudentView.value);
       return visibleClasses.length ? visibleClasses[0].tenLop : 'Danh sách học sinh';
     }
 
@@ -1386,7 +1397,7 @@
           <div class="sort-class-group">
             <div class="sort-class-heading">
               <span>${escapeHtml(classItem.tenLop)} · ${escapeHtml(getKhoiName(classItem.khoi))}</span>
-              <span>${students.length} học sinh · SapXep ${Number(classItem.khoi) * 100}–${Number(classItem.khoi) * 100 + 99}</span>
+              <span>${students.length} học sinh · SapXep ${classItem.classNumber * 100}–${classItem.classNumber * 100 + 99}</span>
             </div>
             <div class="sort-class-items" data-group-key="${escapeHtml(classItem.groupKey)}">
               ${students.map(function (item, index) {
@@ -1401,7 +1412,7 @@
                     ondragend="handleSortDragEnd(event)"
                   >
                     <span class="sort-drag-handle" aria-hidden="true">⋮⋮</span>
-                    <span class="sort-position">${Number(classItem.khoi) * 100 + index}</span>
+                    <span class="sort-position">${classItem.classNumber * 100 + index}</span>
                     <div>
                       <div class="sort-student-name">${escapeHtml(item.hoTen)}</div>
                       <div class="sort-student-meta">${escapeHtml(getKhoiName(item.khoi))} · ${escapeHtml(getLopName(item.lop))}</div>
@@ -1454,8 +1465,12 @@
     }
 
     function updateSortPositionsFromDom(groupKey) {
-      const khoi = Number(String(groupKey || '').split('|')[0]);
-      const baseOrder = khoi >= 1 && khoi <= 9 ? khoi * 100 : 0;
+      const classItem = getSortClassList().find(function (item) {
+        return item.groupKey === groupKey;
+      });
+      const baseOrder = classItem && classItem.classNumber >= 1 && classItem.classNumber <= 9
+        ? classItem.classNumber * 100
+        : 0;
 
       getGroupDomItems(groupKey).forEach(function (item, index) {
         item.querySelector('.sort-position').textContent = baseOrder + index;
@@ -1593,7 +1608,7 @@
 
       document.getElementById('formKhoi').value = item.khoi || '';
       renderLopSelect('formLop', item.khoi || '', false, item.lop);
-      applySapXepRangeByKhoi();
+      applySapXepRangeByLop();
 
       document.getElementById('formSapXep').value = item.sapXep || '';
       document.getElementById('formHocPhi').value = item.hocPhi ? formatMoneyInputValue(item.hocPhi) : '';
