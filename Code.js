@@ -785,7 +785,7 @@ function saveHocSinh(token, hocSinh) {
   }
 
   if (requestedSort < sortRangeStart || requestedSort > sortRangeEnd || requestedSortUsed) {
-    const usedSortValues = rows.reduce((map, row) => {
+    const maxSortInClass = rows.reduce((maxValue, row) => {
       const rowId = String(row.MaHocSinh || '').trim();
       const rowStatus = String(row.TrangThai || '').trim().toUpperCase();
 
@@ -796,21 +796,16 @@ function saveHocSinh(token, hocSinh) {
         String(row.Lop || '').trim() === lop
       ) {
         const value = number_(row.SapXep);
-        if (value >= sortRangeStart && value <= sortRangeEnd) map[value] = true;
+        if (value >= sortRangeStart && value <= sortRangeEnd) {
+          return Math.max(maxValue, value);
+        }
       }
 
-      return map;
-    }, {});
-    let availableSort = 0;
+      return maxValue;
+    }, sortRangeStart - 1);
+    const availableSort = maxSortInClass + 1;
 
-    for (let value = sortRangeStart; value <= sortRangeEnd; value++) {
-      if (!usedSortValues[value]) {
-        availableSort = value;
-        break;
-      }
-    }
-
-    if (!availableSort) {
+    if (availableSort > sortRangeEnd) {
       throw new Error('Lớp đã sử dụng hết dải SapXep từ ' + sortRangeStart + ' đến ' + sortRangeEnd + '.');
     }
 
@@ -900,6 +895,7 @@ function saveHocSinh(token, hocSinh) {
   return jsonResponse_({
     success: true,
     maHocSinh: newId,
+    sapXep: number_(sapXep),
     thuPhiUpdated: !!(thuPhiResult && (thuPhiResult.added || thuPhiResult.alreadyExists)),
     thuPhiSheetName: thuPhiResult ? thuPhiResult.sheetName : '',
     message: message
