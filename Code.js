@@ -623,14 +623,28 @@ function saveHocSinhOrder(token, orderedStudentIds) {
 
       const khoi = index.Khoi === undefined ? '' : String(row[index.Khoi] || '').trim();
       const lop = index.Lop === undefined ? '' : String(row[index.Lop] || '').trim();
-      map[id] = khoi + '|' + lop;
+      map[id] = {
+        groupKey: khoi + '|' + lop,
+        khoi: Number(khoi)
+      };
       return map;
     }, {});
     const nextOrderByGroup = {};
     const orderMap = orderedIds.reduce((map, id) => {
-      const groupKey = studentGroupMap[id] || '|';
-      nextOrderByGroup[groupKey] = number_(nextOrderByGroup[groupKey]) + 1;
-      map[id] = nextOrderByGroup[groupKey];
+      const group = studentGroupMap[id];
+
+      if (!group || group.khoi < 1 || group.khoi > 9) {
+        throw new Error('Học sinh có khối không hợp lệ. Chỉ hỗ trợ khối 1 đến khối 9.');
+      }
+
+      const position = number_(nextOrderByGroup[group.groupKey]);
+
+      if (position > 99) {
+        throw new Error('Mỗi lớp chỉ hỗ trợ tối đa 100 vị trí sắp xếp.');
+      }
+
+      map[id] = group.khoi * 100 + position;
+      nextOrderByGroup[group.groupKey] = position + 1;
       return map;
     }, {});
     const now = new Date();
@@ -692,7 +706,7 @@ function saveHocSinhOrder(token, orderedStudentIds) {
   return jsonResponse_({
     success: true,
     updatedCount: orderedIds.length,
-    message: 'Đã cập nhật thứ tự ' + orderedIds.length + ' học sinh.'
+    message: 'Đã cập nhật SapXep theo dải lớp cho ' + orderedIds.length + ' học sinh.'
   });
 }
 
@@ -703,7 +717,7 @@ function saveHocSinh(token, hocSinh) {
 
   const maHocSinh = String(hocSinh.maHocSinh || '').trim();
   const kyHocIds = Array.isArray(hocSinh.kyHocIds) ? hocSinh.kyHocIds : [];
-  const sapXep = String(hocSinh.sapXep || '').trim();
+  let sapXep = String(hocSinh.sapXep || '').trim();
   const khoi = String(hocSinh.khoi || '').trim();
   const lop = String(hocSinh.lop || '').trim();
   const hoTen = String(hocSinh.hoTen || '').trim();
@@ -753,6 +767,55 @@ function saveHocSinh(token, hocSinh) {
   const now = new Date();
   const rows = readObjectsNoCache_(SHEET_HOCSINH);
   let newId = maHocSinh;
+
+  const khoiNumber = Number(khoi);
+  const sortRangeStart = khoiNumber * 100;
+  const sortRangeEnd = sortRangeStart + 99;
+  const requestedSort = number_(sapXep);
+  const requestedSortUsed = rows.some(row => {
+    return String(row.MaHocSinh || '').trim() !== maHocSinh &&
+      String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED' &&
+      String(row.Khoi || '').trim() === khoi &&
+      String(row.Lop || '').trim() === lop &&
+      number_(row.SapXep) === requestedSort;
+  });
+
+  if (khoiNumber < 1 || khoiNumber > 9) {
+    throw new Error('Chỉ hỗ trợ sắp xếp học sinh từ khối 1 đến khối 9.');
+  }
+
+  if (requestedSort < sortRangeStart || requestedSort > sortRangeEnd || requestedSortUsed) {
+    const usedSortValues = rows.reduce((map, row) => {
+      const rowId = String(row.MaHocSinh || '').trim();
+      const rowStatus = String(row.TrangThai || '').trim().toUpperCase();
+
+      if (
+        rowId !== maHocSinh &&
+        rowStatus !== 'DELETED' &&
+        String(row.Khoi || '').trim() === khoi &&
+        String(row.Lop || '').trim() === lop
+      ) {
+        const value = number_(row.SapXep);
+        if (value >= sortRangeStart && value <= sortRangeEnd) map[value] = true;
+      }
+
+      return map;
+    }, {});
+    let availableSort = 0;
+
+    for (let value = sortRangeStart; value <= sortRangeEnd; value++) {
+      if (!usedSortValues[value]) {
+        availableSort = value;
+        break;
+      }
+    }
+
+    if (!availableSort) {
+      throw new Error('Lớp đã sử dụng hết dải SapXep từ ' + sortRangeStart + ' đến ' + sortRangeEnd + '.');
+    }
+
+    sapXep = String(availableSort);
+  }
 
   const existed = rows.some(row => {
     return String(row.MaHocSinh || '').trim() === maHocSinh &&
@@ -3550,13 +3613,16 @@ function writeObjectsToSheet_(sheetName, objects, requiredHeaders) {
 }
 
 function compareStudentSort_(a, b) {
+  const sortA = number_(a.sapXep || a.SapXep);
+  const sortB = number_(b.sapXep || b.SapXep);
+  const finalA = sortA > 0 ? sortA : 999999;
+  const finalB = sortB > 0 ? sortB : 999999;
+
+  // Mọi danh sách học sinh ưu tiên SapXep tăng dần: 100-199, 200-299, ... 900-999.
+  if (finalA !== finalB) return finalA - finalB;
+
   const khoiA = Number(a.khoi || a.Khoi || 999);
   const khoiB = Number(b.khoi || b.Khoi || 999);
-  const capA = khoiA >= 1 && khoiA <= 5 ? 1 : (khoiA >= 6 && khoiA <= 9 ? 2 : 999);
-  const capB = khoiB >= 1 && khoiB <= 5 ? 1 : (khoiB >= 6 && khoiB <= 9 ? 2 : 999);
-
-  // Thứ tự bắt buộc: Cấp 1 -> Cấp 2, lớp 1 -> 9, rồi mới đến SapXep.
-  if (capA !== capB) return capA - capB;
 
   if (khoiA !== khoiB) return khoiA - khoiB;
 
@@ -3564,14 +3630,6 @@ function compareStudentSort_(a, b) {
   const lopB = String(b.lop || b.Lop || '');
 
   if (lopA !== lopB) return lopA.localeCompare(lopB, 'vi');
-
-  const sortA = number_(a.sapXep || a.SapXep);
-  const sortB = number_(b.sapXep || b.SapXep);
-
-  const finalA = sortA > 0 ? sortA : 999999;
-  const finalB = sortB > 0 ? sortB : 999999;
-
-  if (finalA !== finalB) return finalA - finalB;
 
   return String(a.hoTen || a.HoTen || '').localeCompare(String(b.hoTen || b.HoTen || ''), 'vi');
 }

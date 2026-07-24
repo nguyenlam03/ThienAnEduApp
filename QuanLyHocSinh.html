@@ -719,7 +719,8 @@
 
           <div class="field">
             <label>Sắp xếp</label>
-            <input id="formSapXep" type="number" min="1" placeholder="Ví dụ: 1, 2, 3...">
+            <input id="formSapXep" type="number" min="100" max="999" placeholder="Tự cấp theo lớp nếu để trống">
+            <div id="formSapXepHelp" class="money-help">Lớp 1 dùng 100–199, … lớp 9 dùng 900–999.</div>
           </div>
 
           <div class="field">
@@ -803,7 +804,7 @@
 
       <div class="modal-body">
         <div class="sort-student-help">
-          Chọn cấp hoặc lớp ở cây bên trái, sau đó kéo thả học sinh trong cùng một lớp. Thứ tự luôn là <strong>Khối/Cấp học → Lớp 1–9 → SapXep</strong>.
+          Chọn lớp trong cây <strong>Khối → Lớp</strong>, sau đó kéo thả học sinh. SapXep được cấp theo dải: lớp 1 từ 100, lớp 2 từ 200, … lớp 9 từ 900.
         </div>
         <div class="sort-student-workspace">
           <aside id="sortStudentTree" class="sort-tree-panel" aria-label="Cây cấp và lớp"></aside>
@@ -1034,6 +1035,28 @@
       const khoi = document.getElementById('formKhoi').value;
       renderLopSelect('formLop', khoi, false, selectedLop);
       applyDefaultHocPhiByKhoi();
+      applySapXepRangeByKhoi();
+    }
+
+    function applySapXepRangeByKhoi() {
+      const khoi = Number(document.getElementById('formKhoi').value);
+      const input = document.getElementById('formSapXep');
+      const help = document.getElementById('formSapXepHelp');
+
+      if (khoi < 1 || khoi > 9) {
+        input.min = '100';
+        input.max = '999';
+        input.placeholder = 'Tự cấp theo lớp nếu để trống';
+        help.textContent = 'Lớp 1 dùng 100–199, … lớp 9 dùng 900–999.';
+        return;
+      }
+
+      const start = khoi * 100;
+      const end = start + 99;
+      input.min = String(start);
+      input.max = String(end);
+      input.placeholder = 'Tự cấp từ ' + start + ' nếu để trống';
+      help.textContent = 'Dải SapXep của lớp này: ' + start + '–' + end + '.';
     }
 
     function applyDefaultHocPhiByKhoi() {
@@ -1246,7 +1269,6 @@
       return Object.keys(classMap).map(function (key) {
         const item = classMap[key];
         item.groupKey = key;
-        item.level = Number(item.khoi) >= 1 && Number(item.khoi) <= 5 ? 1 : 2;
         item.studentCount = sortStudentList.filter(function (student) {
           return getSortStudentGroupKey(student) === key;
         }).length;
@@ -1271,31 +1293,35 @@
           <span>☰ Tất cả học sinh</span>
           <span class="sort-tree-count">${total}</span>
         </button>
-        <div class="sort-tree-root-label">
-          <span>▾ Khối</span>
-          <span class="sort-tree-count">${total}</span>
-        </div>
       `;
 
-      [1, 2].forEach(function (level) {
-        const levelClasses = classes.filter(function (item) {
-          return item.level === level;
+      const grades = classes.map(function (item) {
+        return Number(item.khoi);
+      }).filter(function (grade, index, list) {
+        return grade >= 1 && grade <= 9 && list.indexOf(grade) === index;
+      }).sort(function (a, b) {
+        return a - b;
+      });
+
+      grades.forEach(function (grade) {
+        const gradeClasses = classes.filter(function (item) {
+          return Number(item.khoi) === grade;
         });
-        const levelCount = levelClasses.reduce(function (sum, item) {
+        const gradeCount = gradeClasses.reduce(function (sum, item) {
           return sum + item.studentCount;
         }, 0);
-        const levelActive = sortStudentView.type === 'LEVEL' && Number(sortStudentView.value) === level
+        const gradeActive = sortStudentView.type === 'GRADE' && Number(sortStudentView.value) === grade
           ? ' active'
           : '';
 
         html += `
           <div class="sort-tree-level">
-            <button class="sort-tree-button${levelActive}" type="button" onclick="selectSortStudentView('LEVEL', '${level}')">
-              <span>▾ Cấp ${level}</span>
-              <span class="sort-tree-count">${levelCount}</span>
+            <button class="sort-tree-button${gradeActive}" type="button" onclick="selectSortStudentView('GRADE', '${grade}')">
+              <span>▾ Khối ${grade}</span>
+              <span class="sort-tree-count">${gradeCount}</span>
             </button>
             <div class="sort-tree-children">
-              ${levelClasses.map(function (item) {
+              ${gradeClasses.map(function (item) {
                 const active = sortStudentView.type === 'CLASS' && sortStudentView.value === item.groupKey
                   ? ' active'
                   : '';
@@ -1322,14 +1348,14 @@
     function getVisibleSortClasses() {
       return getSortClassList().filter(function (item) {
         if (sortStudentView.type === 'ALL') return true;
-        if (sortStudentView.type === 'LEVEL') return item.level === Number(sortStudentView.value);
+        if (sortStudentView.type === 'GRADE') return Number(item.khoi) === Number(sortStudentView.value);
         return item.groupKey === sortStudentView.value;
       });
     }
 
     function getSortViewTitle(visibleClasses) {
       if (sortStudentView.type === 'ALL') return 'Tất cả học sinh';
-      if (sortStudentView.type === 'LEVEL') return 'Học sinh Cấp ' + sortStudentView.value;
+      if (sortStudentView.type === 'GRADE') return 'Học sinh Khối ' + sortStudentView.value;
       return visibleClasses.length ? visibleClasses[0].tenLop : 'Danh sách học sinh';
     }
 
@@ -1360,7 +1386,7 @@
           <div class="sort-class-group">
             <div class="sort-class-heading">
               <span>${escapeHtml(classItem.tenLop)} · ${escapeHtml(getKhoiName(classItem.khoi))}</span>
-              <span>${students.length} học sinh</span>
+              <span>${students.length} học sinh · SapXep ${Number(classItem.khoi) * 100}–${Number(classItem.khoi) * 100 + 99}</span>
             </div>
             <div class="sort-class-items" data-group-key="${escapeHtml(classItem.groupKey)}">
               ${students.map(function (item, index) {
@@ -1375,7 +1401,7 @@
                     ondragend="handleSortDragEnd(event)"
                   >
                     <span class="sort-drag-handle" aria-hidden="true">⋮⋮</span>
-                    <span class="sort-position">${index + 1}</span>
+                    <span class="sort-position">${Number(classItem.khoi) * 100 + index}</span>
                     <div>
                       <div class="sort-student-name">${escapeHtml(item.hoTen)}</div>
                       <div class="sort-student-meta">${escapeHtml(getKhoiName(item.khoi))} · ${escapeHtml(getLopName(item.lop))}</div>
@@ -1428,8 +1454,11 @@
     }
 
     function updateSortPositionsFromDom(groupKey) {
+      const khoi = Number(String(groupKey || '').split('|')[0]);
+      const baseOrder = khoi >= 1 && khoi <= 9 ? khoi * 100 : 0;
+
       getGroupDomItems(groupKey).forEach(function (item, index) {
-        item.querySelector('.sort-position').textContent = index + 1;
+        item.querySelector('.sort-position').textContent = baseOrder + index;
       });
     }
 
@@ -1564,6 +1593,7 @@
 
       document.getElementById('formKhoi').value = item.khoi || '';
       renderLopSelect('formLop', item.khoi || '', false, item.lop);
+      applySapXepRangeByKhoi();
 
       document.getElementById('formSapXep').value = item.sapXep || '';
       document.getElementById('formHocPhi').value = item.hocPhi ? formatMoneyInputValue(item.hocPhi) : '';
