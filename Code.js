@@ -9,6 +9,8 @@ const SHEET_THUPHI = 'ThuPhi';
 const SHEET_DANHMUC_THUCHI = 'DanhMucThuChi';
 const SHEET_SOTHUCHI = 'SoThuChi';
 const SHEET_NGUONTIEN = 'NguonTien';
+const SHEET_CAUHINH = 'CauHinh';
+const CONFIG_NOTIFICATION_DURATION = 'NOTIFICATION_DURATION_SECONDS';
 
 const CACHE_LOGIN_PREFIX = 'LOGIN_TOKEN_';
 const CACHE_PREFIX = 'TA_CACHE_';
@@ -30,6 +32,7 @@ function include(filename) {
  */
 function doGet(e) {
   const page = e && e.parameter && e.parameter.page ? e.parameter.page : 'Login';
+  const notificationDurationMs = getNotificationDurationMs_();
 
   const protectedPages = [
     'Index',
@@ -43,8 +46,9 @@ function doGet(e) {
     const session = getSessionFromToken_(token);
 
     if (!session.valid) {
-      return HtmlService.createTemplateFromFile('Login')
-        .evaluate()
+      const expiredLoginTemplate = HtmlService.createTemplateFromFile('Login');
+      expiredLoginTemplate.notificationDurationMs = notificationDurationMs;
+      return expiredLoginTemplate.evaluate()
         .setTitle('Đăng nhập')
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
     }
@@ -58,14 +62,17 @@ function doGet(e) {
     template.tenKyHoc = session.tenKyHoc;
     template.kyHocName = session.tenKyHoc;
     template.cacheEnabled = isDataCacheEnabled_();
+    template.notificationDurationMs = notificationDurationMs;
 
     return template.evaluate()
       .setTitle('Thiên Ân Education')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
 
-  return HtmlService.createTemplateFromFile('Login')
-    .evaluate()
+  const loginTemplate = HtmlService.createTemplateFromFile('Login');
+  loginTemplate.notificationDurationMs = notificationDurationMs;
+
+  return loginTemplate.evaluate()
     .setTitle('Đăng nhập')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
@@ -94,6 +101,7 @@ function setupDatabase() {
   ensureSheet_(ss, SHEET_DANHMUC_THUCHI, getDanhMucThuChiHeaders_());
   ensureSheet_(ss, SHEET_SOTHUCHI, getSoThuChiHeaders_());
   ensureSheet_(ss, SHEET_NGUONTIEN, getNguonTienHeaders_());
+  ensureAppConfigSheet_();
 
   // Dữ liệu thu phí được lưu theo từng sheet tháng, ví dụ: Thang07.2026.
   // Không tạo thêm sheet ThuPhi tổng hợp để tránh dữ liệu trùng lặp và nặng file.
@@ -185,6 +193,58 @@ function formatHeader_(sheet) {
     .setBackground('#0284c7');
 
   sheet.setFrozenRows(1);
+}
+
+function ensureAppConfigSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_CAUHINH);
+  const headers = ['MaCauHinh', 'GiaTri', 'MoTa'];
+
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_CAUHINH);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    formatHeader_(sheet);
+  }
+
+  let values = sheet.getDataRange().getValues();
+  let currentHeaders = values[0].map(value => String(value || '').trim());
+  if (headers.some(header => currentHeaders.indexOf(header) === -1)) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    formatHeader_(sheet);
+    values = sheet.getDataRange().getValues();
+    currentHeaders = headers.slice();
+  }
+  const keyIndex = currentHeaders.indexOf('MaCauHinh');
+  const hasNotificationConfig = keyIndex !== -1 && values.slice(1).some(row => {
+    return String(row[keyIndex] || '').trim().toUpperCase() === CONFIG_NOTIFICATION_DURATION;
+  });
+
+  if (!hasNotificationConfig) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, 1, headers.length).setValues([[
+      CONFIG_NOTIFICATION_DURATION,
+      5,
+      'Thá»i gian hiá»ƒn thá»‹ notification, tÃ­nh báº±ng giÃ¢y (1-300).'
+    ]]);
+  }
+
+  return sheet;
+}
+
+function getNotificationDurationMs_() {
+  const sheet = ensureAppConfigSheet_();
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 2) return 5000;
+
+  const headers = values[0].map(value => String(value || '').trim());
+  const keyIndex = headers.indexOf('MaCauHinh');
+  const valueIndex = headers.indexOf('GiaTri');
+  if (keyIndex === -1 || valueIndex === -1) return 5000;
+
+  const row = values.slice(1).find(item => {
+    return String(item[keyIndex] || '').trim().toUpperCase() === CONFIG_NOTIFICATION_DURATION;
+  });
+  const seconds = row ? number_(row[valueIndex]) : 5;
+  return Math.min(300, Math.max(1, seconds || 5)) * 1000;
 }
 
 /* =========================================================
@@ -508,6 +568,7 @@ function getHocSinhList(token, filters) {
         ngaySinh: formatDateForInput_(ngayVao),
         ngaySinhDisplay: formatDateDisplay_(ngayVao),
         gioiTinh: String(row.GioiTinh || '').trim(),
+        khongThuPhi: toBoolean_(row.KhongThuPhi),
         sdtPhuHuynh: String(row.SDTPhuHuynh || '').trim(),
         diaChi: String(row.DiaChi || '').trim(),
         ghiChu: String(row.GhiChu || '').trim(),
@@ -748,7 +809,8 @@ function saveHocSinh(token, hocSinh) {
   const diaChi = String(hocSinh.diaChi || '').trim();
   const ghiChu = String(hocSinh.ghiChu || '').trim();
   const hocPhi = String(hocSinh.hocPhi || '').replace(/[^\d]/g, '');
-  const capNhatThuPhi = toBoolean_(hocSinh.capNhatThuPhi);
+  const khongThuPhi = toBoolean_(hocSinh.khongThuPhi);
+  const capNhatThuPhi = !khongThuPhi && toBoolean_(hocSinh.capNhatThuPhi);
   const thuPhiYearMonth = String(hocSinh.thuPhiYearMonth || '').trim();
 
   if (kyHocIds.length === 0) {
@@ -797,6 +859,7 @@ function saveHocSinh(token, hocSinh) {
 
   let newId = maHocSinh;
   let existed = false;
+  let savedStudentRow = null;
 
   try {
   const now = new Date();
@@ -858,7 +921,7 @@ function saveHocSinh(token, hocSinh) {
   }
 
   const parsedNgayVao = parseInputDate_(ngayVao);
-  const savedStudentRow = Object.assign({}, existingRow || {}, {
+  savedStudentRow = Object.assign({}, existingRow || {}, {
     MaHocSinh: newId,
     MaKyHoc: session.maKyHoc,
     SapXep: sapXep,
@@ -869,6 +932,7 @@ function saveHocSinh(token, hocSinh) {
     NgayVao: parsedNgayVao,
     NgaySinh: parsedNgayVao,
     GioiTinh: gioiTinh,
+    KhongThuPhi: khongThuPhi ? 'Có' : 'Không',
     SDTPhuHuynh: sdtPhuHuynh,
     DiaChi: diaChi,
     GhiChu: ghiChu,
@@ -881,8 +945,7 @@ function saveHocSinh(token, hocSinh) {
     updateObjectRowById_(SHEET_HOCSINH, 'MaHocSinh', newId, savedStudentRow, getHocSinhHeaders_());
   } else {
     const studentSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-    const studentSheet = studentSpreadsheet.getSheetByName(SHEET_HOCSINH) ||
-      ensureSheet_(studentSpreadsheet, SHEET_HOCSINH, getHocSinhHeaders_());
+    const studentSheet = ensureSheet_(studentSpreadsheet, SHEET_HOCSINH, getHocSinhHeaders_());
     appendObjectsToSheet_(studentSheet, [savedStudentRow], getHocSinhHeaders_());
   }
   saveHocSinhKyHoc_(newId, kyHocIds, hocPhi);
@@ -890,12 +953,25 @@ function saveHocSinh(token, hocSinh) {
     lock.releaseLock();
   }
 
+  let thuPhiSyncResult = null;
+  if (existed && /^\d{4}-\d{2}$/.test(thuPhiYearMonth)) {
+    thuPhiSyncResult = syncHocSinhToThuPhiMonth_(
+      session.maKyHoc,
+      thuPhiYearMonth,
+      savedStudentRow,
+      hocPhi
+    );
+  }
+
   // Đổi phiên bản trước khi đọc lại dữ liệu để bảo đảm không dùng cache cũ.
   bumpDataVersion_();
 
   let thuPhiResult = null;
 
-  if (!existed && capNhatThuPhi) {
+  if (
+    (!existed && capNhatThuPhi) ||
+    (existed && !khongThuPhi && thuPhiSyncResult && !thuPhiSyncResult.updated)
+  ) {
     thuPhiResult = addHocSinhToThuPhiMonth_(
       session.maKyHoc,
       thuPhiYearMonth,
@@ -915,12 +991,21 @@ function saveHocSinh(token, hocSinh) {
     message += ' Học sinh đã có trong ' + thuPhiResult.sheetName + '.';
   }
 
+  if (thuPhiSyncResult && thuPhiSyncResult.updated) {
+    message += ' Đã đồng bộ thông tin sang ' + thuPhiSyncResult.sheetName + '.';
+  }
+
   return jsonResponse_({
     success: true,
     maHocSinh: newId,
     sapXep: number_(sapXep),
-    thuPhiUpdated: !!(thuPhiResult && (thuPhiResult.added || thuPhiResult.alreadyExists)),
-    thuPhiSheetName: thuPhiResult ? thuPhiResult.sheetName : '',
+    thuPhiUpdated: !!(
+      (thuPhiResult && (thuPhiResult.added || thuPhiResult.alreadyExists)) ||
+      (thuPhiSyncResult && thuPhiSyncResult.updated)
+    ),
+    thuPhiSheetName: thuPhiResult
+      ? thuPhiResult.sheetName
+      : (thuPhiSyncResult ? thuPhiSyncResult.sheetName : ''),
     message: message
   });
 }
@@ -970,6 +1055,7 @@ function getHocSinhHeaders_() {
     'NgayVao',
     'NgaySinh',
     'GioiTinh',
+    'KhongThuPhi',
     'SDTPhuHuynh',
     'DiaChi',
     'GhiChu',
@@ -1150,7 +1236,8 @@ function getQuanLyThuPhiData(token, yearMonth) {
     if (!id || String(row.TrangThai || '').trim().toUpperCase() === 'DELETED') return map;
     map[id] = {
       truong: String(row.Truong || '').trim() || 'THCS Long Phước',
-      gioiTinh: String(row.GioiTinh || '').trim()
+      gioiTinh: String(row.GioiTinh || '').trim(),
+      khongThuPhi: toBoolean_(row.KhongThuPhi)
     };
     return map;
   }, {});
@@ -1202,6 +1289,10 @@ function getQuanLyThuPhiData(token, yearMonth) {
           : (getNguonTienName_(inferredSource) || (daThu > 0 ? 'Chưa phân loại' : '')),
         ghiChu: String(row.GhiChu || '').trim()
       };
+    })
+    .filter(item => {
+      const studentMeta = studentMetaMap[item.maHocSinh] || {};
+      return !studentMeta.khongThuPhi;
     })
     .sort(compareStudentSort_);
 
@@ -1565,6 +1656,99 @@ function ensureThuPhiMonthSnapshot_(maKyHoc, year, month, options) {
  * Chủ động bổ sung một học sinh mới vào sheet thu phí tháng hiện tại.
  * Chỉ được gọi khi người dùng tick “Cập nhật thu phí” lúc thêm học sinh.
  */
+function syncHocSinhToThuPhiMonth_(maKyHoc, yearMonth, student, hocPhiValue) {
+  const ym = parseYearMonth_(yearMonth);
+  const sheetName = getThuPhiMonthSheetName_(ym.year, ym.month);
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+
+  if (!sheet || sheet.getLastRow() < 2) {
+    return { updated: false, sheetName: sheetName };
+  }
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) {
+    throw new Error('Hệ thống đang cập nhật sheet thu phí tháng. Vui lòng thao tác lại.');
+  }
+
+  try {
+    const values = sheet.getDataRange().getValues();
+    const headers = values[0].map(header => String(header || '').trim());
+    const index = buildHeaderIndex_(headers);
+    const requiredHeaders = [
+      'MaHocSinh', 'MaKyHoc', 'SapXep', 'Khoi', 'TenKhoi', 'Lop', 'TenLop',
+      'HoTen', 'Truong', 'GioiTinh', 'SDTPhuHuynh', 'NgayVao', 'HocPhi',
+      'HocPhiGoc', 'TamNghi', 'SoTienDaThu', 'DaDong', 'ConLai',
+      'TrangThaiThu', 'TrangThai', 'UpdatedAt'
+    ];
+    requiredHeaders.forEach(header => {
+      if (index[header] === undefined) {
+        throw new Error('Sheet ' + sheetName + ' thiếu cột: ' + header + '.');
+      }
+    });
+
+    const studentId = String(student.MaHocSinh || '').trim();
+    let targetIndex = -1;
+    for (let rowIndex = 1; rowIndex < values.length; rowIndex++) {
+      if (
+        String(values[rowIndex][index.MaHocSinh] || '').trim() === studentId &&
+        String(values[rowIndex][index.MaKyHoc] || '').trim() === maKyHoc
+      ) {
+        targetIndex = rowIndex;
+        break;
+      }
+    }
+
+    if (targetIndex === -1) {
+      return { updated: false, sheetName: sheetName };
+    }
+
+    const lopInfo = getLopList_().find(item => item.maLop === String(student.Lop || '').trim());
+    const khoiInfo = getKhoiList_().find(item => item.khoi === String(student.Khoi || '').trim());
+    const row = values[targetIndex].slice();
+    const khongThuPhi = toBoolean_(student.KhongThuPhi);
+
+    if (khongThuPhi) {
+      row[index.HocPhi] = 0;
+      row[index.HocPhiGoc] = 0;
+      row[index.ConLai] = 0;
+      row[index.TrangThaiThu] = 'Không thu phí';
+      row[index.TrangThai] = 'DELETED';
+      row[index.UpdatedAt] = new Date();
+      sheet.getRange(targetIndex + 1, 1, 1, headers.length).setValues([row]);
+      return { updated: true, removed: true, sheetName: sheetName };
+    }
+
+    const newHocPhi = number_(hocPhiValue);
+    const soTienDaThu = number_(row[index.SoTienDaThu]);
+    const tamNghi = toBoolean_(row[index.TamNghi]);
+
+    row[index.SapXep] = number_(student.SapXep);
+    row[index.Khoi] = String(student.Khoi || '').trim();
+    row[index.TenKhoi] = khoiInfo ? khoiInfo.tenKhoi : String(student.Khoi || '').trim();
+    row[index.Lop] = String(student.Lop || '').trim();
+    row[index.TenLop] = lopInfo ? lopInfo.tenLop : String(student.Lop || '').trim();
+    row[index.HoTen] = String(student.HoTen || '').trim();
+    row[index.Truong] = String(student.Truong || '').trim();
+    row[index.GioiTinh] = String(student.GioiTinh || '').trim();
+    row[index.SDTPhuHuynh] = String(student.SDTPhuHuynh || '').trim();
+    row[index.NgayVao] = student.NgayVao || student.NgaySinh || '';
+    row[index.HocPhiGoc] = newHocPhi;
+    row[index.HocPhi] = tamNghi ? 0 : newHocPhi;
+    row[index.ConLai] = tamNghi ? 0 : Math.max(newHocPhi - soTienDaThu, 0);
+    row[index.DaDong] = !tamNghi && soTienDaThu > 0 ? 'Có' : 'Không';
+    row[index.TrangThaiThu] = tamNghi
+      ? 'Tạm nghỉ'
+      : getTrangThaiThuPhi_(newHocPhi, soTienDaThu);
+    row[index.TrangThai] = 'ACTIVE';
+    row[index.UpdatedAt] = new Date();
+
+    sheet.getRange(targetIndex + 1, 1, 1, headers.length).setValues([row]);
+    return { updated: true, sheetName: sheetName };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function addHocSinhToThuPhiMonth_(maKyHoc, yearMonth, maHocSinh) {
   const ym = parseYearMonth_(yearMonth);
   const snapshot = ensureThuPhiMonthSnapshot_(maKyHoc, ym.year, ym.month, { includeRows: false });
@@ -1773,6 +1957,7 @@ function getHocSinhTheoKyHocForThuPhi_(maKyHoc) {
 
   return hocSinhRows
     .filter(row => String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED')
+    .filter(row => !toBoolean_(row.KhongThuPhi))
     .map(row => {
       const maHocSinh = String(row.MaHocSinh || '').trim();
 
@@ -3700,8 +3885,19 @@ function updateObjectRowById_(sheetName, idHeader, idValue, object, requiredHead
     throw new Error('Sheet ' + sheetName + ' chÆ°a cÃ³ cáº¥u trÃºc dá»¯ liá»‡u.');
   }
 
-  const headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0]
+  let headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0]
     .map(header => String(header || '').trim());
+  let headersChanged = false;
+  requiredHeaders.forEach(header => {
+    if (headers.indexOf(header) === -1) {
+      headers.push(header);
+      headersChanged = true;
+    }
+  });
+  if (headersChanged) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    formatHeader_(sheet);
+  }
   const idColumnIndex = headers.indexOf(idHeader);
 
   if (idColumnIndex === -1) {

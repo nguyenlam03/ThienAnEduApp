@@ -746,6 +746,16 @@
             </div>
           </div>
 
+          <div class="field full fee-update-card">
+            <label class="checkbox-row" for="formKhongThuPhi">
+              <input id="formKhongThuPhi" type="checkbox" onchange="handleKhongThuPhiChange()">
+              <span class="checkbox-title">Không thu phí</span>
+            </label>
+            <div class="checkbox-help">
+              Học sinh được chọn sẽ không xuất hiện trong danh sách thu phí và được đồng bộ khỏi sheet thu phí tháng hiện tại.
+            </div>
+          </div>
+
           <div id="thuPhiUpdateBox" class="field full fee-update-card">
             <label class="checkbox-row" for="formCapNhatThuPhi">
               <input id="formCapNhatThuPhi" type="checkbox">
@@ -838,6 +848,7 @@
   </div>
 
   <?!= include('AppGridConfig'); ?>
+  <script>window.APP_NOTIFICATION_DURATION_MS = <?!= JSON.stringify(notificationDurationMs) ?>;</script>
   <?!= include('AppNotification'); ?>
   <?!= include('AppBusy'); ?>
 
@@ -853,6 +864,8 @@
     let studentList = [];
     let sortStudentList = [];
     let sortStudentView = { type: 'ALL', value: '' };
+    let studentSearchTimer = null;
+    let studentLoadSequence = 0;
 
     document.addEventListener('DOMContentLoaded', function () {
       GridColumnConfig.register({
@@ -867,8 +880,16 @@
 
       document.getElementById('filterKeyword').addEventListener('keydown', function (event) {
         if (event.key === 'Enter') {
+          clearTimeout(studentSearchTimer);
           loadHocSinh();
         }
+      });
+
+      document.getElementById('filterKeyword').addEventListener('input', function () {
+        clearTimeout(studentSearchTimer);
+        studentSearchTimer = setTimeout(function () {
+          loadHocSinh({ silent: true });
+        }, 280);
       });
 
       document.getElementById('studentModal').addEventListener('click', function (event) {
@@ -1154,23 +1175,30 @@
         });
     }
 
-    function loadHocSinh() {
+    function loadHocSinh(options) {
+      const settings = options || {};
+      const requestId = ++studentLoadSequence;
       const filters = {
         khoi: document.getElementById('filterKhoi').value,
         lop: document.getElementById('filterLop').value,
         keyword: document.getElementById('filterKeyword').value
       };
 
-      showBusy('Đang tải danh sách học sinh...');
+      if (!settings.silent) showBusy('Đang tải danh sách học sinh...');
 
       google.script.run
         .withSuccessHandler(function (res) {
+          if (requestId !== studentLoadSequence) {
+            if (!settings.silent) hideBusy();
+            return;
+          }
           studentList = parseServerJson(res) || [];
           renderStudentTable();
-          hideBusy();
+          if (!settings.silent) hideBusy();
         })
         .withFailureHandler(function (error) {
-          hideBusy();
+          if (requestId !== studentLoadSequence) return;
+          if (!settings.silent) hideBusy();
           showMessage(getErrorMessage(error), 'error');
         })
         .getHocSinhList(APP_TOKEN, filters);
@@ -1214,7 +1242,7 @@
             <td data-column="gender">${escapeHtml(item.gioiTinh || '')}</td>
             <td data-column="school">${escapeHtml(item.truong || '')}</td>
             <td data-column="parentPhone">${escapeHtml(item.sdtPhuHuynh || '')}</td>
-            <td data-column="tuition"><strong>${formatMoney(item.hocPhi || '')}</strong></td>
+            <td data-column="tuition"><strong>${item.khongThuPhi ? 'Không thu phí' : formatMoney(item.hocPhi || '')}</strong></td>
             <td data-column="note">${escapeHtml(item.ghiChu || '')}</td>
 
             <td data-column="actions">
@@ -1231,7 +1259,7 @@
 
     function renderGroupedStudentRows(list, renderRow) {
       const totalHocPhi = list.reduce(function (sum, item) {
-        return sum + Number(item.hocPhi || 0);
+        return sum + (item.khongThuPhi ? 0 : Number(item.hocPhi || 0));
       }, 0);
       const groups = [];
       const groupMap = {};
@@ -1250,7 +1278,7 @@
 
       return groups.map(function (group) {
         const groupHocPhi = group.items.reduce(function (sum, item) {
-          return sum + Number(item.hocPhi || 0);
+          return sum + (item.khongThuPhi ? 0 : Number(item.hocPhi || 0));
         }, 0);
         const maleCount = group.items.filter(function (item) {
           return normalizeStudentText(item.gioiTinh) === 'nam';
@@ -1662,6 +1690,7 @@
 
       document.getElementById('formSapXep').value = '';
       document.getElementById('formHocPhi').value = '';
+      document.getElementById('formKhongThuPhi').checked = false;
       document.getElementById('formHoTen').value = '';
       document.getElementById('formNgaySinh').value = '';
       document.getElementById('formGioiTinh').value = '';
@@ -1672,6 +1701,7 @@
       document.getElementById('thuPhiUpdateBox').hidden = false;
       document.getElementById('formCapNhatThuPhi').checked = false;
       document.getElementById('formThuPhiMonthLabel').textContent = getCurrentMonthDisplay();
+      handleKhongThuPhiChange();
 
       document.getElementById('studentModal').classList.add('show');
 
@@ -1702,6 +1732,7 @@
 
       document.getElementById('formSapXep').value = item.sapXep || '';
       document.getElementById('formHocPhi').value = item.hocPhi ? formatMoneyInputValue(item.hocPhi) : '';
+      document.getElementById('formKhongThuPhi').checked = item.khongThuPhi === true;
       document.getElementById('formHoTen').value = item.hoTen || '';
       document.getElementById('formNgaySinh').value = item.ngaySinh || '';
       document.getElementById('formGioiTinh').value = item.gioiTinh || '';
@@ -1711,6 +1742,7 @@
 
       document.getElementById('formCapNhatThuPhi').checked = false;
       document.getElementById('thuPhiUpdateBox').hidden = true;
+      handleKhongThuPhiChange();
 
       document.getElementById('studentModal').classList.add('show');
     }
@@ -1730,6 +1762,7 @@
         khoi: document.getElementById('formKhoi').value,
         lop: document.getElementById('formLop').value,
         hocPhi: getHocPhiRawValue(),
+        khongThuPhi: document.getElementById('formKhongThuPhi').checked,
         hoTen: document.getElementById('formHoTen').value.trim(),
         ngaySinh: document.getElementById('formNgaySinh').value,
         gioiTinh: document.getElementById('formGioiTinh').value,
@@ -1800,6 +1833,15 @@
           showNotification(getErrorMessage(error), 'error');
         })
         .saveHocSinh(APP_TOKEN, hocSinh);
+    }
+
+    function handleKhongThuPhiChange() {
+      const khongThuPhi = document.getElementById('formKhongThuPhi').checked;
+      const hocPhiInput = document.getElementById('formHocPhi');
+      const capNhatThuPhiInput = document.getElementById('formCapNhatThuPhi');
+      hocPhiInput.disabled = khongThuPhi;
+      capNhatThuPhiInput.disabled = khongThuPhi;
+      if (khongThuPhi) capNhatThuPhiInput.checked = false;
     }
 
     function updateStudentListAfterSave(hocSinh, result) {

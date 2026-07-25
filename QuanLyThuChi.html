@@ -312,6 +312,7 @@
 </div>
 
 <?!= include('AppGridConfig'); ?>
+<script>window.APP_NOTIFICATION_DURATION_MS=<?!= JSON.stringify(notificationDurationMs) ?>;</script>
 <?!= include('AppNotification'); ?>
 <?!= include('AppBusy'); ?>
 <script>
@@ -320,11 +321,17 @@ const APP_URL=<?!= JSON.stringify(appUrl) ?>;
 const APP_CACHE_ENABLED=<?!= JSON.stringify(cacheEnabled) ?>;
 let financeData={categories:[],sources:[],sourceSummaries:[],transactions:[],recentTransactions:[],cashbook:[],reports:{categories:[],sources:[]},summary:{},range:{}};
 let activeTab='dashboard';
+let financeSearchTimer=null;
+let financeLoadSequence=0;
 
 document.addEventListener('DOMContentLoaded',function(){
   initFinanceGridConfigs();
   setDefaultDateRange();
-  document.getElementById('filterKeyword').addEventListener('keydown',e=>{if(e.key==='Enter')loadFinanceData()});
+  document.getElementById('filterKeyword').addEventListener('keydown',e=>{if(e.key==='Enter'){clearTimeout(financeSearchTimer);loadFinanceData()}});
+  document.getElementById('filterKeyword').addEventListener('input',()=>{
+    clearTimeout(financeSearchTimer);
+    financeSearchTimer=setTimeout(()=>loadFinanceData({silent:true}),320);
+  });
   ['transactionModal','transferModal','sourceModal','categoryModal'].forEach(id=>{
     document.getElementById(id).addEventListener('click',e=>{if(e.target.id===id)closeModal(id)});
   });
@@ -351,10 +358,11 @@ function handleHeaderAction(select){
 }
 function setDefaultDateRange(){const now=new Date(),from=new Date(now.getFullYear(),now.getMonth(),1),to=new Date(now.getFullYear(),now.getMonth()+1,0);document.getElementById('filterFromDate').value=dateToInput(from);document.getElementById('filterToDate').value=dateToInput(to)}
 function dateToInput(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
-function loadFinanceData(){
+function loadFinanceData(options){
+  const settings=options||{},requestId=++financeLoadSequence;
   const filters={fromDate:v('filterFromDate'),toDate:v('filterToDate'),loai:v('filterType'),maDanhMuc:v('filterCategory'),maNguonTien:v('filterSource'),trangThai:v('filterStatus'),keyword:v('filterKeyword').trim()};
-  showBusy('Đang tải dữ liệu thu chi...');
-  google.script.run.withSuccessHandler(res=>{financeData=parseServerJson(res)||financeData;hideBusy();renderAll()}).withFailureHandler(e=>{hideBusy();showMessage(getErrorMessage(e),'error')}).getQuanLyThuChiData(APP_TOKEN,filters)
+  if(!settings.silent)showBusy('Đang tải dữ liệu thu chi...');
+  google.script.run.withSuccessHandler(res=>{if(requestId!==financeLoadSequence){if(!settings.silent)hideBusy();return}financeData=parseServerJson(res)||financeData;if(!settings.silent)hideBusy();renderAll()}).withFailureHandler(e=>{if(requestId!==financeLoadSequence)return;if(!settings.silent)hideBusy();showMessage(getErrorMessage(e),'error')}).getQuanLyThuChiData(APP_TOKEN,filters)
 }
 function renderAll(){renderSourceOptions();renderFilterCategories();renderSummary();renderSourceCards();renderTransactions();renderCashbook();renderCategories();renderReports();renderWarning()}
 function renderSourceOptions(){

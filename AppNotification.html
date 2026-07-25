@@ -192,7 +192,10 @@
   (function (global) {
     'use strict';
 
-    const DEFAULT_DURATION = 5000;
+    const configuredDuration = Number(global.APP_NOTIFICATION_DURATION_MS);
+    const DEFAULT_DURATION = Number.isFinite(configuredDuration) && configuredDuration > 0
+      ? configuredDuration
+      : 5000;
     const MAX_VISIBLE = 5;
     const TYPE_CONFIG = {
       success: { title: 'Thành công', icon: '✓' },
