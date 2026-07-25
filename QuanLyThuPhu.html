@@ -47,11 +47,31 @@
 
     .fee-filter-row {
       display: grid;
-      grid-template-columns: 200px 200px 1fr 130px;
+      grid-template-columns: 170px 170px minmax(220px, 1fr) 145px 155px 120px;
       gap: 14px;
       margin-bottom: 20px;
       align-items: end;
     }
+
+    .fee-view-tabs { display:flex; gap:8px; margin:4px 0 18px; padding-bottom:10px; border-bottom:1px solid #e2e8f0; }
+    .fee-view-tab { border:1px solid #bae6fd; background:#f8fafc; color:#475569; border-radius:12px; padding:10px 16px; font-weight:800; cursor:pointer; }
+    .fee-view-tab.active { background:#0284c7; border-color:#0284c7; color:#fff; box-shadow:0 8px 20px rgba(2,132,199,.22); }
+    .fee-tab-panel[hidden] { display:none !important; }
+    .fee-chart-card,.fee-assessment-card { border:1px solid #dbeafe; border-radius:20px; background:#fff; padding:20px; box-shadow:0 10px 28px rgba(15,23,42,.06); }
+    .fee-chart-title { font-size:18px; font-weight:900; color:#0f172a; }
+    .fee-chart-subtitle { margin-top:5px; color:#64748b; font-size:13px; }
+    .fee-column-chart { min-height:330px; margin-top:24px; padding:24px 12px 0; border-left:1px solid #cbd5e1; border-bottom:1px solid #cbd5e1; display:flex; align-items:flex-end; justify-content:space-around; gap:18px; overflow-x:auto; background:repeating-linear-gradient(to top,#f1f5f9 0,#f1f5f9 1px,transparent 1px,transparent 25%); }
+    .fee-chart-column { min-width:82px; height:280px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; }
+    .fee-chart-percent { color:#075985; font-size:13px; font-weight:900; margin-bottom:7px; }
+    .fee-chart-bar { width:54px; min-height:3px; border-radius:12px 12px 3px 3px; background:linear-gradient(180deg,#38bdf8,#0284c7); box-shadow:0 8px 18px rgba(2,132,199,.22); transition:height 300ms ease; }
+    .fee-chart-label { min-height:36px; margin-top:9px; color:#334155; font-size:12px; font-weight:800; text-align:center; }
+    .fee-analysis-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-top:18px; }
+    .fee-analysis-item { padding:14px; border-radius:15px; background:#f8fafc; border:1px solid #e2e8f0; }
+    .fee-analysis-label { color:#64748b; font-size:12px; font-weight:700; }
+    .fee-analysis-value { margin-top:6px; color:#0f172a; font-size:19px; font-weight:900; }
+    .fee-assessment-card { margin-top:16px; border-left:6px solid #0284c7; }
+    .fee-assessment-heading { color:#075985; font-size:16px; font-weight:900; }
+    .fee-assessment-text { margin-top:8px; color:#334155; line-height:1.65; font-weight:600; }
 
     .status-pill {
       display: inline-flex;
@@ -230,6 +250,10 @@
       .fee-form-grid {
         grid-template-columns: 1fr;
       }
+
+      .fee-analysis-grid {
+        grid-template-columns: 1fr 1fr;
+      }
     }
   </style>
   <?!= include('AppTheme'); ?>
@@ -316,6 +340,20 @@
               <input id="filterKeyword" type="text" placeholder="Nhập tên học sinh hoặc số điện thoại...">
             </div>
 
+            <div class="field">
+              <label>Khối</label>
+              <select id="filterKhoi" onchange="handleFeeGradeFilterChange()">
+                <option value="ALL">Tất cả khối</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label>Lớp</label>
+              <select id="filterLop" onchange="renderTable()">
+                <option value="ALL">Tất cả lớp</option>
+              </select>
+            </div>
+
             <button class="secondary-button" onclick="loadThuPhiData()">
               Lọc dữ liệu
             </button>
@@ -341,6 +379,12 @@
             </div>
           </div>
 
+          <div class="fee-view-tabs" role="tablist" aria-label="Chế độ xem thu phí">
+            <button id="feeListTabButton" class="fee-view-tab active" type="button" onclick="switchFeeTab('LIST')">Danh sách thu phí</button>
+            <button id="feeChartTabButton" class="fee-view-tab" type="button" onclick="switchFeeTab('CHART')">Biểu đồ &amp; đánh giá</button>
+          </div>
+
+          <div id="feeListTabPanel" class="fee-tab-panel">
           <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin:14px 0 16px;">
             <div class="pill-badge">
               <span>💰</span>
@@ -396,6 +440,17 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+          </div>
+
+          <div id="feeChartTabPanel" class="fee-tab-panel" hidden>
+            <div class="fee-chart-card">
+              <div class="fee-chart-title">Tỷ lệ thu học phí theo lớp</div>
+              <div class="fee-chart-subtitle">Tỷ lệ số tiền đã thu trên tổng học phí phải thu của từng lớp.</div>
+              <div id="feeClassChart" class="fee-column-chart"></div>
+              <div id="feeAnalysisGrid" class="fee-analysis-grid"></div>
+            </div>
+            <div id="feeAssessmentCard" class="fee-assessment-card"></div>
           </div>
         </div>
       </section>
@@ -623,6 +678,7 @@
           feeStudents = data.students || [];
           moneySources = data.sources || [];
           renderMoneySourceSelect();
+          renderFeeFilterOptions();
           currentMonthText = data.monthText || '';
           currentSheetName = data.sheetName || '';
 
@@ -656,6 +712,61 @@
       }
     }
 
+    function renderFeeFilterOptions() {
+      const gradeSelect = document.getElementById('filterKhoi');
+      const currentGrade = gradeSelect.value || 'ALL';
+      const grades = [];
+      feeStudents.forEach(function (item) {
+        const key = String(item.khoi || '').trim();
+        if (key && !grades.some(function (grade) { return grade.value === key; })) {
+          grades.push({ value: key, label: item.tenKhoi || key });
+        }
+      });
+      grades.sort(function (a, b) { return Number(a.value) - Number(b.value); });
+      gradeSelect.innerHTML = '<option value="ALL">Tất cả khối</option>' + grades.map(function (grade) {
+        return `<option value="${escapeAttribute(grade.value)}">${escapeHtml(grade.label)}</option>`;
+      }).join('');
+      gradeSelect.value = grades.some(function (grade) { return grade.value === currentGrade; }) ? currentGrade : 'ALL';
+      renderFeeClassFilterOptions();
+    }
+
+    function renderFeeClassFilterOptions() {
+      const grade = document.getElementById('filterKhoi').value;
+      const classSelect = document.getElementById('filterLop');
+      const currentClass = classSelect.value || 'ALL';
+      const classes = [];
+      feeStudents.forEach(function (item) {
+        if (grade !== 'ALL' && String(item.khoi || '') !== grade) return;
+        const key = String(item.lop || '').trim();
+        if (key && !classes.some(function (classItem) { return classItem.value === key; })) {
+          classes.push({ value: key, label: item.tenLop || key });
+        }
+      });
+      classes.sort(function (a, b) {
+        const numberA = Number((a.value.match(/([1-9])/) || [0, 99])[1]);
+        const numberB = Number((b.value.match(/([1-9])/) || [0, 99])[1]);
+        return numberA - numberB;
+      });
+      classSelect.innerHTML = '<option value="ALL">Tất cả lớp</option>' + classes.map(function (classItem) {
+        return `<option value="${escapeAttribute(classItem.value)}">${escapeHtml(classItem.label)}</option>`;
+      }).join('');
+      classSelect.value = classes.some(function (classItem) { return classItem.value === currentClass; }) ? currentClass : 'ALL';
+    }
+
+    function handleFeeGradeFilterChange() {
+      renderFeeClassFilterOptions();
+      renderTable();
+    }
+
+    function switchFeeTab(tab) {
+      const showChart = tab === 'CHART';
+      document.getElementById('feeListTabPanel').hidden = showChart;
+      document.getElementById('feeChartTabPanel').hidden = !showChart;
+      document.getElementById('feeListTabButton').classList.toggle('active', !showChart);
+      document.getElementById('feeChartTabButton').classList.toggle('active', showChart);
+      if (showChart) renderTable();
+    }
+
     function renderSummary(summary) {
       const paidCount = summary.paidCount || 0;
       const totalStudents = summary.totalStudents || 0;
@@ -681,8 +792,13 @@
       const tbody = document.getElementById('feeTableBody');
       const keyword = normalizeText(document.getElementById('filterKeyword').value);
       const paymentStatus = document.getElementById('filterPaymentStatus').value;
+      const grade = document.getElementById('filterKhoi').value;
+      const classId = document.getElementById('filterLop').value;
 
       let list = feeStudents.slice();
+
+      if (grade !== 'ALL') list = list.filter(item => String(item.khoi || '') === grade);
+      if (classId !== 'ALL') list = list.filter(item => String(item.lop || '') === classId);
 
       if (paymentStatus === 'TEMPORARY') {
         list = list.filter(item => item.tamNghi === true);
@@ -730,6 +846,7 @@
         });
       }
 
+      renderFeeDashboard(list);
       document.getElementById('countText').textContent = list.length + ' học sinh';
 
       if (list.length === 0) {
@@ -784,6 +901,92 @@
         `;
       });
       GridColumnConfig.apply('fee-list');
+    }
+
+    function renderFeeDashboard(list) {
+      const groups = [];
+      const groupMap = {};
+      const stats = list.reduce(function (result, item) {
+        const hocPhi = Number(item.hocPhi || 0);
+        const daThu = Number(item.soTienDaThu || 0);
+        result.expected += hocPhi;
+        result.collected += daThu;
+        result.remaining += Number(item.conLai || Math.max(hocPhi - daThu, 0));
+        if (item.tamNghi) result.temporary++;
+        else if (hocPhi > 0 && daThu >= hocPhi) result.fullyPaid++;
+        else if (daThu > 0) result.partial++;
+        else result.unpaid++;
+
+        const key = String(item.lop || item.tenLop || 'CHUA_XEP_LOP');
+        if (!groupMap[key]) {
+          groupMap[key] = { name: item.tenLop || item.lop || 'Chưa xếp lớp', expected: 0, collected: 0 };
+          groups.push(groupMap[key]);
+        }
+        groupMap[key].expected += hocPhi;
+        groupMap[key].collected += daThu;
+        return result;
+      }, { expected: 0, collected: 0, remaining: 0, fullyPaid: 0, partial: 0, unpaid: 0, temporary: 0 });
+
+      const chart = document.getElementById('feeClassChart');
+      if (!groups.length) {
+        chart.innerHTML = '<div class="empty-box">Không có dữ liệu phù hợp để lập biểu đồ.</div>';
+      } else {
+        chart.innerHTML = groups.map(function (group) {
+          const rate = group.expected > 0 ? group.collected * 100 / group.expected : 0;
+          const height = Math.min(100, Math.max(1, rate));
+          return `
+            <div class="fee-chart-column" title="${escapeAttribute(group.name + ': ' + formatPercent(rate))}">
+              <div class="fee-chart-percent">${formatPercent(rate)}</div>
+              <div class="fee-chart-bar" style="height:${height * 2.15}px"></div>
+              <div class="fee-chart-label">${escapeHtml(group.name)}</div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      const collectionRate = stats.expected > 0 ? stats.collected * 100 / stats.expected : 0;
+      const studentTotal = stats.fullyPaid + stats.partial + stats.unpaid + stats.temporary;
+      const paidStudentRate = studentTotal > 0 ? stats.fullyPaid * 100 / studentTotal : 0;
+      document.getElementById('feeAnalysisGrid').innerHTML = [
+        ['Phải thu', formatMoney(stats.expected)],
+        ['Đã thu', formatMoney(stats.collected)],
+        ['Còn lại', formatMoney(stats.remaining)],
+        ['Tỷ lệ thu tiền', formatPercent(collectionRate)],
+        ['Đã thu đủ', stats.fullyPaid + ' học sinh'],
+        ['Thu một phần', stats.partial + ' học sinh'],
+        ['Chưa thu', stats.unpaid + ' học sinh'],
+        ['Tạm nghỉ', stats.temporary + ' học sinh']
+      ].map(function (item) {
+        return `<div class="fee-analysis-item"><div class="fee-analysis-label">${item[0]}</div><div class="fee-analysis-value">${item[1]}</div></div>`;
+      }).join('');
+
+      let level = 'Cần cải thiện';
+      let color = '#dc2626';
+      let recommendation = 'Tỷ lệ thu còn thấp. Nên ưu tiên liên hệ các trường hợp chưa thu và lập kế hoạch nhắc phí cụ thể.';
+      if (collectionRate >= 95) {
+        level = 'Xuất sắc'; color = '#16a34a';
+        recommendation = 'Tiến độ thu học phí rất tốt. Chỉ cần tiếp tục xử lý các trường hợp còn lại và đối chiếu nguồn tiền.';
+      } else if (collectionRate >= 80) {
+        level = 'Tốt'; color = '#0284c7';
+        recommendation = 'Tiến độ thu đạt mức tốt. Nên tập trung nhắc các học sinh chưa thu hoặc mới thu một phần.';
+      } else if (collectionRate >= 60) {
+        level = 'Trung bình'; color = '#d97706';
+        recommendation = 'Tiến độ thu ở mức trung bình. Cần rà soát theo từng lớp và ưu tiên các lớp có tỷ lệ thấp.';
+      }
+      const assessment = document.getElementById('feeAssessmentCard');
+      assessment.style.borderLeftColor = color;
+      assessment.innerHTML = `
+        <div class="fee-assessment-heading" style="color:${color}">Đánh giá tháng ${escapeHtml(currentMonthText || '')}: ${level}</div>
+        <div class="fee-assessment-text">
+          Đã thu <strong>${formatPercent(collectionRate)}</strong> tổng số tiền dự kiến; có
+          <strong>${formatPercent(paidStudentRate)}</strong> học sinh đã hoàn thành đủ học phí.
+          ${recommendation}
+        </div>
+      `;
+    }
+
+    function formatPercent(value) {
+      return Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 1 }) + '%';
     }
 
     function renderGroupedFeeRows(list, renderRow) {
