@@ -466,6 +466,92 @@
     background: #f8fafc;
   }
 
+  tbody tr.student-data-row {
+    transition: background-color 0.16s ease, box-shadow 0.16s ease;
+  }
+
+  tbody tr.student-data-row:hover {
+    background: #e0f2fe !important;
+    box-shadow: inset 4px 0 0 #0284c7;
+  }
+
+  .student-class-group-row td {
+    padding: 0;
+    border-bottom: 1px solid #bae6fd;
+    background: linear-gradient(90deg, #e0f2fe, #f8fafc);
+  }
+
+  .student-class-group-row:hover td {
+    background: linear-gradient(90deg, #e0f2fe, #f8fafc);
+  }
+
+  .student-class-group {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    padding: 12px 16px;
+  }
+
+  .student-class-group-title {
+    color: #075985;
+    font-size: 15px;
+    font-weight: 900;
+  }
+
+  .student-class-group-summary,
+  .student-class-group-schools {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px 14px;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .student-class-group-summary strong { color: #0f172a; }
+
+  .student-class-group-schools {
+    width: 100%;
+    padding-top: 2px;
+  }
+
+  .student-school-legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .student-school-legend::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .school-tone-1,
+  tr.school-tone-1 td[data-column="student"],
+  tr.school-tone-1 td[data-column="school"],
+  tr.school-tone-1 .student-name { color: #0369a1; }
+
+  .school-tone-2,
+  tr.school-tone-2 td[data-column="student"],
+  tr.school-tone-2 td[data-column="school"],
+  tr.school-tone-2 .student-name { color: #7e22ce; }
+
+  .school-tone-3,
+  tr.school-tone-3 td[data-column="student"],
+  tr.school-tone-3 td[data-column="school"],
+  tr.school-tone-3 .student-name { color: #047857; }
+
+  .school-tone-4,
+  tr.school-tone-4 td[data-column="student"],
+  tr.school-tone-4 td[data-column="school"],
+  tr.school-tone-4 .student-name { color: #c2410c; }
+
   .student-name {
     font-weight: 800;
     color: #0f172a;

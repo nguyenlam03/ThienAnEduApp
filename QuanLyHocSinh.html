@@ -1194,13 +1194,13 @@
         return;
       }
 
-      tbody.innerHTML = studentList.map(function (item, index) {
+      tbody.innerHTML = renderGroupedStudentRows(studentList, function (item, index, schoolToneClass) {
         const lopName = getLopName(item.lop);
         const khoiName = getKhoiName(item.khoi);
         const kyHocNames = item.kyHocNames || [];
 
         return `
-          <tr>
+          <tr class="student-data-row ${schoolToneClass}">
             <td data-column="stt">${index + 1}</td>
 
             <td data-column="student">
@@ -1225,8 +1225,86 @@
             </td>
           </tr>
         `;
-      }).join('');
+      });
       GridColumnConfig.apply('student-list');
+    }
+
+    function renderGroupedStudentRows(list, renderRow) {
+      const totalHocPhi = list.reduce(function (sum, item) {
+        return sum + Number(item.hocPhi || 0);
+      }, 0);
+      const groups = [];
+      const groupMap = {};
+
+      list.forEach(function (item, index) {
+        const key = String(item.lop || item.tenLop || 'CHUA_XEP_LOP');
+        if (!groupMap[key]) {
+          groupMap[key] = { items: [], originalIndexes: [], schools: [] };
+          groups.push(groupMap[key]);
+        }
+        groupMap[key].items.push(item);
+        groupMap[key].originalIndexes.push(index);
+        const school = String(item.truong || 'Chưa cập nhật trường').trim();
+        if (groupMap[key].schools.indexOf(school) === -1) groupMap[key].schools.push(school);
+      });
+
+      return groups.map(function (group) {
+        const groupHocPhi = group.items.reduce(function (sum, item) {
+          return sum + Number(item.hocPhi || 0);
+        }, 0);
+        const maleCount = group.items.filter(function (item) {
+          return normalizeStudentText(item.gioiTinh) === 'nam';
+        }).length;
+        const femaleCount = group.items.filter(function (item) {
+          return normalizeStudentText(item.gioiTinh) === 'nu';
+        }).length;
+        const percentage = totalHocPhi > 0 ? groupHocPhi * 100 / totalHocPhi : 0;
+        const hasMultipleSchools = group.schools.length >= 2;
+        const first = group.items[0] || {};
+        const className = first.tenLop || getLopName(first.lop) || 'Chưa xếp lớp';
+        const schoolToneMap = {};
+        group.schools.forEach(function (school, schoolIndex) {
+          schoolToneMap[school] = hasMultipleSchools ? 'school-tone-' + (schoolIndex % 4 + 1) : '';
+        });
+        const legends = hasMultipleSchools ? `
+          <div class="student-class-group-schools">
+            <span>Phân biệt trường:</span>
+            ${group.schools.map(function (school) {
+              return `<span class="student-school-legend ${schoolToneMap[school]}">${escapeHtml(school)}</span>`;
+            }).join('')}
+          </div>
+        ` : '';
+        const header = `
+          <tr class="student-class-group-row">
+            <td data-grid-empty="true" colspan="12">
+              <div class="student-class-group">
+                <div class="student-class-group-title">${escapeHtml(className)}</div>
+                <div class="student-class-group-summary">
+                  <span>Tổng học phí: <strong>${formatMoney(groupHocPhi)}</strong></span>
+                  <span>Tỷ lệ: <strong>${percentage.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}%</strong></span>
+                  <span>Học sinh: <strong>${group.items.length}</strong></span>
+                  <span>Nam: <strong>${maleCount}</strong></span>
+                  <span>Nữ: <strong>${femaleCount}</strong></span>
+                </div>
+                ${legends}
+              </div>
+            </td>
+          </tr>
+        `;
+        const rows = group.items.map(function (item, index) {
+          const school = String(item.truong || 'Chưa cập nhật trường').trim();
+          return renderRow(item, group.originalIndexes[index], schoolToneMap[school] || '');
+        }).join('');
+        return header + rows;
+      }).join('');
+    }
+
+    function normalizeStudentText(value) {
+      return String(value || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
     }
 
     function openSortStudentModal() {
