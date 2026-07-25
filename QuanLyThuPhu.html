@@ -376,6 +376,7 @@
                   <th data-column="receiptNo">Số phiếu</th>
                   <th data-column="grade">Khối</th>
                   <th data-column="class">Lớp</th>
+                  <th data-column="school">Trường</th>
                   <th data-column="monthlyFee">Học phí tháng</th>
                   <th data-column="collected">Đã thu</th>
                   <th data-column="remaining">Còn lại</th>
@@ -389,7 +390,7 @@
 
               <tbody id="feeTableBody">
                 <tr>
-                  <td data-grid-empty="true" colspan="13">
+                  <td data-grid-empty="true" colspan="14">
                     <div class="empty-box">Đang tải dữ liệu...</div>
                   </td>
                 </tr>
@@ -724,6 +725,7 @@
         list = list.filter(item => {
           const text = normalizeText(
             item.hoTen + ' ' +
+            item.truong + ' ' +
             item.sdtPhuHuynh + ' ' +
             item.tenLop + ' ' +
             item.tenKhoi
@@ -738,7 +740,7 @@
       if (list.length === 0) {
         tbody.innerHTML = `
           <tr>
-            <td data-grid-empty="true" colspan="13">
+            <td data-grid-empty="true" colspan="14">
               <div class="empty-box">Không có học sinh phù hợp với bộ lọc hiện tại.</div>
             </td>
           </tr>
@@ -762,6 +764,7 @@
             <td data-column="receiptNo"><strong>${escapeHtml(item.soPhieu || '')}</strong></td>
             <td data-column="grade">${escapeHtml(item.tenKhoi || item.khoi || '')}</td>
             <td data-column="class"><span class="class-badge">${escapeHtml(item.tenLop || item.lop || '')}</span></td>
+            <td data-column="school">${escapeHtml(item.truong || '')}</td>
 
             <td data-column="monthlyFee"><strong>${formatMoney(item.hocPhi || 0)}</strong></td>
             <td data-column="collected"><strong>${formatMoney(item.soTienDaThu || 0)}</strong></td>

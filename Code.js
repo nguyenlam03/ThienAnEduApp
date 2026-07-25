@@ -497,6 +497,7 @@ function getHocSinhList(token, filters) {
         khoi: String(row.Khoi || '').trim(),
         lop: String(row.Lop || '').trim(),
         hoTen: String(row.HoTen || '').trim(),
+        truong: String(row.Truong || '').trim() || 'THCS Long Phước',
         ngaySinh: formatDateForInput_(ngayVao),
         ngaySinhDisplay: formatDateDisplay_(ngayVao),
         gioiTinh: String(row.GioiTinh || '').trim(),
@@ -525,6 +526,7 @@ function getHocSinhList(token, filters) {
     result = result.filter(item => {
       const haystack = normalizeText_(
         item.hoTen + ' ' +
+        item.truong + ' ' +
         item.sdtPhuHuynh + ' ' +
         item.ghiChu
       );
@@ -732,6 +734,7 @@ function saveHocSinh(token, hocSinh) {
   const khoi = String(hocSinh.khoi || '').trim();
   const lop = String(hocSinh.lop || '').trim();
   const hoTen = String(hocSinh.hoTen || '').trim();
+  const truong = String(hocSinh.truong || '').trim() || 'THCS Long Phước';
   const ngayVao = String(hocSinh.ngaySinh || '').trim();
   const gioiTinh = String(hocSinh.gioiTinh || '').trim();
   const sdtPhuHuynh = String(hocSinh.sdtPhuHuynh || '').trim();
@@ -755,6 +758,10 @@ function saveHocSinh(token, hocSinh) {
 
   if (!hoTen) {
     throw new Error('Vui lòng nhập họ tên học sinh.');
+  }
+
+  if (['TH Tam Thiện', 'THCS Phước Thái', 'THCS Long Phước'].indexOf(truong) === -1) {
+    throw new Error('Trường học không hợp lệ.');
   }
 
   if (sdtPhuHuynh && !/^0\d{9}$/.test(sdtPhuHuynh)) {
@@ -848,6 +855,7 @@ function saveHocSinh(token, hocSinh) {
         Khoi: khoi,
         Lop: lop,
         HoTen: hoTen,
+        Truong: truong,
         NgayVao: parseInputDate_(ngayVao),
         NgaySinh: parseInputDate_(ngayVao),
         GioiTinh: gioiTinh,
@@ -872,6 +880,7 @@ function saveHocSinh(token, hocSinh) {
       Khoi: khoi,
       Lop: lop,
       HoTen: hoTen,
+      Truong: truong,
       NgayVao: parseInputDate_(ngayVao),
       NgaySinh: parseInputDate_(ngayVao),
       GioiTinh: gioiTinh,
@@ -966,6 +975,7 @@ function getHocSinhHeaders_() {
     'Khoi',
     'Lop',
     'HoTen',
+    'Truong',
     'NgayVao',
     'NgaySinh',
     'GioiTinh',
@@ -1129,8 +1139,20 @@ function getQuanLyThuPhiData(token, yearMonth) {
         String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED';
     });
 
+  const studentMetaMap = readObjects_(SHEET_HOCSINH).reduce((map, row) => {
+    const id = String(row.MaHocSinh || '').trim();
+    if (!id || String(row.TrangThai || '').trim().toUpperCase() === 'DELETED') return map;
+    map[id] = {
+      truong: String(row.Truong || '').trim() || 'THCS Long Phước',
+      gioiTinh: String(row.GioiTinh || '').trim()
+    };
+    return map;
+  }, {});
+
   const resultStudents = rows
     .map(row => {
+      const maHocSinh = String(row.MaHocSinh || '').trim();
+      const studentMeta = studentMetaMap[maHocSinh] || {};
       const tamNghi = toBoolean_(row.TamNghi) ||
         String(row.TrangThaiThu || '').trim() === 'Tạm nghỉ';
       const rowHocPhi = number_(row.HocPhi);
@@ -1145,7 +1167,7 @@ function getQuanLyThuPhiData(token, yearMonth) {
       );
 
       return {
-        maHocSinh: String(row.MaHocSinh || '').trim(),
+        maHocSinh: maHocSinh,
         sapXep: number_(row.SapXep),
 
         hoTen: String(row.HoTen || '').trim(),
@@ -1153,6 +1175,8 @@ function getQuanLyThuPhiData(token, yearMonth) {
         tenKhoi: String(row.TenKhoi || row.Khoi || '').trim(),
         lop: String(row.Lop || '').trim(),
         tenLop: String(row.TenLop || row.Lop || '').trim(),
+        truong: String(row.Truong || studentMeta.truong || '').trim(),
+        gioiTinh: String(row.GioiTinh || studentMeta.gioiTinh || '').trim(),
         sdtPhuHuynh: String(row.SDTPhuHuynh || '').trim(),
 
         hocPhiGoc: hocPhiGoc,
@@ -1484,6 +1508,8 @@ function ensureThuPhiMonthSnapshot_(maKyHoc, year, month) {
         Lop: student.lop,
         TenLop: student.tenLop,
         HoTen: student.hoTen,
+        Truong: student.truong,
+        GioiTinh: student.gioiTinh,
         SDTPhuHuynh: student.sdtPhuHuynh,
         NgayVao: toDateOnly_(student.ngayVaoRaw) || student.ngayVaoRaw || '',
         HocPhi: hocPhi,
@@ -1579,6 +1605,8 @@ function addHocSinhToThuPhiMonth_(maKyHoc, yearMonth, maHocSinh) {
       Lop: student.lop,
       TenLop: student.tenLop,
       HoTen: student.hoTen,
+      Truong: student.truong,
+      GioiTinh: student.gioiTinh,
       SDTPhuHuynh: student.sdtPhuHuynh,
       NgayVao: toDateOnly_(student.ngayVaoRaw) || student.ngayVaoRaw || '',
       HocPhi: hocPhi,
@@ -1752,6 +1780,8 @@ function getHocSinhTheoKyHocForThuPhi_(maKyHoc) {
         tenKhoi: khoiNameMap[khoi] || khoi,
         lop: lop,
         tenLop: lopNameMap[lop] || lop,
+        truong: String(row.Truong || '').trim() || 'THCS Long Phước',
+        gioiTinh: String(row.GioiTinh || '').trim(),
         sdtPhuHuynh: String(row.SDTPhuHuynh || '').trim(),
         hocPhi: kyHocMap[maHocSinh] ? kyHocMap[maHocSinh].hocPhi : '',
         ngayVaoRaw: row.NgayVao || row.NgaySinh || row.CreatedAt || '',
@@ -1776,6 +1806,8 @@ function getThuPhiMonthHeaders_() {
     'Lop',
     'TenLop',
     'HoTen',
+    'Truong',
+    'GioiTinh',
     'SDTPhuHuynh',
     'NgayVao',
     'HocPhi',
@@ -3637,9 +3669,6 @@ function compareStudentSort_(a, b) {
   const finalA = sortA > 0 ? sortA : 999999;
   const finalB = sortB > 0 ? sortB : 999999;
 
-  // Mọi danh sách học sinh ưu tiên SapXep tăng dần: 100-199, 200-299, ... 900-999.
-  if (finalA !== finalB) return finalA - finalB;
-
   const lopA = String(a.lop || a.Lop || '');
   const lopB = String(b.lop || b.Lop || '');
   const lopMatchA = lopA.match(/([1-9])/);
@@ -3647,9 +3676,31 @@ function compareStudentSort_(a, b) {
   const classNumberA = lopMatchA ? Number(lopMatchA[1]) : Math.floor(finalA / 100);
   const classNumberB = lopMatchB ? Number(lopMatchB[1]) : Math.floor(finalB / 100);
 
+  // Lớp luôn tăng từ 1 đến 9.
   if (classNumberA !== classNumberB) return classNumberA - classNumberB;
 
   if (lopA !== lopB) return lopA.localeCompare(lopB, 'vi');
+
+  // Cấp 2: THCS Phước Thái trước, THCS Long Phước sau.
+  if (classNumberA >= 6 && classNumberA <= 9) {
+    const schoolA = normalizeText_(a.truong || a.Truong || '');
+    const schoolB = normalizeText_(b.truong || b.Truong || '');
+    const schoolOrderA = schoolA === 'thcs phuoc thai' ? 1 : (schoolA === 'thcs long phuoc' ? 2 : 3);
+    const schoolOrderB = schoolB === 'thcs phuoc thai' ? 1 : (schoolB === 'thcs long phuoc' ? 2 : 3);
+
+    if (schoolOrderA !== schoolOrderB) return schoolOrderA - schoolOrderB;
+  }
+
+  // Trong cùng lớp/nhóm trường: Nam trước, Nữ sau.
+  const genderA = normalizeText_(a.gioiTinh || a.GioiTinh || '');
+  const genderB = normalizeText_(b.gioiTinh || b.GioiTinh || '');
+  const genderOrderA = genderA === 'nam' ? 1 : (genderA === 'nu' ? 2 : 3);
+  const genderOrderB = genderB === 'nam' ? 1 : (genderB === 'nu' ? 2 : 3);
+
+  if (genderOrderA !== genderOrderB) return genderOrderA - genderOrderB;
+
+  // SapXep là tiêu chí cố định cuối cùng trước tên.
+  if (finalA !== finalB) return finalA - finalB;
 
   return String(a.hoTen || a.HoTen || '').localeCompare(String(b.hoTen || b.HoTen || ''), 'vi');
 }

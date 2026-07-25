@@ -658,6 +658,7 @@
                   <th data-column="term">Kỳ học</th>
                   <th data-column="joinDate">Ngày vào</th>
                   <th data-column="gender">Giới tính</th>
+                  <th data-column="school">Trường</th>
                   <th data-column="parentPhone">SĐT phụ huynh</th>
                   <th data-column="tuition">Học phí</th>
                   <th data-column="note">Ghi chú</th>
@@ -667,7 +668,7 @@
 
               <tbody id="studentTableBody">
                 <tr>
-                  <td data-grid-empty="true" colspan="11">
+                  <td data-grid-empty="true" colspan="12">
                     <div class="empty-box">Đang tải dữ liệu...</div>
                   </td>
                 </tr>
@@ -768,6 +769,15 @@
               <option value="">Chưa chọn</option>
               <option value="Nam">Nam</option>
               <option value="Nữ">Nữ</option>
+            </select>
+          </div>
+
+          <div class="field span-2">
+            <label>Trường</label>
+            <select id="formTruong">
+              <option value="TH Tam Thiện">TH Tam Thiện</option>
+              <option value="THCS Phước Thái">THCS Phước Thái</option>
+              <option value="THCS Long Phước" selected>THCS Long Phước</option>
             </select>
           </div>
 
@@ -1175,7 +1185,7 @@
       if (studentList.length === 0) {
         tbody.innerHTML = `
           <tr>
-            <td data-grid-empty="true" colspan="11">
+            <td data-grid-empty="true" colspan="12">
               <div class="empty-box">Chưa có học sinh phù hợp với bộ lọc hiện tại.</div>
             </td>
           </tr>
@@ -1202,6 +1212,7 @@
             <td data-column="term">${renderKyHocBadges(kyHocNames)}</td>
             <td data-column="joinDate">${escapeHtml(item.ngaySinhDisplay || '')}</td>
             <td data-column="gender">${escapeHtml(item.gioiTinh || '')}</td>
+            <td data-column="school">${escapeHtml(item.truong || '')}</td>
             <td data-column="parentPhone">${escapeHtml(item.sdtPhuHuynh || '')}</td>
             <td data-column="tuition"><strong>${formatMoney(item.hocPhi || '')}</strong></td>
             <td data-column="note">${escapeHtml(item.ghiChu || '')}</td>
@@ -1415,7 +1426,7 @@
                     <span class="sort-position">${classItem.classNumber * 100 + index}</span>
                     <div>
                       <div class="sort-student-name">${escapeHtml(item.hoTen)}</div>
-                      <div class="sort-student-meta">${escapeHtml(getKhoiName(item.khoi))} · ${escapeHtml(getLopName(item.lop))}</div>
+                      <div class="sort-student-meta">${escapeHtml(getKhoiName(item.khoi))} · ${escapeHtml(getLopName(item.lop))} · ${escapeHtml(item.truong || '')} · ${escapeHtml(item.gioiTinh || '')}</div>
                     </div>
                     <div class="sort-move-actions">
                       <button class="sort-move-button" type="button" title="Di chuyển lên" ${index === 0 ? 'disabled' : ''} onclick="moveSortStudent('${escapeAttribute(item.maHocSinh)}', -1)">↑</button>
@@ -1576,6 +1587,7 @@
       document.getElementById('formHoTen').value = '';
       document.getElementById('formNgaySinh').value = '';
       document.getElementById('formGioiTinh').value = '';
+      document.getElementById('formTruong').value = 'THCS Long Phước';
       document.getElementById('formSdtPhuHuynh').value = '';
       document.getElementById('formGhiChu').value = '';
 
@@ -1615,6 +1627,7 @@
       document.getElementById('formHoTen').value = item.hoTen || '';
       document.getElementById('formNgaySinh').value = item.ngaySinh || '';
       document.getElementById('formGioiTinh').value = item.gioiTinh || '';
+      document.getElementById('formTruong').value = item.truong || 'THCS Long Phước';
       document.getElementById('formSdtPhuHuynh').value = item.sdtPhuHuynh || '';
       document.getElementById('formGhiChu').value = item.ghiChu || '';
 
@@ -1642,6 +1655,7 @@
         hoTen: document.getElementById('formHoTen').value.trim(),
         ngaySinh: document.getElementById('formNgaySinh').value,
         gioiTinh: document.getElementById('formGioiTinh').value,
+        truong: document.getElementById('formTruong').value,
         sdtPhuHuynh: document.getElementById('formSdtPhuHuynh').value.trim(),
         diaChi: '',
         ghiChu: document.getElementById('formGhiChu').value.trim(),
