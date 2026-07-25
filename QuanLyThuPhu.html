@@ -47,7 +47,7 @@
 
     .fee-filter-row {
       display: grid;
-      grid-template-columns: 170px 170px minmax(220px, 1fr) 145px 155px 120px;
+      grid-template-columns: 170px 145px 155px 170px minmax(220px, 1fr) 120px;
       gap: 14px;
       margin-bottom: 20px;
       align-items: end;
@@ -324,6 +324,20 @@
             </div>
 
             <div class="field">
+              <label>Khối</label>
+              <select id="filterKhoi" onchange="handleFeeGradeFilterChange()">
+                <option value="ALL">Tất cả khối</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label>Lớp</label>
+              <select id="filterLop" onchange="renderTable()">
+                <option value="ALL">Tất cả lớp</option>
+              </select>
+            </div>
+
+            <div class="field">
               <label>Trạng thái</label>
               <select id="filterPaymentStatus" onchange="renderTable()">
                 <option value="ALL">Tất cả</option>
@@ -338,20 +352,6 @@
             <div class="field">
               <label>Tìm kiếm học sinh</label>
               <input id="filterKeyword" type="text" placeholder="Nhập tên học sinh hoặc số điện thoại...">
-            </div>
-
-            <div class="field">
-              <label>Khối</label>
-              <select id="filterKhoi" onchange="handleFeeGradeFilterChange()">
-                <option value="ALL">Tất cả khối</option>
-              </select>
-            </div>
-
-            <div class="field">
-              <label>Lớp</label>
-              <select id="filterLop" onchange="renderTable()">
-                <option value="ALL">Tất cả lớp</option>
-              </select>
             </div>
 
             <button class="secondary-button" onclick="loadThuPhiData()">
