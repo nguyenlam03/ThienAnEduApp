@@ -15,6 +15,8 @@ const CACHE_PREFIX = 'TA_CACHE_';
 const CACHE_SECONDS = 1800;
 const CACHE_CHUNK_SIZE = 90000;
 const DATA_CACHE_ENABLED_PROPERTY = 'DATA_CACHE_ENABLED';
+let DATA_VERSION_MEMO_ = '';
+let DATA_CACHE_ENABLED_MEMO_ = null;
 
 /**
  * Include file HTML dùng chung.
@@ -265,7 +267,7 @@ function logout(token) {
 }
 
 /**
- * Bật/tắt cache dữ liệu nghiệp vụ. Mặc định tắt.
+ * Bật/tắt cache dữ liệu nghiệp vụ. Mặc định bật để tối ưu tốc độ đọc.
  * Cache token đăng nhập vẫn hoạt động độc lập để duy trì phiên đăng nhập.
  */
 function setDataCacheEnabled(token, enabled) {
@@ -276,6 +278,7 @@ function setDataCacheEnabled(token, enabled) {
     DATA_CACHE_ENABLED_PROPERTY,
     isEnabled ? 'TRUE' : 'FALSE'
   );
+  DATA_CACHE_ENABLED_MEMO_ = isEnabled;
 
   // Đổi phiên bản để mọi cache cũ không còn được dùng lại.
   bumpDataVersion_();
@@ -290,9 +293,13 @@ function setDataCacheEnabled(token, enabled) {
 }
 
 function isDataCacheEnabled_() {
-  return String(
-    PropertiesService.getScriptProperties().getProperty(DATA_CACHE_ENABLED_PROPERTY) || 'FALSE'
+  if (DATA_CACHE_ENABLED_MEMO_ !== null) return DATA_CACHE_ENABLED_MEMO_;
+
+  DATA_CACHE_ENABLED_MEMO_ = String(
+    PropertiesService.getScriptProperties().getProperty(DATA_CACHE_ENABLED_PROPERTY) || 'TRUE'
   ).toUpperCase() === 'TRUE';
+
+  return DATA_CACHE_ENABLED_MEMO_;
 }
 
 /**
@@ -839,61 +846,45 @@ function saveHocSinh(token, hocSinh) {
     sapXep = String(availableSort);
   }
 
-  existed = rows.some(row => {
+  const existingRow = rows.find(row => {
     return String(row.MaHocSinh || '').trim() === maHocSinh &&
       String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED';
   });
 
-  const updatedRows = rows.map(row => {
-    if (
-      String(row.MaHocSinh || '').trim() === maHocSinh &&
-      String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED'
-    ) {
-      return Object.assign({}, row, {
-        MaKyHoc: session.maKyHoc,
-        SapXep: sapXep,
-        Khoi: khoi,
-        Lop: lop,
-        HoTen: hoTen,
-        Truong: truong,
-        NgayVao: parseInputDate_(ngayVao),
-        NgaySinh: parseInputDate_(ngayVao),
-        GioiTinh: gioiTinh,
-        SDTPhuHuynh: sdtPhuHuynh,
-        DiaChi: diaChi,
-        GhiChu: ghiChu,
-        TrangThai: 'ACTIVE',
-        UpdatedAt: now
-      });
-    }
-
-    return row;
-  });
+  existed = !!existingRow;
 
   if (!existed) {
     newId = 'HS_' + Utilities.getUuid().slice(0, 8).toUpperCase();
-
-    updatedRows.push({
-      MaHocSinh: newId,
-      MaKyHoc: session.maKyHoc,
-      SapXep: sapXep,
-      Khoi: khoi,
-      Lop: lop,
-      HoTen: hoTen,
-      Truong: truong,
-      NgayVao: parseInputDate_(ngayVao),
-      NgaySinh: parseInputDate_(ngayVao),
-      GioiTinh: gioiTinh,
-      SDTPhuHuynh: sdtPhuHuynh,
-      DiaChi: diaChi,
-      GhiChu: ghiChu,
-      TrangThai: 'ACTIVE',
-      CreatedAt: now,
-      UpdatedAt: now
-    });
   }
 
-  writeObjectsToSheet_(SHEET_HOCSINH, updatedRows, getHocSinhHeaders_());
+  const parsedNgayVao = parseInputDate_(ngayVao);
+  const savedStudentRow = Object.assign({}, existingRow || {}, {
+    MaHocSinh: newId,
+    MaKyHoc: session.maKyHoc,
+    SapXep: sapXep,
+    Khoi: khoi,
+    Lop: lop,
+    HoTen: hoTen,
+    Truong: truong,
+    NgayVao: parsedNgayVao,
+    NgaySinh: parsedNgayVao,
+    GioiTinh: gioiTinh,
+    SDTPhuHuynh: sdtPhuHuynh,
+    DiaChi: diaChi,
+    GhiChu: ghiChu,
+    TrangThai: 'ACTIVE',
+    CreatedAt: existingRow && existingRow.CreatedAt ? existingRow.CreatedAt : now,
+    UpdatedAt: now
+  });
+
+  if (existed) {
+    updateObjectRowById_(SHEET_HOCSINH, 'MaHocSinh', newId, savedStudentRow, getHocSinhHeaders_());
+  } else {
+    const studentSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    const studentSheet = studentSpreadsheet.getSheetByName(SHEET_HOCSINH) ||
+      ensureSheet_(studentSpreadsheet, SHEET_HOCSINH, getHocSinhHeaders_());
+    appendObjectsToSheet_(studentSheet, [savedStudentRow], getHocSinhHeaders_());
+  }
   saveHocSinhKyHoc_(newId, kyHocIds, hocPhi);
   } finally {
     lock.releaseLock();
@@ -991,6 +982,21 @@ function getHocSinhHeaders_() {
 function saveHocSinhKyHoc_(maHocSinh, kyHocIds, hocPhi) {
   const now = new Date();
   const oldRows = readObjectsNoCache_(SHEET_HOCSINH_KYHOC);
+
+  const activeRows = oldRows.filter(row => {
+    return String(row.MaHocSinh || '').trim() === maHocSinh &&
+      String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED';
+  });
+  const activeKyHocIds = activeRows
+    .map(row => String(row.MaKyHoc || '').trim())
+    .filter(id => id)
+    .sort();
+  const requestedKyHocIds = kyHocIds.map(id => String(id || '').trim()).filter(id => id).sort();
+  const mappingUnchanged = activeKyHocIds.length === requestedKyHocIds.length &&
+    activeKyHocIds.every((id, index) => id === requestedKyHocIds[index]) &&
+    activeRows.every(row => String(number_(row.HocPhi)) === String(number_(hocPhi)));
+
+  if (mappingUnchanged) return;
 
   const keptRows = oldRows.map(row => {
     if (
@@ -1301,7 +1307,8 @@ function saveThuPhiHocSinh(token, data) {
   const snapshot = ensureThuPhiMonthSnapshot_(
     session.maKyHoc,
     ym.year,
-    ym.month
+    ym.month,
+    { includeRows: false }
   );
 
   ensureThuChiSheets_(session.maKyHoc);
@@ -1456,7 +1463,8 @@ function saveThuPhiHocSinh(token, data) {
  * Nếu sheet đã có dữ liệu của kỳ học thì chỉ đánh dấu đã khởi tạo,
  * không đồng bộ lại từ HocSinh.
  */
-function ensureThuPhiMonthSnapshot_(maKyHoc, year, month) {
+function ensureThuPhiMonthSnapshot_(maKyHoc, year, month, options) {
+  const includeRows = !options || options.includeRows !== false;
   const lock = LockService.getScriptLock();
 
   if (!lock.tryLock(30000)) {
@@ -1471,6 +1479,14 @@ function ensureThuPhiMonthSnapshot_(maKyHoc, year, month) {
     const marker = props.getProperty(propertyKey);
     const markerSheetId = marker ? String(marker).split('|')[0] : '';
     const markerMatchesSheet = markerSheetId === String(sheet.getSheetId());
+    if (markerMatchesSheet) {
+      return {
+        sheet: sheet,
+        created: false,
+        rows: includeRows ? readObjectsNoCache_(sheetName) : []
+      };
+    }
+
     const rows = readObjectsNoCache_(sheetName);
 
     const hasExistingSnapshot = rows.some(row => {
@@ -1478,13 +1494,11 @@ function ensureThuPhiMonthSnapshot_(maKyHoc, year, month) {
         String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED';
     });
 
-    if (markerMatchesSheet || hasExistingSnapshot) {
-      if (!markerMatchesSheet) {
-        props.setProperty(
-          propertyKey,
-          String(sheet.getSheetId()) + '|' + String(Date.now())
-        );
-      }
+    if (hasExistingSnapshot) {
+      props.setProperty(
+        propertyKey,
+        String(sheet.getSheetId()) + '|' + String(Date.now())
+      );
 
       return {
         sheet: sheet,
@@ -1553,7 +1567,7 @@ function ensureThuPhiMonthSnapshot_(maKyHoc, year, month) {
  */
 function addHocSinhToThuPhiMonth_(maKyHoc, yearMonth, maHocSinh) {
   const ym = parseYearMonth_(yearMonth);
-  const snapshot = ensureThuPhiMonthSnapshot_(maKyHoc, ym.year, ym.month);
+  const snapshot = ensureThuPhiMonthSnapshot_(maKyHoc, ym.year, ym.month, { includeRows: false });
   const sheet = snapshot.sheet;
   const lock = LockService.getScriptLock();
 
@@ -3657,10 +3671,57 @@ function writeObjectsToSheet_(sheetName, objects, requiredHeaders) {
     })
   );
 
-  sheet.clearContents();
   sheet.getRange(1, 1, values.length, headers.length).setValues(values);
-  formatHeader_(sheet);
-  sheet.autoResizeColumns(1, headers.length);
+
+  if (currentValues.length > values.length) {
+    sheet.getRange(
+      values.length + 1,
+      1,
+      currentValues.length - values.length,
+      Math.max(1, sheet.getLastColumn())
+    ).clearContent();
+  }
+
+  if (!currentHeaders.length || headers.length !== currentHeaders.length) {
+    formatHeader_(sheet);
+  }
+}
+
+/**
+ * Cáº­p nháº­t Ä‘Ãºng má»™t dÃ²ng theo khoÃ¡, khÃ´ng xoÃ¡ vÃ  ghi láº¡i toÃ n bá»™ sheet.
+ */
+function updateObjectRowById_(sheetName, idHeader, idValue, object, requiredHeaders) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName) || ensureSheet_(ss, sheetName, requiredHeaders);
+  const lastColumn = sheet.getLastColumn();
+  const lastRow = sheet.getLastRow();
+
+  if (lastColumn <= 0 || lastRow <= 0) {
+    throw new Error('Sheet ' + sheetName + ' chÆ°a cÃ³ cáº¥u trÃºc dá»¯ liá»‡u.');
+  }
+
+  const headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0]
+    .map(header => String(header || '').trim());
+  const idColumnIndex = headers.indexOf(idHeader);
+
+  if (idColumnIndex === -1) {
+    throw new Error('Sheet ' + sheetName + ' thiáº¿u cá»™t ' + idHeader + '.');
+  }
+
+  const ids = lastRow > 1
+    ? sheet.getRange(2, idColumnIndex + 1, lastRow - 1, 1).getValues()
+    : [];
+  const targetOffset = ids.findIndex(row => String(row[0] || '').trim() === String(idValue || '').trim());
+
+  if (targetOffset === -1) {
+    throw new Error('KhÃ´ng tÃ¬m tháº¥y dá»¯ liá»‡u cáº§n cáº­p nháº­t trong sheet ' + sheetName + '.');
+  }
+
+  const rowValues = headers.map(header => {
+    return Object.prototype.hasOwnProperty.call(object, header) ? object[header] : '';
+  });
+
+  sheet.getRange(targetOffset + 2, 1, 1, headers.length).setValues([rowValues]);
 }
 
 function compareStudentSort_(a, b) {
@@ -3816,6 +3877,8 @@ function jsonResponse_(data) {
 }
 
 function getDataVersion_() {
+  if (DATA_VERSION_MEMO_) return DATA_VERSION_MEMO_;
+
   const props = PropertiesService.getScriptProperties();
   let version = props.getProperty('DATA_VERSION');
 
@@ -3824,11 +3887,13 @@ function getDataVersion_() {
     props.setProperty('DATA_VERSION', version);
   }
 
+  DATA_VERSION_MEMO_ = version;
   return version;
 }
 
 function bumpDataVersion_() {
-  PropertiesService.getScriptProperties().setProperty('DATA_VERSION', String(Date.now()));
+  DATA_VERSION_MEMO_ = String(Date.now());
+  PropertiesService.getScriptProperties().setProperty('DATA_VERSION', DATA_VERSION_MEMO_);
 }
 
 function buildCacheKey_(name) {

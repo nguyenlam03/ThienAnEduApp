@@ -516,12 +516,6 @@
         renderTable();
       });
 
-      document.getElementById('feeModal').addEventListener('click', function (event) {
-        if (event.target.id === 'feeModal') {
-          closeFeeModal();
-        }
-      });
-
       loadThuPhiData();
     });
 
@@ -1026,18 +1020,28 @@
             maNguonTien: data.maNguonTien,
             tenNguonTien: getMoneySourceName(data.maNguonTien),
             ghiChu: data.ghiChu,
+            trangThai: tamNghi
+              ? 'Tạm nghỉ'
+              : getFeeStatusClient(Number(data.hocPhi || 0), Number(data.soTienDaThu || 0)),
             monthText: currentMonthText
           });
+
+          const savedIndex = feeStudents.findIndex(function (item) {
+            return item.maHocSinh === savedItem.maHocSinh;
+          });
+          if (savedIndex !== -1) feeStudents[savedIndex] = savedItem;
 
           document.getElementById('formSoPhieu').value = savedItem.soPhieu;
           closeFeeModal();
           showMessage(result.message || 'Đã lưu thông tin thu phí.', 'success');
 
+          renderSummary(buildLocalFeeSummary());
+          renderTable();
+
           if (printAfter && !tamNghi && savedItem.soPhieu && savedItem.soTienDaThu > 0) {
             printTuitionReceiptDocument(savedItem, pendingPrintWindow);
           }
 
-          loadThuPhiData();
         })
         .withFailureHandler(function (error) {
           btn.disabled = false;
@@ -1047,6 +1051,39 @@
           showNotification(getErrorMessage(error), 'error');
         })
         .saveThuPhiHocSinh(APP_TOKEN, data);
+    }
+
+    function getFeeStatusClient(hocPhi, daThu) {
+      if (daThu <= 0) return 'Chưa thu';
+      if (hocPhi > 0 && daThu < hocPhi) return 'Thu một phần';
+      if (hocPhi > 0 && daThu > hocPhi) return 'Thu dư';
+      return 'Đã thu đủ';
+    }
+
+    function buildLocalFeeSummary() {
+      return feeStudents.reduce(function (summary, item) {
+        const hocPhi = Number(item.hocPhi || 0);
+        const daThu = Number(item.soTienDaThu || 0);
+        const conLai = Number(item.conLai || 0);
+        summary.totalStudents++;
+        if (item.tamNghi) summary.temporaryLeaveCount++;
+        if (!item.tamNghi && daThu > 0) summary.paidCount++;
+        if (!item.tamNghi && hocPhi > 0 && daThu >= hocPhi) summary.fullyPaidCount++;
+        summary.totalExpected += hocPhi;
+        summary.totalCollected += daThu;
+        summary.totalRemaining += conLai;
+        if (!item.tamNghi && daThu > 0 && !item.maNguonTien) summary.unassignedCount++;
+        return summary;
+      }, {
+        totalStudents: 0,
+        temporaryLeaveCount: 0,
+        paidCount: 0,
+        fullyPaidCount: 0,
+        totalExpected: 0,
+        totalCollected: 0,
+        totalRemaining: 0,
+        unassignedCount: 0
+      });
     }
 
     function getMoneySourceName(code) {

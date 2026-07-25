@@ -1790,7 +1790,7 @@
           closeModal();
 
           showMessage(data.message || 'Đã lưu dữ liệu.', 'success');
-          loadHocSinh();
+          updateStudentListAfterSave(hocSinh, data);
         })
         .withFailureHandler(function (error) {
           btnSave.disabled = false;
@@ -1800,6 +1800,74 @@
           showNotification(getErrorMessage(error), 'error');
         })
         .saveHocSinh(APP_TOKEN, hocSinh);
+    }
+
+    function updateStudentListAfterSave(hocSinh, result) {
+      const savedStudent = Object.assign({}, hocSinh, {
+        maHocSinh: result.maHocSinh || hocSinh.maHocSinh,
+        sapXep: Number(result.sapXep || hocSinh.sapXep || 0),
+        maKyHoc: APP_MAKYHOC,
+        ngaySinhDisplay: formatDateDisplayClient(hocSinh.ngaySinh),
+        kyHocNames: hocSinh.kyHocIds.map(function (id) {
+          const found = kyHocList.find(function (item) { return item.maKyHoc === id; });
+          return found ? found.tenKyHoc : id;
+        }),
+        trangThaiHocPhi: '',
+        ghiChuHocPhi: ''
+      });
+      const currentIndex = studentList.findIndex(function (item) {
+        return item.maHocSinh === savedStudent.maHocSinh;
+      });
+      const filterKhoi = document.getElementById('filterKhoi').value;
+      const filterLop = document.getElementById('filterLop').value;
+      const keyword = normalizeStudentText(document.getElementById('filterKeyword').value);
+      const haystack = normalizeStudentText(
+        savedStudent.hoTen + ' ' + savedStudent.truong + ' ' +
+        savedStudent.sdtPhuHuynh + ' ' + savedStudent.ghiChu
+      );
+      const matchesCurrentFilter = (!filterKhoi || savedStudent.khoi === filterKhoi) &&
+        (!filterLop || savedStudent.lop === filterLop) &&
+        (!keyword || haystack.indexOf(keyword) !== -1);
+
+      if (currentIndex !== -1) studentList.splice(currentIndex, 1);
+      if (matchesCurrentFilter) studentList.push(savedStudent);
+      studentList.sort(compareStudentClient);
+      renderStudentTable();
+    }
+
+    function compareStudentClient(a, b) {
+      const classA = Number((String(a.lop || '').match(/([1-9])/) || [0, 99])[1]);
+      const classB = Number((String(b.lop || '').match(/([1-9])/) || [0, 99])[1]);
+      if (classA !== classB) return classA - classB;
+
+      if (classA >= 6 && classA <= 9) {
+        const schoolOrder = function (school) {
+          const value = normalizeStudentText(school);
+          if (value === 'thcs phuoc thai') return 1;
+          if (value === 'thcs long phuoc') return 2;
+          return 3;
+        };
+        const schoolDiff = schoolOrder(a.truong) - schoolOrder(b.truong);
+        if (schoolDiff) return schoolDiff;
+      }
+
+      const genderOrder = function (gender) {
+        const value = normalizeStudentText(gender);
+        return value === 'nam' ? 1 : (value === 'nu' ? 2 : 3);
+      };
+      const genderDiff = genderOrder(a.gioiTinh) - genderOrder(b.gioiTinh);
+      if (genderDiff) return genderDiff;
+
+      const sortA = Number(a.sapXep || 999999);
+      const sortB = Number(b.sapXep || 999999);
+      if (sortA !== sortB) return sortA - sortB;
+      return String(a.hoTen || '').localeCompare(String(b.hoTen || ''), 'vi');
+    }
+
+    function formatDateDisplayClient(value) {
+      if (!value) return '';
+      const parts = String(value).split('-');
+      return parts.length === 3 ? parts[2] + '/' + parts[1] + '/' + parts[0] : value;
     }
 
     function deleteHocSinhById(maHocSinh) {
