@@ -9,6 +9,7 @@ const SHEET_THUPHI = 'ThuPhi';
 const SHEET_DANHMUC_THUCHI = 'DanhMucThuChi';
 const SHEET_SOTHUCHI = 'SoThuChi';
 const SHEET_NGUONTIEN = 'NguonTien';
+const SHEET_DOITUONG_THUCHI = 'DoiTuongThuChi';
 const SHEET_CAUHINH = 'CauHinh';
 const CONFIG_NOTIFICATION_DURATION = 'NOTIFICATION_DURATION_SECONDS';
 
@@ -101,6 +102,7 @@ function setupDatabase() {
   ensureSheet_(ss, SHEET_DANHMUC_THUCHI, getDanhMucThuChiHeaders_());
   ensureSheet_(ss, SHEET_SOTHUCHI, getSoThuChiHeaders_());
   ensureSheet_(ss, SHEET_NGUONTIEN, getNguonTienHeaders_());
+  ensureSheet_(ss, SHEET_DOITUONG_THUCHI, getDoiTuongThuChiHeaders_());
   ensureAppConfigSheet_();
 
   // Dữ liệu thu phí được lưu theo từng sheet tháng, ví dụ: Thang07.2026.
@@ -2074,6 +2076,8 @@ function getSoThuChiHeaders_() {
     'NguoiNopNhan',
     'SoPhieu',
     'SoChungTu',
+    'ChungTuFileId',
+    'ChungTuUrl',
     'GhiChu',
     'NguonDuLieu',
     'MaThamChieu',
@@ -2081,6 +2085,13 @@ function getSoThuChiHeaders_() {
     'NguoiTao',
     'CreatedAt',
     'UpdatedAt'
+  ];
+}
+
+function getDoiTuongThuChiHeaders_() {
+  return [
+    'MaDoiTuong', 'Loai', 'TenDoiTuong', 'SoDienThoai', 'DiaChi',
+    'GhiChu', 'TrangThai', 'CreatedAt', 'UpdatedAt'
   ];
 }
 
@@ -2221,7 +2232,7 @@ function getDefaultDanhMucThuChi_() {
 function ensureThuChiSheets_(maKyHoc) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const props = PropertiesService.getScriptProperties();
-  const schemaVersion = '4';
+  const schemaVersion = '5';
   const schemaKey = 'THUCHI_SCHEMA_VERSION';
   const sourceKey = maKyHoc
     ? 'THUCHI_NGUON_INIT_' + String(maKyHoc || '').trim()
@@ -2231,7 +2242,8 @@ function ensureThuChiSheets_(maKyHoc) {
     props.getProperty(schemaKey) === schemaVersion &&
     ss.getSheetByName(SHEET_DANHMUC_THUCHI) &&
     ss.getSheetByName(SHEET_SOTHUCHI) &&
-    ss.getSheetByName(SHEET_NGUONTIEN);
+    ss.getSheetByName(SHEET_NGUONTIEN) &&
+    ss.getSheetByName(SHEET_DOITUONG_THUCHI);
 
   const sourceReady = !maKyHoc || props.getProperty(sourceKey) === '1';
 
@@ -2261,6 +2273,8 @@ function ensureThuChiSheets_(maKyHoc) {
       SHEET_NGUONTIEN,
       getNguonTienHeaders_()
     );
+
+    ensureSheet_(ss, SHEET_DOITUONG_THUCHI, getDoiTuongThuChiHeaders_());
 
     const categoryRows = readObjectsNoCache_(SHEET_DANHMUC_THUCHI);
     const existingCategoryCodes = categoryRows.reduce((map, row) => {
@@ -2453,7 +2467,21 @@ function getQuanLyThuChiData(token, filters) {
 
   const categoryRows = readObjects_(SHEET_DANHMUC_THUCHI);
   const transactionRows = readObjects_(SHEET_SOTHUCHI);
+  const peopleRows = readObjects_(SHEET_DOITUONG_THUCHI);
   const sources = getNguonTienList_(session.maKyHoc);
+
+  const people = peopleRows
+    .filter(row => String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED')
+    .map(row => ({
+      maDoiTuong: String(row.MaDoiTuong || '').trim(),
+      loai: String(row.Loai || 'BOTH').trim().toUpperCase(),
+      tenDoiTuong: String(row.TenDoiTuong || '').trim(),
+      soDienThoai: String(row.SoDienThoai || '').trim(),
+      diaChi: String(row.DiaChi || '').trim(),
+      ghiChu: String(row.GhiChu || '').trim()
+    }))
+    .filter(item => item.maDoiTuong && item.tenDoiTuong)
+    .sort((a, b) => a.tenDoiTuong.localeCompare(b.tenDoiTuong, 'vi'));
 
   const categories = categoryRows
     .filter(row => String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED')
@@ -2680,6 +2708,7 @@ function getQuanLyThuChiData(token, filters) {
       unassignedCount: unassignedTransactions.length
     },
     categories: categories,
+    people: people,
     sources: sources,
     sourceSummaries: sourceSummaries,
     unassignedSummary: hasUnassigned ? unassignedSummary : null,
@@ -2700,6 +2729,55 @@ function getQuanLyThuChiData(token, filters) {
   return json;
 }
 
+function saveDoiTuongThuChi(token, data) {
+  requireSession_(token);
+  data = data || {};
+  const tenDoiTuong = String(data.tenDoiTuong || '').trim();
+  const loai = String(data.loai || 'BOTH').trim().toUpperCase();
+  const soDienThoai = String(data.soDienThoai || '').trim();
+  const diaChi = String(data.diaChi || '').trim();
+  const ghiChu = String(data.ghiChu || '').trim();
+
+  if (!tenDoiTuong) throw new Error('Vui lòng nhập tên người nộp/người nhận.');
+  if (['THU', 'CHI', 'BOTH'].indexOf(loai) === -1) throw new Error('Loại đối tượng không hợp lệ.');
+  if (soDienThoai && !/^0\d{9}$/.test(soDienThoai)) {
+    throw new Error('Số điện thoại phải gồm 10 số và bắt đầu bằng số 0.');
+  }
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('Hệ thống đang cập nhật danh mục người nộp/người nhận.');
+  let saved = null;
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ensureSheet_(ss, SHEET_DOITUONG_THUCHI, getDoiTuongThuChiHeaders_());
+    const rows = readObjectsNoCache_(SHEET_DOITUONG_THUCHI);
+    const duplicate = rows.some(row => {
+      return normalizeText_(row.TenDoiTuong) === normalizeText_(tenDoiTuong) &&
+        String(row.Loai || 'BOTH').trim().toUpperCase() === loai &&
+        String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED';
+    });
+    if (duplicate) throw new Error('Tên này đã có trong danh sách.');
+    const now = new Date();
+    saved = {
+      maDoiTuong: 'DT_' + Utilities.getUuid().slice(0, 10).toUpperCase(),
+      loai: loai,
+      tenDoiTuong: tenDoiTuong,
+      soDienThoai: soDienThoai,
+      diaChi: diaChi,
+      ghiChu: ghiChu
+    };
+    appendObjectsToSheet_(sheet, [{
+      MaDoiTuong: saved.maDoiTuong, Loai: loai, TenDoiTuong: tenDoiTuong,
+      SoDienThoai: soDienThoai, DiaChi: diaChi, GhiChu: ghiChu,
+      TrangThai: 'ACTIVE', CreatedAt: now, UpdatedAt: now
+    }], getDoiTuongThuChiHeaders_());
+  } finally {
+    lock.releaseLock();
+  }
+  bumpDataVersion_();
+  return jsonResponse_({ success: true, item: saved, message: 'Đã thêm người nộp/người nhận.' });
+}
+
 function saveThuChiGiaoDich(token, data) {
   const session = requireSession_(token);
   ensureThuChiSheets_(session.maKyHoc);
@@ -2716,6 +2794,7 @@ function saveThuChiGiaoDich(token, data) {
   const nguoiNopNhan = String(data.nguoiNopNhan || '').trim();
   const soChungTu = String(data.soChungTu || '').trim();
   const ghiChu = String(data.ghiChu || '').trim();
+  const chungTuImage = data.chungTuImage || null;
 
   if (loai !== 'THU' && loai !== 'CHI') {
     throw new Error('Loại giao dịch không hợp lệ.');
@@ -2758,6 +2837,10 @@ function saveThuChiGiaoDich(token, data) {
   if (!source || source.trangThai !== 'ACTIVE') {
     throw new Error('Nguồn tiền không tồn tại hoặc đã ngừng sử dụng.');
   }
+
+  const uploadedAttachment = chungTuImage && chungTuImage.dataUrl
+    ? saveThuChiAttachment_(chungTuImage, loai, ngayText)
+    : null;
 
   const lock = LockService.getScriptLock();
 
@@ -2851,6 +2934,10 @@ function saveThuChiGiaoDich(token, data) {
     currentRow[index.NguoiNopNhan] = nguoiNopNhan;
     currentRow[index.SoPhieu] = soPhieu;
     currentRow[index.SoChungTu] = soChungTu;
+    if (uploadedAttachment) {
+      currentRow[index.ChungTuFileId] = uploadedAttachment.fileId;
+      currentRow[index.ChungTuUrl] = uploadedAttachment.url;
+    }
     currentRow[index.GhiChu] = ghiChu;
     currentRow[index.NguonDuLieu] = 'NHAP_TAY';
     currentRow[index.MaThamChieu] = '';
@@ -2876,10 +2963,43 @@ function saveThuChiGiaoDich(token, data) {
     success: true,
     maGiaoDich: savedId,
     soPhieu: savedSoPhieu,
+    chungTuFileId: uploadedAttachment ? uploadedAttachment.fileId : '',
+    chungTuUrl: uploadedAttachment ? uploadedAttachment.url : '',
     message: maGiaoDich
       ? 'Đã cập nhật ' + (loai === 'CHI' ? 'phiếu chi ' : 'phiếu thu ') + savedSoPhieu + '.'
       : 'Đã tạo ' + (loai === 'CHI' ? 'phiếu chi ' : 'phiếu thu ') + savedSoPhieu + '.'
   });
+}
+
+function saveThuChiAttachment_(imageData, loai, ngayText) {
+  const dataUrl = String(imageData.dataUrl || '');
+  const match = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) throw new Error('Ảnh chứng từ không hợp lệ. Chỉ hỗ trợ JPG, PNG hoặc WEBP.');
+  const bytes = Utilities.base64Decode(match[2]);
+  if (bytes.length > 5 * 1024 * 1024) throw new Error('Ảnh chứng từ sau khi xử lý không được vượt quá 5 MB.');
+
+  const props = PropertiesService.getScriptProperties();
+  let folder = null;
+  const folderId = props.getProperty('THUCHI_ATTACHMENT_FOLDER_ID');
+  if (folderId) {
+    try { folder = DriveApp.getFolderById(folderId); } catch (error) { folder = null; }
+  }
+  if (!folder) {
+    folder = DriveApp.createFolder('ThienAnEduApp_ChungTuThuChi');
+    props.setProperty('THUCHI_ATTACHMENT_FOLDER_ID', folder.getId());
+  }
+
+  const extension = match[1] === 'image/png' ? 'png' : (match[1] === 'image/webp' ? 'webp' : 'jpg');
+  const safeDate = String(ngayText || '').replace(/[^\d]/g, '') || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd');
+  const fileName = String(loai || 'CT') + '_' + safeDate + '_' + Utilities.getUuid().slice(0, 8) + '.' + extension;
+  const blob = Utilities.newBlob(bytes, match[1], fileName);
+  const file = folder.createFile(blob);
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (error) {
+    // Một số Google Workspace không cho phép chia sẻ công khai; chủ sở hữu vẫn xem được file.
+  }
+  return { fileId: file.getId(), url: file.getUrl(), name: fileName };
 }
 
 function saveChuyenNguonTien(token, data) {
@@ -3648,6 +3768,8 @@ function mapThuChiTransaction_(row) {
     nguoiNopNhan: String(row.NguoiNopNhan || '').trim(),
     soPhieu: String(row.SoPhieu || '').trim(),
     soChungTu: String(row.SoChungTu || '').trim(),
+    chungTuFileId: String(row.ChungTuFileId || '').trim(),
+    chungTuUrl: String(row.ChungTuUrl || '').trim(),
     ghiChu: String(row.GhiChu || '').trim(),
     nguonDuLieu: source,
     maThamChieu: String(row.MaThamChieu || '').trim(),
@@ -3681,6 +3803,8 @@ function stripThuChiPrivateFields_(item) {
     nguoiNopNhan: item.nguoiNopNhan,
     soPhieu: item.soPhieu,
     soChungTu: item.soChungTu,
+    chungTuFileId: item.chungTuFileId,
+    chungTuUrl: item.chungTuUrl,
     ghiChu: item.ghiChu,
     nguonDuLieu: item.nguonDuLieu,
     maThamChieu: item.maThamChieu,

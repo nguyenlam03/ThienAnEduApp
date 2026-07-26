@@ -43,6 +43,7 @@
     .finance-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px}.finance-form-grid .full{grid-column:1/-1}
     .finance-modal{max-width:760px;max-height:calc(100vh - 40px);display:flex;flex-direction:column}.finance-modal .modal-body{overflow:auto}
     .read-note{font-size:12px;color:#64748b;margin-top:6px}
+    .input-action-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}.quick-add-button{width:42px;height:42px;border:1px solid #7dd3fc;border-radius:12px;background:#e0f2fe;color:#0369a1;font-size:22px;font-weight:900;cursor:pointer}.attachment-preview{margin-top:8px;padding:10px 12px;border:1px dashed #94a3b8;border-radius:12px;background:#f8fafc;font-size:12px;color:#475569}.attachment-link{color:#0369a1;font-weight:800;text-decoration:none}.attachment-link:hover{text-decoration:underline}
     .empty-mini{padding:24px;text-align:center;color:#64748b}
     @media(max-width:1350px){.finance-filter{grid-template-columns:repeat(4,minmax(0,1fr))}.source-grid,.source-detail-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
     @media(max-width:900px){.finance-actions{flex-wrap:wrap;justify-content:flex-start}.stat-grid{grid-template-columns:1fr 1fr}.source-grid,.source-detail-grid,.report-grid{grid-template-columns:1fr}.finance-filter{grid-template-columns:1fr 1fr}.finance-form-grid{grid-template-columns:1fr}.finance-form-grid .full{grid-column:1}.page-header{align-items:flex-start;flex-direction:column}}
@@ -103,6 +104,7 @@
           <button class="finance-tab" data-tab="transactions" onclick="switchTab('transactions')">📒 Sổ thu chi</button>
           <button class="finance-tab" data-tab="sources" onclick="switchTab('sources')">🏦 Nguồn tiền</button>
           <button class="finance-tab" data-tab="categories" onclick="switchTab('categories')">📁 Danh mục</button>
+          <button class="finance-tab" data-tab="people" onclick="switchTab('people')">👥 Người nộp/nhận</button>
           <button class="finance-tab" data-tab="cashbook" onclick="switchTab('cashbook')">💳 Sổ quỹ</button>
           <button class="finance-tab" data-tab="reports" onclick="switchTab('reports')">📈 Báo cáo</button>
         </div>
@@ -180,6 +182,16 @@
         <section id="tab-categories" class="tab-panel">
           <div class="toolbar-line"><div class="toolbar-left"><span class="pill-badge">📁 Danh mục thu chi</span></div><div class="toolbar-right"><button class="primary-button" onclick="openCategoryModal()">+ Thêm danh mục</button></div></div>
           <div class="report-grid"><div class="finance-card"><div class="finance-card-title" style="color:#15803d">Danh mục thu</div><div id="incomeCategoryList"></div></div><div class="finance-card"><div class="finance-card-title" style="color:#dc2626">Danh mục chi</div><div id="expenseCategoryList"></div></div></div>
+        </section>
+
+        <section id="tab-people" class="tab-panel">
+          <div class="toolbar-line"><div class="toolbar-left"><span class="pill-badge">👥 Danh sách người nộp và người nhận</span></div><div class="toolbar-right"><button class="primary-button" onclick="openQuickPersonModal('BOTH')">+ Thêm người nộp/nhận</button></div></div>
+          <div class="table-wrap">
+            <table class="report-table" style="min-width:900px">
+              <thead><tr><th>STT</th><th>Phân loại</th><th>Họ tên / đơn vị</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Ghi chú</th></tr></thead>
+              <tbody id="peopleTableBody"></tbody>
+            </table>
+          </div>
         </section>
 
         <section id="tab-cashbook" class="tab-panel">
@@ -262,17 +274,26 @@
       <div class="finance-form-grid">
         <div class="field"><label>Số phiếu</label><input id="formTransactionReceiptNo" class="receipt-field" type="text" readonly placeholder="Hệ thống tự tạo khi lưu"></div>
         <div class="field"><label>Ngày lập *</label><input id="formTransactionDate" type="date"></div>
-        <div class="field"><label>Loại phiếu *</label><select id="formTransactionType" onchange="renderTransactionCategories()"><option value="THU">Phiếu thu</option><option value="CHI">Phiếu chi</option></select></div>
+        <div class="field"><label>Loại phiếu *</label><select id="formTransactionType" onchange="handleTransactionTypeChange()"><option value="THU">Phiếu thu</option><option value="CHI">Phiếu chi</option></select></div>
         <div class="field"><label>Nguồn tiền *</label><select id="formTransactionSource" onchange="updateTransactionMethodNote()"></select><div id="transactionMethodNote" class="read-note"></div></div>
         <div class="field"><label>Danh mục *</label><select id="formTransactionCategory"></select></div>
         <div class="field"><label>Số tiền *</label><input id="formTransactionAmount" type="text" inputmode="numeric" oninput="formatMoneyInputById('formTransactionAmount')" placeholder="Nhập số tiền"></div>
-        <div class="field"><label>Người nộp / nhận</label><input id="formTransactionPerson" type="text" placeholder="Họ tên hoặc đơn vị"></div>
+        <div class="field"><label id="formTransactionPersonLabel">Người nộp</label><div class="input-action-row"><select id="formTransactionPerson"><option value="">Chọn người nộp/nhận</option></select><button class="quick-add-button" type="button" title="Thêm nhanh" onclick="openQuickPersonModal()">+</button></div></div>
         <div class="field"><label>Số chứng từ liên quan</label><input id="formTransactionVoucher" type="text" placeholder="Hoá đơn, uỷ nhiệm chi..."></div>
+        <div class="field full"><label>Ảnh hoá đơn / chứng từ</label><input id="formTransactionAttachment" type="file" accept="image/jpeg,image/png,image/webp" onchange="previewTransactionAttachment()"><div id="transactionAttachmentPreview" class="attachment-preview">Chưa chọn ảnh chứng từ.</div></div>
         <div class="field full"><label>Nội dung *</label><input id="formTransactionContent" type="text" placeholder="Nhập nội dung phiếu"></div>
         <div class="field full"><label>Ghi chú</label><textarea id="formTransactionNote" placeholder="Thông tin bổ sung nếu có"></textarea></div>
       </div>
     </div>
     <div class="modal-footer"><button class="cancel-button" onclick="closeModal('transactionModal')">Huỷ</button><button id="btnSaveTransaction" class="save-button" onclick="saveTransaction(false)">Lưu</button><button class="print-button" onclick="saveTransaction(true)">Lưu & in</button></div>
+  </div>
+</div>
+
+<div id="quickPersonModal" class="modal-backdrop">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header"><div id="quickPersonModalTitle" class="modal-title">Thêm người nộp</div><button class="close-button" onclick="closeModal('quickPersonModal')">×</button></div>
+    <div class="modal-body"><div class="finance-form-grid"><div class="field"><label>Phân loại *</label><select id="formQuickPersonType"><option value="THU">Người nộp</option><option value="CHI">Người nhận</option><option value="BOTH">Dùng cho cả hai</option></select></div><div class="field"><label>Họ tên / đơn vị *</label><input id="formQuickPersonName" type="text"></div><div class="field"><label>Số điện thoại</label><input id="formQuickPersonPhone" type="text" placeholder="0912345678"></div><div class="field"><label>Địa chỉ</label><input id="formQuickPersonAddress" type="text"></div><div class="field full"><label>Ghi chú</label><textarea id="formQuickPersonNote"></textarea></div></div></div>
+    <div class="modal-footer"><button class="cancel-button" onclick="closeModal('quickPersonModal')">Huỷ</button><button id="btnSaveQuickPerson" class="save-button" onclick="saveQuickPerson()">Thêm và chọn</button></div>
   </div>
 </div>
 
@@ -319,7 +340,7 @@
 const APP_TOKEN=<?!= JSON.stringify(token) ?>;
 const APP_URL=<?!= JSON.stringify(appUrl) ?>;
 const APP_CACHE_ENABLED=<?!= JSON.stringify(cacheEnabled) ?>;
-let financeData={categories:[],sources:[],sourceSummaries:[],transactions:[],recentTransactions:[],cashbook:[],reports:{categories:[],sources:[]},summary:{},range:{}};
+let financeData={categories:[],people:[],sources:[],sourceSummaries:[],transactions:[],recentTransactions:[],cashbook:[],reports:{categories:[],sources:[]},summary:{},range:{}};
 let activeTab='dashboard';
 let financeSearchTimer=null;
 let financeLoadSequence=0;
@@ -332,7 +353,7 @@ document.addEventListener('DOMContentLoaded',function(){
     clearTimeout(financeSearchTimer);
     financeSearchTimer=setTimeout(()=>loadFinanceData({silent:true}),320);
   });
-  ['transactionModal','transferModal','sourceModal','categoryModal'].forEach(id=>{
+  ['transactionModal','quickPersonModal','transferModal','sourceModal','categoryModal'].forEach(id=>{
     document.getElementById(id).addEventListener('click',e=>{if(e.target.id===id)closeModal(id)});
   });
   document.getElementById('formTransactionSource').addEventListener('change',updateTransactionMethodNote);
@@ -364,7 +385,7 @@ function loadFinanceData(options){
   if(!settings.silent)showBusy('Đang tải dữ liệu thu chi...');
   google.script.run.withSuccessHandler(res=>{if(requestId!==financeLoadSequence){if(!settings.silent)hideBusy();return}financeData=parseServerJson(res)||financeData;if(!settings.silent)hideBusy();renderAll()}).withFailureHandler(e=>{if(requestId!==financeLoadSequence)return;if(!settings.silent)hideBusy();showMessage(getErrorMessage(e),'error')}).getQuanLyThuChiData(APP_TOKEN,filters)
 }
-function renderAll(){renderSourceOptions();renderFilterCategories();renderSummary();renderSourceCards();renderTransactions();renderCashbook();renderCategories();renderReports();renderWarning()}
+function renderAll(){renderSourceOptions();renderFilterCategories();renderSummary();renderSourceCards();renderTransactions();renderCashbook();renderCategories();renderPeople();renderReports();renderWarning()}
 function renderSourceOptions(){
   const current=v('filterSource')||'ALL';fillSourceSelect('filterSource',true,current);fillSourceSelect('formTransactionSource',false,v('formTransactionSource'));fillSourceSelect('formTransferFrom',false,v('formTransferFrom'));fillSourceSelect('formTransferTo',false,v('formTransferTo'))
 }
@@ -391,6 +412,7 @@ function renderSourceCards(){
   document.getElementById('sourceDetailGrid').innerHTML=(financeData.sourceSummaries||[]).map(x=>`<div class="source-detail-card"><div class="source-detail-title">${esc(x.tenNguonTien)}</div><div class="source-detail-balance">${money(x.closingBalance)}</div><div class="source-detail-row"><span>Số dư ban đầu</span><strong>${money(x.soDuBanDau)}</strong></div><div class="source-detail-row"><span>Đầu kỳ lọc</span><strong>${money(x.openingBalance)}</strong></div><div class="source-detail-row"><span>Thu hoạt động</span><strong class="money-income">${money(x.totalThu)}</strong></div><div class="source-detail-row"><span>Chi hoạt động</span><strong class="money-expense">${money(x.totalChi)}</strong></div><div class="source-detail-row"><span>Chuyển vào / ra</span><strong>${money(x.chuyenVao)} / ${money(x.chuyenRa)}</strong></div><div style="margin-top:13px;display:flex;gap:8px"><button class="mini-button edit" onclick="openSourceModal('${attr(x.maNguonTien)}')">Số dư ban đầu</button><button class="mini-button" onclick="filterBySource('${attr(x.maNguonTien)}')">Xem chi tiết</button></div></div>`).join('')
 }
 function filterBySource(code){document.getElementById('filterSource').value=code;loadFinanceData()}
+function attachmentCell(item){const parts=[];if(item.soChungTu)parts.push(`<div>${esc(item.soChungTu)}</div>`);if(item.chungTuUrl)parts.push(`<a class="attachment-link" href="${attr(item.chungTuUrl)}" target="_blank" rel="noopener">🖼 Xem ảnh</a>`);return parts.join('')||''}
 function renderTransactions(){
   renderTransactionRows('recentTransactionBody',(financeData.recentTransactions||[]),false);
   renderTransactionRows('transactionTableBody',(financeData.transactions||[]),true);
@@ -416,7 +438,7 @@ function renderTransactionRows(id,list,full){
       ?`<button class="mini-button delete" onclick="cancelTransfer('${attr(x.maNhomChuyen)}')">Huỷ chuyển</button>`
       :manualAction;
     if(!full)return `<tr><td data-column="date">${esc(x.ngayDisplay)}</td><td data-column="receiptNo"><strong>${esc(x.soPhieu||'')}</strong></td><td data-column="type">${typePill(x.loai)}</td><td data-column="source">${sourcePill(x.tenNguonTien)}</td><td data-column="category">${esc(x.tenDanhMuc)}</td><td data-column="content">${esc(x.noiDung)}</td><td data-column="income" class="money-income">${thu}</td><td data-column="expense" class="money-expense">${chi}</td><td data-column="status">${statePill(x.trangThai)}</td></tr>`;
-    return `<tr><td data-column="stt">${i+1}</td><td data-column="date">${esc(x.ngayDisplay)}</td><td data-column="receiptNo"><strong>${esc(x.soPhieu||'')}</strong></td><td data-column="type">${typePill(x.loai)}</td><td data-column="source">${sourcePill(x.tenNguonTien)}</td><td data-column="category">${esc(x.tenDanhMuc)}</td><td data-column="content">${esc(x.noiDung)}</td><td data-column="person">${esc(x.nguoiNopNhan)}</td><td data-column="reference">${esc(x.soChungTu)}</td><td data-column="income" class="money-income">${thu}</td><td data-column="expense" class="money-expense">${chi}</td><td data-column="dataSource">${esc(sourceLabel(x.nguonDuLieu))}</td><td data-column="status">${statePill(x.trangThai)}</td><td data-column="actions"><div class="action-group">${action}</div></td></tr>`
+    return `<tr><td data-column="stt">${i+1}</td><td data-column="date">${esc(x.ngayDisplay)}</td><td data-column="receiptNo"><strong>${esc(x.soPhieu||'')}</strong></td><td data-column="type">${typePill(x.loai)}</td><td data-column="source">${sourcePill(x.tenNguonTien)}</td><td data-column="category">${esc(x.tenDanhMuc)}</td><td data-column="content">${esc(x.noiDung)}</td><td data-column="person">${esc(x.nguoiNopNhan)}</td><td data-column="reference">${attachmentCell(x)}</td><td data-column="income" class="money-income">${thu}</td><td data-column="expense" class="money-expense">${chi}</td><td data-column="dataSource">${esc(sourceLabel(x.nguonDuLieu))}</td><td data-column="status">${statePill(x.trangThai)}</td><td data-column="actions"><div class="action-group">${action}</div></td></tr>`
   }).join('');
   GridColumnConfig.apply(gridId);
 }
@@ -431,6 +453,12 @@ function renderCashbook(){
 }
 
 function renderCategories(){renderCategoryList('incomeCategoryList','THU');renderCategoryList('expenseCategoryList','CHI')}
+function renderPeople(){
+  const list=financeData.people||[],labels={THU:'Người nộp',CHI:'Người nhận',BOTH:'Cả hai'};
+  document.getElementById('peopleTableBody').innerHTML=list.length
+    ?list.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(labels[x.loai]||x.loai)}</td><td><strong>${esc(x.tenDoiTuong)}</strong></td><td>${esc(x.soDienThoai||'')}</td><td>${esc(x.diaChi||'')}</td><td>${esc(x.ghiChu||'')}</td></tr>`).join('')
+    :'<tr><td colspan="6"><div class="empty-box">Chưa có người nộp hoặc người nhận.</div></td></tr>';
+}
 function renderCategoryList(id,type){
   const list=(financeData.categories||[]).filter(x=>x.loai===type);
   document.getElementById(id).innerHTML=list.length?list.map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid #f1f5f9"><div><strong>${esc(x.tenDanhMuc)}</strong><div class="stat-note">${x.trangThai==='ACTIVE'?'Đang sử dụng':'Đã ngừng'}</div></div><div><button class="mini-button edit" onclick="editCategory('${attr(x.maDanhMuc)}')">Sửa</button> <button class="mini-button" onclick="toggleCategory('${attr(x.maDanhMuc)}',${x.trangThai!=='ACTIVE'})">${x.trangThai==='ACTIVE'?'Ngừng':'Bật'}</button></div></div>`).join(''):'<div class="empty-mini">Chưa có danh mục.</div>'
@@ -450,6 +478,34 @@ function renderReports(){
 
 function renderWarning(){const n=(financeData.summary&&financeData.summary.unassignedCount)||0,w=document.getElementById('unassignedWarning');if(n>0){w.className='warning-box show';w.textContent='Có '+n+' giao dịch cũ chưa xác định nguồn tiền. Hãy sửa giao dịch nhập tay hoặc cập nhật nguồn nhận tại trang Quản lý thu phí.'}else{w.className='warning-box';w.textContent=''}}
 function switchTab(tab){activeTab=tab;document.querySelectorAll('.finance-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active',p.id==='tab-'+tab))}
+function renderTransactionPeople(selected){
+  const type=v('formTransactionType'),select=document.getElementById('formTransactionPerson');
+  select.innerHTML='<option value="">Chọn '+(type==='CHI'?'người nhận':'người nộp')+'</option>';
+  (financeData.people||[]).filter(x=>x.loai==='BOTH'||x.loai===type).forEach(x=>select.appendChild(new Option(x.tenDoiTuong,x.tenDoiTuong)));
+  if(selected&&!Array.from(select.options).some(o=>o.value===selected))select.appendChild(new Option(selected,selected));
+  if(selected)select.value=selected;
+  t('formTransactionPersonLabel',type==='CHI'?'Người nhận':'Người nộp');
+}
+function handleTransactionTypeChange(){renderTransactionCategories();renderTransactionPeople('')}
+function openQuickPersonModal(typeOverride){
+  const type=typeOverride||v('formTransactionType');
+  document.getElementById('formQuickPersonType').value=type;
+  document.getElementById('formQuickPersonName').value='';document.getElementById('formQuickPersonPhone').value='';document.getElementById('formQuickPersonAddress').value='';document.getElementById('formQuickPersonNote').value='';
+  t('quickPersonModalTitle',type==='CHI'?'Thêm nhanh người nhận':'Thêm nhanh người nộp');openModal('quickPersonModal');
+}
+function saveQuickPerson(){
+  const btn=document.getElementById('btnSaveQuickPerson'),data={loai:v('formQuickPersonType'),tenDoiTuong:v('formQuickPersonName').trim(),soDienThoai:v('formQuickPersonPhone').trim(),diaChi:v('formQuickPersonAddress').trim(),ghiChu:v('formQuickPersonNote').trim()};
+  if(!data.tenDoiTuong){showNotification('Vui lòng nhập họ tên hoặc đơn vị.','warning');return}
+  btn.disabled=true;showBusy('Đang thêm người nộp/người nhận...');
+  google.script.run.withSuccessHandler(r=>{btn.disabled=false;hideBusy();const result=parseServerJson(r)||{},item=result.item;if(item){financeData.people=financeData.people||[];financeData.people.push(item);renderPeople();if(document.getElementById('transactionModal').classList.contains('show')&&(item.loai==='BOTH'||item.loai===v('formTransactionType')))renderTransactionPeople(item.tenDoiTuong)}closeModal('quickPersonModal');showMessage(result.message||'Đã thêm.','success')}).withFailureHandler(e=>{btn.disabled=false;hideBusy();showNotification(getErrorMessage(e),'error')}).saveDoiTuongThuChi(APP_TOKEN,data)
+}
+function resetTransactionAttachment(url){document.getElementById('formTransactionAttachment').value='';document.getElementById('transactionAttachmentPreview').innerHTML=url?`Ảnh hiện tại: <a class="attachment-link" href="${attr(url)}" target="_blank" rel="noopener">Xem ảnh chứng từ</a>`:'Chưa chọn ảnh chứng từ.'}
+function previewTransactionAttachment(){const file=document.getElementById('formTransactionAttachment').files[0];document.getElementById('transactionAttachmentPreview').textContent=file?'Đã chọn: '+file.name+' · ảnh sẽ được tối ưu khi lưu.':'Chưa chọn ảnh chứng từ.'}
+function prepareVoucherImage(){
+  const file=document.getElementById('formTransactionAttachment').files[0];if(!file)return Promise.resolve(null);
+  if(!/^image\/(jpeg|png|webp)$/.test(file.type))return Promise.reject(new Error('Chỉ hỗ trợ ảnh JPG, PNG hoặc WEBP.'));
+  return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=()=>reject(new Error('Không đọc được ảnh chứng từ.'));reader.onload=()=>{const image=new Image();image.onerror=()=>reject(new Error('Ảnh chứng từ bị lỗi.'));image.onload=()=>{const max=1600,scale=Math.min(1,max/Math.max(image.width,image.height)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);resolve({name:file.name,dataUrl:canvas.toDataURL('image/jpeg',.82)})};image.src=reader.result};reader.readAsDataURL(file)});
+}
 function openTransactionModal(type){
   const isExpense=type==='CHI';
   document.getElementById('formTransactionId').value='';
@@ -459,9 +515,10 @@ function openTransactionModal(type){
   document.getElementById('formTransactionDate').value=dateToInput(new Date());
   document.getElementById('formTransactionAmount').value='';
   document.getElementById('formTransactionContent').value='';
-  document.getElementById('formTransactionPerson').value='';
+  renderTransactionPeople('');
   document.getElementById('formTransactionVoucher').value='';
   document.getElementById('formTransactionNote').value='';
+  resetTransactionAttachment('');
   fillSourceSelect('formTransactionSource',false,'');
   renderTransactionCategories();
   updateTransactionMethodNote();
@@ -480,9 +537,10 @@ function editTransaction(id){
   renderTransactionCategories(x.maDanhMuc);
   document.getElementById('formTransactionAmount').value=numberText(x.soTien);
   document.getElementById('formTransactionContent').value=x.noiDung||'';
-  document.getElementById('formTransactionPerson').value=x.nguoiNopNhan||'';
+  renderTransactionPeople(x.nguoiNopNhan||'');
   document.getElementById('formTransactionVoucher').value=x.soChungTu||'';
   document.getElementById('formTransactionNote').value=x.ghiChu||'';
+  resetTransactionAttachment(x.chungTuUrl||'');
   t('transactionModalTitle',x.loai==='CHI'?'Cập nhật phiếu chi':'Cập nhật phiếu thu');
   updateTransactionMethodNote();
   openModal('transactionModal')
@@ -495,18 +553,22 @@ function saveTransaction(printAfter){
   const receiptDraft={loai:data.loai,ngayGiaoDich:data.ngayGiaoDich,ngayDisplay:formatDateDisplayClient(data.ngayGiaoDich),tenNguonTien:getSourceNameByCode(data.maNguonTien),tenDanhMuc:getCategoryNameByCode(data.maDanhMuc),noiDung:data.noiDung,nguoiNopNhan:data.nguoiNopNhan,soChungTu:data.soChungTu,ghiChu:data.ghiChu,soTien:Number(data.soTien),trangThai:'HOAT_DONG'};
   const pendingPrintWindow=printAfter?window.open('','_blank','width=850,height=900'):null;
   if(printAfter&&!pendingPrintWindow){showNotification('Trình duyệt đang chặn cửa sổ in. Phiếu vẫn sẽ được lưu.','warning');}
-  showBusy('Đang lưu phiếu...');
-  google.script.run.withSuccessHandler(r=>{
-    hideBusy();
-    const result=parseServerJson(r)||{};
-    receiptDraft.maGiaoDich=result.maGiaoDich||data.maGiaoDich;
-    receiptDraft.soPhieu=result.soPhieu||v('formTransactionReceiptNo');
-    document.getElementById('formTransactionReceiptNo').value=receiptDraft.soPhieu||'';
-    closeModal('transactionModal');
-    showMessage(result.message||'Đã lưu phiếu.','success');
-    if(printAfter&&pendingPrintWindow)printReceiptDocument(receiptDraft,pendingPrintWindow);
-    loadFinanceData();
-  }).withFailureHandler(e=>{hideBusy();if(pendingPrintWindow)pendingPrintWindow.close();showNotification(getErrorMessage(e),'error')}).saveThuChiGiaoDich(APP_TOKEN,data)
+  showBusy('Đang xử lý ảnh chứng từ và lưu phiếu...');
+  prepareVoucherImage().then(image=>{
+    data.chungTuImage=image;
+    google.script.run.withSuccessHandler(r=>{
+      hideBusy();
+      const result=parseServerJson(r)||{};
+      receiptDraft.maGiaoDich=result.maGiaoDich||data.maGiaoDich;
+      receiptDraft.soPhieu=result.soPhieu||v('formTransactionReceiptNo');
+      receiptDraft.chungTuUrl=result.chungTuUrl||'';
+      document.getElementById('formTransactionReceiptNo').value=receiptDraft.soPhieu||'';
+      closeModal('transactionModal');
+      showMessage(result.message||'Đã lưu phiếu.','success');
+      if(printAfter&&pendingPrintWindow)printReceiptDocument(receiptDraft,pendingPrintWindow);
+      loadFinanceData();
+    }).withFailureHandler(e=>{hideBusy();if(pendingPrintWindow)pendingPrintWindow.close();showNotification(getErrorMessage(e),'error')}).saveThuChiGiaoDich(APP_TOKEN,data)
+  }).catch(e=>{hideBusy();if(pendingPrintWindow)pendingPrintWindow.close();showNotification(getErrorMessage(e),'error')})
 }
 
 function cancelTransaction(id){if(!confirm('Huỷ giao dịch này? Dữ liệu vẫn được giữ để đối chiếu.'))return;showBusy('Đang huỷ giao dịch...');google.script.run.withSuccessHandler(()=>{hideBusy();loadFinanceData()}).withFailureHandler(e=>{hideBusy();showNotification(getErrorMessage(e),'error')}).cancelThuChiGiaoDich(APP_TOKEN,id)}
