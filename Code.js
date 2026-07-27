@@ -1354,6 +1354,32 @@ function getQuanLyThuPhiData(token, yearMonth) {
   return json;
 }
 
+function getThuPhiQrImage(token, amount, addInfo) {
+  requireSession_(token);
+  const paymentAmount = Math.floor(number_(amount));
+  if (paymentAmount <= 0 || paymentAmount > 9999999999999) {
+    throw new Error('Số tiền tạo mã QR không hợp lệ.');
+  }
+
+  const paymentInfo = String(addInfo || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 50);
+  const query = [
+    'amount=' + encodeURIComponent(paymentAmount),
+    'addInfo=' + encodeURIComponent(paymentInfo || 'DONG HOC PHI'),
+    'accountName=' + encodeURIComponent('HO KINH DOANH TRAN NGUYEN LAM')
+  ].join('&');
+  const url = 'https://img.vietqr.io/image/BIDV-8838077136-qr_only.png?' + query;
+  const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
+  if (response.getResponseCode() < 200 || response.getResponseCode() >= 300) {
+    throw new Error('Không thể tạo mã QR thanh toán. Vui lòng thử lại.');
+  }
+  const blob = response.getBlob();
+  return jsonResponse_({
+    dataUrl: 'data:' + (blob.getContentType() || 'image/png') + ';base64,' + Utilities.base64Encode(blob.getBytes())
+  });
+}
+
 /**
  * Ghi nhận hoặc chỉnh sửa thông tin thu phí của một học sinh.
  * Chỉ cập nhật đúng một dòng trong sheet tháng; không ghi lại toàn bộ sheet.
