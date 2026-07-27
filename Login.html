@@ -306,6 +306,7 @@
       font-weight: 500;
       color: #94a3b8;
     }
+    .logo-icon img{width:100%;height:100%;object-fit:contain;border-radius:inherit;display:block}
 
     .theme-dock {
       position: fixed;
@@ -436,10 +437,10 @@
       <div class="brand-content">
         <div>
           <div class="logo-box">
-            <div class="logo-icon">TA</div>
+            <div class="logo-icon"><? if (brandLogoUrl) { ?><img src="<?= brandLogoUrl ?>" alt="Logo"><? } else { ?>TA<? } ?></div>
             <div class="logo-text">
-              Thiên Ân Education<br>
-              Khơi nguồn tri thức
+              <?= brandName ?><br>
+              <?= brandTagline ?>
             </div>
           </div>
 
@@ -470,7 +471,7 @@
         </div>
 
         <div class="footer-brand">
-          Thiên Ân Education – Khơi nguồn tri thức
+          <?= brandName ?> – <?= brandTagline ?>
         </div>
       </div>
     </section>

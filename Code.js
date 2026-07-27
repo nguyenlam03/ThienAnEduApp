@@ -12,6 +12,9 @@ const SHEET_NGUONTIEN = 'NguonTien';
 const SHEET_DOITUONG_THUCHI = 'DoiTuongThuChi';
 const SHEET_CAUHINH = 'CauHinh';
 const CONFIG_NOTIFICATION_DURATION = 'NOTIFICATION_DURATION_SECONDS';
+const CONFIG_BRAND_NAME = 'APP_BRAND_NAME';
+const CONFIG_BRAND_TAGLINE = 'APP_BRAND_TAGLINE';
+const CONFIG_BRAND_LOGO_URL = 'APP_BRAND_LOGO_URL';
 
 const CACHE_LOGIN_PREFIX = 'LOGIN_TOKEN_';
 const CACHE_PREFIX = 'TA_CACHE_';
@@ -34,6 +37,7 @@ function include(filename) {
 function doGet(e) {
   const page = e && e.parameter && e.parameter.page ? e.parameter.page : 'Login';
   const notificationDurationMs = getNotificationDurationMs_();
+  const brand = getAppBrandConfig_();
 
   const protectedPages = [
     'Index',
@@ -49,6 +53,7 @@ function doGet(e) {
     if (!session.valid) {
       const expiredLoginTemplate = HtmlService.createTemplateFromFile('Login');
       expiredLoginTemplate.notificationDurationMs = notificationDurationMs;
+      applyBrandToTemplate_(expiredLoginTemplate, brand);
       return expiredLoginTemplate.evaluate()
         .setTitle('Đăng nhập')
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -64,14 +69,16 @@ function doGet(e) {
     template.kyHocName = session.tenKyHoc;
     template.cacheEnabled = isDataCacheEnabled_();
     template.notificationDurationMs = notificationDurationMs;
+    applyBrandToTemplate_(template, brand);
 
     return template.evaluate()
-      .setTitle('Thiên Ân Education')
+      .setTitle(brand.name)
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
 
   const loginTemplate = HtmlService.createTemplateFromFile('Login');
   loginTemplate.notificationDurationMs = notificationDurationMs;
+  applyBrandToTemplate_(loginTemplate, brand);
 
   return loginTemplate.evaluate()
     .setTitle('Đăng nhập')
@@ -197,6 +204,12 @@ function formatHeader_(sheet) {
   sheet.setFrozenRows(1);
 }
 
+function applyBrandToTemplate_(template, brand) {
+  template.brandName = brand.name;
+  template.brandTagline = brand.tagline;
+  template.brandLogoUrl = brand.logoUrl;
+}
+
 function ensureAppConfigSheet_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(SHEET_CAUHINH);
@@ -229,7 +242,38 @@ function ensureAppConfigSheet_() {
     ]]);
   }
 
+  const configRows = [
+    [CONFIG_BRAND_NAME, 'Thiên Ân Education', 'Tên cơ sở dạy học hiển thị trong toàn bộ phần mềm.'],
+    [CONFIG_BRAND_TAGLINE, 'Khơi nguồn tri thức', 'Khẩu hiệu của cơ sở dạy học.'],
+    [CONFIG_BRAND_LOGO_URL, '', 'URL ảnh logo PNG/JPG/SVG dùng trong toàn bộ phần mềm.']
+  ];
+  const existingKeys = values.slice(1).map(row => String(row[keyIndex] || '').trim().toUpperCase());
+  configRows.forEach(row => {
+    if (existingKeys.indexOf(row[0]) === -1) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, 1, headers.length).setValues([row]);
+    }
+  });
+
   return sheet;
+}
+
+function getAppBrandConfig_() {
+  const sheet = ensureAppConfigSheet_();
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0].map(value => String(value || '').trim());
+  const keyIndex = headers.indexOf('MaCauHinh');
+  const valueIndex = headers.indexOf('GiaTri');
+  const map = {};
+  if (keyIndex !== -1 && valueIndex !== -1) {
+    values.slice(1).forEach(row => {
+      map[String(row[keyIndex] || '').trim().toUpperCase()] = String(row[valueIndex] || '').trim();
+    });
+  }
+  return {
+    name: map[CONFIG_BRAND_NAME] || 'Thiên Ân Education',
+    tagline: map[CONFIG_BRAND_TAGLINE] || 'Khơi nguồn tri thức',
+    logoUrl: map[CONFIG_BRAND_LOGO_URL] || ''
+  };
 }
 
 function getNotificationDurationMs_() {
@@ -1376,8 +1420,33 @@ function getThuPhiQrImage(token, amount, addInfo) {
   }
   const blob = response.getBlob();
   return jsonResponse_({
-    dataUrl: 'data:' + (blob.getContentType() || 'image/png') + ';base64,' + Utilities.base64Encode(blob.getBytes())
+    dataUrl: 'data:' + (blob.getContentType() || 'image/png') + ';base64,' + Utilities.base64Encode(blob.getBytes()),
+    logoDataUrl: getAppBrandLogoDataUrl_()
   });
+}
+
+function getAppBrandLogoImage(token) {
+  requireSession_(token);
+  return jsonResponse_({ dataUrl: getAppBrandLogoDataUrl_() });
+}
+
+function getAppBrandLogoDataUrl_() {
+  const logoUrl = getAppBrandConfig_().logoUrl;
+  if (!logoUrl) return '';
+  let fetchUrl = logoUrl;
+  const driveMatch = logoUrl.match(/(?:\/d\/|[?&]id=)([-\w]{20,})/);
+  if (driveMatch) fetchUrl = 'https://drive.google.com/uc?export=download&id=' + driveMatch[1];
+  try {
+    const response = UrlFetchApp.fetch(fetchUrl, { muteHttpExceptions: true, followRedirects: true });
+    if (response.getResponseCode() < 200 || response.getResponseCode() >= 300) return '';
+    const blob = response.getBlob();
+    if (blob.getBytes().length > 2 * 1024 * 1024) return '';
+    const contentType = blob.getContentType() || 'image/png';
+    if (contentType.indexOf('image/') !== 0) return '';
+    return 'data:' + contentType + ';base64,' + Utilities.base64Encode(blob.getBytes());
+  } catch (error) {
+    return '';
+  }
 }
 
 /**

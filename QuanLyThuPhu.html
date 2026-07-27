@@ -270,8 +270,8 @@
   <div class="app">
     <header class="topbar">
       <div class="brand">
-        <div class="brand-logo">TA</div>
-        <div class="brand-title">Thiên Ân Education - Khơi nguồn tri thức</div>
+        <div class="brand-logo"><? if (brandLogoUrl) { ?><img src="<?= brandLogoUrl ?>" alt="Logo"><? } else { ?>TA<? } ?></div>
+        <div class="brand-title"><?= brandName ?> - <?= brandTagline ?></div>
       </div>
 
       <div class="session-box">
@@ -544,7 +544,7 @@
       <div class="modal-header"><div id="feeCardModalTitle" class="modal-title">Thông báo học phí</div><button class="close-button" onclick="closeFeeCardModal()">×</button></div>
       <div class="fee-card-preview-wrap"><img id="feeCardPreview" class="fee-card-preview" alt="Ảnh thông báo học phí"></div>
       <div class="fee-share-message"><label for="feeShareMessage">Nội dung nhắn thêm cho phụ huynh</label><textarea id="feeShareMessage" placeholder="Nhập lời nhắn gửi kèm ảnh..."></textarea></div>
-      <div class="modal-footer"><button class="cancel-button" onclick="closeFeeCardModal()">Đóng</button><button class="secondary-button" onclick="downloadFeeCard()">Tải ảnh PNG</button><button id="btnShareFeeCard" class="save-button" onclick="shareFeeCard()">Chia sẻ qua Zalo</button><button id="btnPrintFeeCard" class="print-button" onclick="printFeeCard()">In</button></div>
+      <div class="modal-footer"><button class="cancel-button" onclick="closeFeeCardModal()">Đóng</button><button class="secondary-button" onclick="downloadFeeCard()">Tải ảnh PNG</button><button class="secondary-button" onclick="copyFeeCard()">Sao chép ảnh + nội dung</button><button id="btnShareFeeCard" class="save-button" onclick="shareFeeCard()">Chia sẻ qua Zalo</button><button id="btnPrintFeeCard" class="print-button" onclick="printFeeCard()">In</button></div>
     </div>
   </div>
 
@@ -557,6 +557,8 @@
     const APP_TOKEN = <?!= JSON.stringify(token) ?>;
     const APP_URL = <?!= JSON.stringify(appUrl) ?>;
     const APP_CACHE_ENABLED = <?!= JSON.stringify(cacheEnabled) ?>;
+    const APP_BRAND_NAME = <?!= JSON.stringify(brandName) ?>;
+    const APP_BRAND_TAGLINE = <?!= JSON.stringify(brandTagline) ?>;
 
     let feeStudents = [];
     let currentMonthText = '';
@@ -1327,7 +1329,13 @@
         showNotification('Học sinh chưa có biên lai hợp lệ để in.', 'warning');
         return;
       }
-      createTuitionCardPreview(item, true, '');
+      showBusy('Đang tạo ảnh biên lai...');
+      google.script.run.withSuccessHandler(function (res) {
+        const result = parseServerJson(res) || {};
+        createTuitionCardPreview(item, true, '', result.dataUrl || '');
+      }).withFailureHandler(function () {
+        createTuitionCardPreview(item, true, '', '');
+      }).getAppBrandLogoImage(APP_TOKEN);
     }
 
     function generateTuitionNotice(maHocSinh) {
@@ -1342,14 +1350,14 @@
       showBusy('Đang tạo mã QR đúng số tiền và ảnh thông báo...');
       google.script.run.withSuccessHandler(function (res) {
         const result = parseServerJson(res) || {};
-        createTuitionCardPreview(item, false, result.dataUrl || '');
+        createTuitionCardPreview(item, false, result.dataUrl || '', result.logoDataUrl || '');
       }).withFailureHandler(function (error) {
         hideBusy();
         showNotification(getErrorMessage(error), 'error');
       }).getThuPhiQrImage(APP_TOKEN, amount, transferInfo);
     }
 
-    function createTuitionCardPreview(item, paid, qrDataUrl) {
+    function createTuitionCardPreview(item, paid, qrDataUrl, logoDataUrl) {
       const canvas = document.createElement('canvas');
       canvas.width = 760;
       canvas.height = 1180;
@@ -1372,11 +1380,10 @@
       headerGradient.addColorStop(0, primary); headerGradient.addColorStop(1, paid ? '#00b874' : accent);
       ctx.fillStyle = headerGradient; roundRect(ctx, 8, 8, 744, 330, 34); ctx.fill();
       ctx.save(); ctx.globalAlpha = .92; ctx.fillStyle = decoration; ctx.beginPath(); ctx.arc(688, 52, 116, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; setCardFont(ctx, 750, 15); ctx.fillText(paid ? 'ĐÃ THU' : (isPrimary ? 'CẤP 1' : 'CẤP 2'), 680, 78);
       ctx.fillStyle = paid ? '#f8c93a' : '#fff'; roundRect(ctx, 58, 48, 82, 82, 22); ctx.fill();
       ctx.fillStyle = paid ? '#006746' : primary; setCardFont(ctx, 800, 29); ctx.textAlign = 'center'; ctx.fillText('TA', 99, 101);
-      ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; setCardFont(ctx, 750, 26); ctx.fillText('THIÊN ÂN EDUCATION', 162, 80);
-      setCardFont(ctx, 500, 18); ctx.fillText('Khơi nguồn tri thức', 162, 109);
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; setCardFont(ctx, 750, 26); ctx.fillText(String(APP_BRAND_NAME || 'Thiên Ân Education').toUpperCase(), 162, 80);
+      setCardFont(ctx, 500, 18); ctx.fillText(APP_BRAND_TAGLINE || 'Khơi nguồn tri thức', 162, 109);
       ctx.textAlign = 'center'; setCardFont(ctx, 800, 39); ctx.fillText(title, 380, 210);
       setCardFont(ctx, 650, 17); ctx.fillText(paid ? ('Số ' + (item.soPhieu || '—') + '  •  Tháng ' + month) : ('Tháng ' + month), 380, 248);
       setCardFont(ctx, 500, 16); ctx.fillText(paid ? 'Xác nhận đã ghi nhận thanh toán' : 'Kính gửi Quý phụ huynh học sinh', 380, 282);
@@ -1392,21 +1399,30 @@
       ctx.fillStyle = '#475569'; setCardFont(ctx, 400, 17, true);
       drawWrappedText(ctx, '(' + numberToVietnameseWords(amount) + ')', 380, 711, 650, 24, 'center');
 
-      const finish = function () {
+      const finalize = function () {
         ctx.fillStyle = '#475569'; setCardFont(ctx, 400, 17, true); ctx.textAlign = 'center';
         ctx.fillText(paid ? 'Chân thành cảm ơn Quý phụ huynh!' : 'Chân thành cảm ơn Quý phụ huynh!', 380, 1110);
-        ctx.fillStyle = primary; setCardFont(ctx, 700, 14); ctx.fillText('THIÊN ÂN EDUCATION  ·  KHƠI NGUỒN TRI THỨC', 380, 1144);
+        ctx.fillStyle = primary; setCardFont(ctx, 700, 14); ctx.fillText(String(APP_BRAND_NAME || '').toUpperCase() + '  ·  ' + String(APP_BRAND_TAGLINE || '').toUpperCase(), 380, 1144);
+        ctx.strokeStyle = primary; ctx.lineWidth = 5; roundRect(ctx, 10, 10, 740, 1160, 32); ctx.stroke();
         currentFeeCardDataUrl = canvas.toDataURL('image/png');
         currentFeeCardFileName = filePrefix + '-' + safeFileName(item.hoTen || item.maHocSinh) + '-' + month.replace('/', '-') + '.png';
         document.getElementById('feeCardPreview').src = currentFeeCardDataUrl;
         document.getElementById('feeCardModalTitle').textContent = paid ? 'Biên lai học phí' : 'Thông báo học phí';
         document.getElementById('feeShareMessage').value = paid
-          ? 'Thiên Ân Education gửi Quý phụ huynh biên lai học phí tháng ' + month + ' của em ' + (item.hoTen || '') + '.'
-          : 'Thiên Ân Education kính gửi Quý phụ huynh thông báo học phí tháng ' + month + ' của em ' + (item.hoTen || '') + '. Quý phụ huynh vui lòng xem thông tin trong ảnh đính kèm.';
+          ? APP_BRAND_NAME + ' gửi Quý phụ huynh biên lai học phí tháng ' + month + ' của em ' + (item.hoTen || '') + '.'
+          : APP_BRAND_NAME + ' kính gửi Quý phụ huynh thông báo học phí tháng ' + month + ' của em ' + (item.hoTen || '') + '. Quý phụ huynh vui lòng xem thông tin trong ảnh đính kèm.';
         document.getElementById('btnPrintFeeCard').style.display = paid ? '' : 'none';
         document.getElementById('btnShareFeeCard').style.display = navigator.share ? '' : 'none';
         document.getElementById('feeCardModal').classList.add('show');
         hideBusy();
+      };
+      const finish = function () {
+        if (!logoDataUrl) { finalize(); return; }
+        loadCanvasImage(logoDataUrl).then(function (logo) {
+          ctx.fillStyle = '#fff'; roundRect(ctx, 58, 48, 82, 82, 22); ctx.fill();
+          drawImageContain(ctx, logo, 66, 56, 66, 66);
+          finalize();
+        }).catch(finalize);
       };
 
       if (paid) {
@@ -1439,18 +1455,21 @@
     function drawCardRow(ctx, label, value, y, color) { ctx.textAlign = 'left'; ctx.fillStyle = '#64748b'; setCardFont(ctx, 500, 17); ctx.fillText(label, 70, y); ctx.fillStyle = color; setCardFont(ctx, 650, 17); ctx.fillText(String(value).slice(0, 52), 250, y); }
     function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight, align) { const words=String(text).split(' '),lines=[];let line='';words.forEach(function(word){const test=line?line+' '+word:word;if(ctx.measureText(test).width>maxWidth&&line){lines.push(line);line=word}else line=test});if(line)lines.push(line);ctx.textAlign=align||'left';lines.slice(0,2).forEach(function(item,index){ctx.fillText(item,x,y+index*lineHeight)}); }
     function loadCanvasImage(src) { return new Promise(function(resolve,reject){const image=new Image();image.onload=function(){resolve(image)};image.onerror=reject;image.src=src;}); }
+    function drawImageContain(ctx,image,x,y,width,height){const scale=Math.min(width/image.width,height/image.height),w=image.width*scale,h=image.height*scale;ctx.drawImage(image,x+(width-w)/2,y+(height-h)/2,w,h);}
     function safeFileName(value) { return normalizeText(value).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'hoc-sinh'; }
     function closeFeeCardModal() { document.getElementById('feeCardModal').classList.remove('show'); }
     function downloadFeeCard() { if(!currentFeeCardDataUrl)return;const link=document.createElement('a');link.href=currentFeeCardDataUrl;link.download=currentFeeCardFileName;document.body.appendChild(link);link.click();link.remove(); }
     function feeCardBlob() { const parts=currentFeeCardDataUrl.split(','),bytes=atob(parts[1]),array=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)array[i]=bytes.charCodeAt(i);return new Blob([array],{type:'image/png'}); }
-    function shareFeeCard() { if(!currentFeeCardDataUrl)return;const message=document.getElementById('feeShareMessage').value.trim()||'Thông tin học phí từ Thiên Ân Education.';const file=new File([feeCardBlob()],currentFeeCardFileName,{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({title:'Thiên Ân Education',text:message,files:[file]}).catch(function(){});}else{if(navigator.clipboard)navigator.clipboard.writeText(message).catch(function(){});downloadFeeCard();window.open('https://zalo.me/','_blank');showNotification('Ảnh đã được tải và lời nhắn đã được sao chép. Hãy chọn phụ huynh trên Zalo để gửi.','info');} }
+    function copyFeeCard(){if(!currentFeeCardDataUrl)return;const message=document.getElementById('feeShareMessage').value.trim();if(navigator.clipboard&&window.ClipboardItem){const item=new ClipboardItem({'image/png':feeCardBlob(),'text/plain':new Blob([message],{type:'text/plain'})});navigator.clipboard.write([item]).then(function(){showNotification('Đã sao chép ảnh và nội dung. Bạn có thể dán vào Zalo chat.','success')}).catch(function(){copyFeeCardFallback(message)});}else copyFeeCardFallback(message);}
+    function copyFeeCardFallback(message){if(navigator.clipboard)navigator.clipboard.writeText(message).catch(function(){});downloadFeeCard();showNotification('Trình duyệt chỉ hỗ trợ sao chép nội dung; ảnh đã được tải xuống để gửi kèm.','info');}
+    function shareFeeCard() { if(!currentFeeCardDataUrl)return;const message=document.getElementById('feeShareMessage').value.trim()||('Thông tin học phí từ '+APP_BRAND_NAME+'.');const file=new File([feeCardBlob()],currentFeeCardFileName,{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({title:APP_BRAND_NAME,text:message,files:[file]}).catch(function(){});}else{if(navigator.clipboard)navigator.clipboard.writeText(message).catch(function(){});downloadFeeCard();window.open('https://zalo.me/','_blank');showNotification('Ảnh đã được tải và lời nhắn đã được sao chép. Hãy chọn phụ huynh trên Zalo để gửi.','info');} }
     function printFeeCard() { if(!currentFeeCardDataUrl)return;const win=window.open('','_blank','width=850,height=1000');if(!win){showNotification('Vui lòng cho phép cửa sổ bật lên để in.','warning');return}win.document.write('<html><head><title>Biên lai học phí</title><style>@page{size:A5 portrait;margin:5mm}body{margin:0;text-align:center}img{max-width:100%;max-height:98vh}</style></head><body><img src="'+currentFeeCardDataUrl+'"><script>window.onload=function(){window.print()}<\/script></body></html>');win.document.close(); }
 
     function printTuitionReceiptDocument(item, existingWindow) {
       const amount = Number(item.soTienDaThu || 0);
       const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escapeHtml('Biên lai ' + (item.soPhieu || ''))}</title><style>
         @page{size:A5 portrait;margin:12mm}*{box-sizing:border-box}body{font-family:"Times New Roman",serif;color:#111;margin:0}.sheet{border:1px solid #111;padding:18px 22px;min-height:185mm}.org{text-align:center;font-size:13px;font-weight:700;text-transform:uppercase}.title{text-align:center;font-size:25px;font-weight:800;margin-top:16px}.number{text-align:center;font-size:14px;margin-top:5px}.line{display:grid;grid-template-columns:150px 1fr;gap:8px;margin-top:13px;font-size:15px}.label{font-weight:700}.amount{font-size:18px;font-weight:800}.words{font-style:italic}.signatures{display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;margin-top:36px;font-size:14px}.signatures strong{display:block;margin-bottom:48px}.footer{margin-top:20px;font-size:12px;color:#555}
-      </style></head><body><div class="sheet"><div class="org">THIÊN ÂN EDUCATION</div><div class="title">BIÊN LAI THU HỌC PHÍ</div><div class="number">Số: <strong>${escapeHtml(item.soPhieu || '')}</strong> &nbsp; | &nbsp; Ngày: <strong>${escapeHtml(item.ngayThuDisplay || formatDateDisplayClient(item.ngayThu) || '')}</strong></div>
+      </style></head><body><div class="sheet"><div class="org">${escapeHtml(APP_BRAND_NAME)}</div><div class="title">BIÊN LAI THU HỌC PHÍ</div><div class="number">Số: <strong>${escapeHtml(item.soPhieu || '')}</strong> &nbsp; | &nbsp; Ngày: <strong>${escapeHtml(item.ngayThuDisplay || formatDateDisplayClient(item.ngayThu) || '')}</strong></div>
       <div class="line"><div class="label">Học sinh:</div><div><strong>${escapeHtml(item.hoTen || '')}</strong></div></div>
       <div class="line"><div class="label">Lớp:</div><div>${escapeHtml((item.tenKhoi || item.khoi || '') + ' - ' + (item.tenLop || item.lop || ''))}</div></div>
       <div class="line"><div class="label">Tháng thu phí:</div><div>${escapeHtml(item.monthText || currentMonthText || '')}</div></div>
