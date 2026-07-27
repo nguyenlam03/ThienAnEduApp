@@ -10,6 +10,7 @@ const SHEET_DANHMUC_THUCHI = 'DanhMucThuChi';
 const SHEET_SOTHUCHI = 'SoThuChi';
 const SHEET_NGUONTIEN = 'NguonTien';
 const SHEET_DOITUONG_THUCHI = 'DoiTuongThuChi';
+const SHEET_DIEMDANH = 'DiemDanh';
 const SHEET_CAUHINH = 'CauHinh';
 const CONFIG_NOTIFICATION_DURATION = 'NOTIFICATION_DURATION_SECONDS';
 const CONFIG_BRAND_NAME = 'APP_BRAND_NAME';
@@ -42,6 +43,7 @@ function doGet(e) {
   const protectedPages = [
     'Index',
     'QuanLyHocSinh',
+    'QuanLyDiemDanh',
     'QuanLyThuPhu',
     'QuanLyThuChi'
   ];
@@ -110,6 +112,7 @@ function setupDatabase() {
   ensureSheet_(ss, SHEET_SOTHUCHI, getSoThuChiHeaders_());
   ensureSheet_(ss, SHEET_NGUONTIEN, getNguonTienHeaders_());
   ensureSheet_(ss, SHEET_DOITUONG_THUCHI, getDoiTuongThuChiHeaders_());
+  ensureSheet_(ss, SHEET_DIEMDANH, getDiemDanhHeaders_());
   ensureAppConfigSheet_();
 
   // Dữ liệu thu phí được lưu theo từng sheet tháng, ví dụ: Thang07.2026.
@@ -657,6 +660,106 @@ function getHocSinhList(token, filters) {
   return json;
 }
 
+function getDiemDanhData(token, dateText) {
+  const session = requireSession_(token);
+  const ngay = String(dateText || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ngay)) throw new Error('Ngày điểm danh không hợp lệ.');
+  ensureSheet_(SpreadsheetApp.getActiveSpreadsheet(), SHEET_DIEMDANH, getDiemDanhHeaders_());
+
+  const students = JSON.parse(getHocSinhList(token, {}));
+  const attendanceMap = readObjectsNoCache_(SHEET_DIEMDANH)
+    .filter(row => String(row.MaKyHoc || '').trim() === session.maKyHoc && formatDateForInput_(row.NgayDiemDanh) === ngay)
+    .reduce((map, row) => {
+      map[String(row.MaHocSinh || '').trim()] = {
+        trangThai: String(row.TrangThai || 'CHUA_DIEM_DANH').trim().toUpperCase(),
+        ghiChu: String(row.GhiChu || '').trim()
+      };
+      return map;
+    }, {});
+
+  const result = students.map(student => {
+    const saved = attendanceMap[student.maHocSinh] || {};
+    return Object.assign({}, student, {
+      trangThaiDiemDanh: saved.trangThai || 'CHUA_DIEM_DANH',
+      ghiChuDiemDanh: saved.ghiChu || ''
+    });
+  });
+  return jsonResponse_({
+    date: ngay,
+    students: result,
+    khoiList: getKhoiList_(),
+    lopList: getLopList_()
+  });
+}
+
+function saveDiemDanh(token, dateText, records) {
+  const session = requireSession_(token);
+  const ngay = String(dateText || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ngay)) throw new Error('Ngày điểm danh không hợp lệ.');
+  records = Array.isArray(records) ? records : [];
+  if (!records.length) throw new Error('Chưa có dữ liệu điểm danh để lưu.');
+
+  const validStatuses = ['CHUA_DIEM_DANH', 'CO_MAT', 'VANG_CO_PHEP', 'VANG_KHONG_PHEP', 'DI_MUON'];
+  const studentIds = new Set(JSON.parse(getHocSinhList(token, {})).map(item => item.maHocSinh));
+  const cleanRecords = records.map(item => ({
+    maHocSinh: String(item.maHocSinh || '').trim(),
+    trangThai: String(item.trangThai || '').trim().toUpperCase(),
+    ghiChu: String(item.ghiChu || '').trim().slice(0, 500)
+  })).filter(item => studentIds.has(item.maHocSinh) && validStatuses.indexOf(item.trangThai) !== -1);
+  if (!cleanRecords.length) throw new Error('Không có học sinh hợp lệ để lưu điểm danh.');
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('Hệ thống đang có người lưu điểm danh. Vui lòng thử lại.');
+  try {
+    const sheet = ensureSheet_(SpreadsheetApp.getActiveSpreadsheet(), SHEET_DIEMDANH, getDiemDanhHeaders_());
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(value => String(value || '').trim());
+    const values = sheet.getDataRange().getValues();
+    const index = buildHeaderIndex_(headers);
+    const rowMap = {};
+    values.slice(1).forEach((row, offset) => {
+      const key = String(row[index.MaKyHoc] || '').trim() + '|' + formatDateForInput_(row[index.NgayDiemDanh]) + '|' + String(row[index.MaHocSinh] || '').trim();
+      rowMap[key] = offset + 1;
+    });
+    const now = new Date();
+    const dirtyRows = [];
+    cleanRecords.forEach(item => {
+      const key = session.maKyHoc + '|' + ngay + '|' + item.maHocSinh;
+      let rowIndex = rowMap[key];
+      if (rowIndex === undefined) {
+        rowIndex = values.length;
+        values.push(new Array(headers.length).fill(''));
+        rowMap[key] = rowIndex;
+        values[rowIndex][index.MaDiemDanh] = 'DD_' + Utilities.getUuid().slice(0, 12).toUpperCase();
+        values[rowIndex][index.MaKyHoc] = session.maKyHoc;
+        values[rowIndex][index.NgayDiemDanh] = parseInputDate_(ngay);
+        values[rowIndex][index.MaHocSinh] = item.maHocSinh;
+      }
+      values[rowIndex][index.TrangThai] = item.trangThai;
+      values[rowIndex][index.GhiChu] = item.ghiChu;
+      values[rowIndex][index.UpdatedAt] = now;
+      dirtyRows.push(rowIndex);
+    });
+    const sortedDirtyRows = Array.from(new Set(dirtyRows)).sort((a, b) => a - b);
+    let groupStart = sortedDirtyRows[0];
+    let groupEnd = groupStart;
+    for (let i = 1; i <= sortedDirtyRows.length; i++) {
+      const current = sortedDirtyRows[i];
+      if (current === groupEnd + 1) {
+        groupEnd = current;
+        continue;
+      }
+      sheet.getRange(groupStart + 1, 1, groupEnd - groupStart + 1, headers.length)
+        .setValues(values.slice(groupStart, groupEnd + 1));
+      groupStart = current;
+      groupEnd = current;
+    }
+  } finally {
+    lock.releaseLock();
+  }
+  bumpDataVersion_();
+  return jsonResponse_({ success: true, savedCount: cleanRecords.length, message: 'Đã lưu điểm danh ' + cleanRecords.length + ' học sinh.' });
+}
+
 function saveHocSinhOrder(token, orderedStudentIds) {
   const session = requireSession_(token);
   const orderedIds = Array.isArray(orderedStudentIds)
@@ -1087,6 +1190,10 @@ function deleteHocSinh(token, maHocSinh) {
     success: true,
     message: 'Đã xoá học sinh và xoá bộ nhớ tạm.'
   });
+}
+
+function getDiemDanhHeaders_() {
+  return ['MaDiemDanh', 'MaKyHoc', 'NgayDiemDanh', 'MaHocSinh', 'TrangThai', 'GhiChu', 'UpdatedAt'];
 }
 
 function getHocSinhHeaders_() {
