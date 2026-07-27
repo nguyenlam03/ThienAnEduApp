@@ -241,6 +241,7 @@
     .fee-card-modal{max-width:850px;max-height:calc(100vh - 32px);display:flex;flex-direction:column}
     .fee-card-preview-wrap{padding:18px;overflow:auto;background:#e2e8f0;text-align:center}
     .fee-card-preview{display:block;width:min(100%,570px);height:auto;margin:0 auto;border-radius:20px;box-shadow:0 18px 45px rgba(15,23,42,.2);background:#fff}
+    .fee-share-message{padding:14px 18px;background:#fff;border-top:1px solid #e2e8f0}.fee-share-message label{display:block;margin-bottom:7px;color:#334155;font-size:13px;font-weight:800}.fee-share-message textarea{width:100%;min-height:76px;resize:vertical}
     .notice-button{background:#fff7ed!important;color:#c2410c!important;border-color:#fdba74!important}
     .receipt-button{background:#ecfdf5!important;color:#047857!important;border-color:#6ee7b7!important}
 
@@ -542,7 +543,8 @@
     <div class="modal fee-card-modal">
       <div class="modal-header"><div id="feeCardModalTitle" class="modal-title">Thông báo học phí</div><button class="close-button" onclick="closeFeeCardModal()">×</button></div>
       <div class="fee-card-preview-wrap"><img id="feeCardPreview" class="fee-card-preview" alt="Ảnh thông báo học phí"></div>
-      <div class="modal-footer"><button class="cancel-button" onclick="closeFeeCardModal()">Đóng</button><button class="secondary-button" onclick="downloadFeeCard()">Tải ảnh PNG</button><button id="btnShareFeeCard" class="save-button" onclick="shareFeeCard()">Chia sẻ ảnh</button><button id="btnPrintFeeCard" class="print-button" onclick="printFeeCard()">In</button></div>
+      <div class="fee-share-message"><label for="feeShareMessage">Nội dung nhắn thêm cho phụ huynh</label><textarea id="feeShareMessage" placeholder="Nhập lời nhắn gửi kèm ảnh..."></textarea></div>
+      <div class="modal-footer"><button class="cancel-button" onclick="closeFeeCardModal()">Đóng</button><button class="secondary-button" onclick="downloadFeeCard()">Tải ảnh PNG</button><button id="btnShareFeeCard" class="save-button" onclick="shareFeeCard()">Chia sẻ qua Zalo</button><button id="btnPrintFeeCard" class="print-button" onclick="printFeeCard()">In</button></div>
     </div>
   </div>
 
@@ -1353,21 +1355,24 @@
       canvas.height = 1180;
       const ctx = canvas.getContext('2d');
       const grade = Number(String(item.khoi || item.lop || '').match(/[1-9]/)?.[0] || 0);
-      const primary = paid ? '#009b62' : (grade > 0 && grade <= 5 ? '#e94f92' : '#0aa58d');
-      const accent = paid ? '#f8c93a' : (grade > 0 && grade <= 5 ? '#f8a8ca' : '#75d9ca');
-      const pale = paid ? '#effaf4' : (grade > 0 && grade <= 5 ? '#fff0f6' : '#eefbf9');
+      const isPrimary = grade > 0 && grade <= 5;
+      const primary = paid ? '#009b62' : (isPrimary ? '#df3f86' : '#167fc5');
+      const accent = paid ? '#f8c93a' : (isPrimary ? '#ff91bd' : '#59b9ec');
+      const decoration = paid ? '#f8c93a' : (isPrimary ? '#f76da8' : '#65c8f1');
+      const pale = paid ? '#effaf4' : (isPrimary ? '#fff0f6' : '#eff8ff');
       const amount = paid ? Number(item.soTienDaThu || 0) : Number(item.conLai || 0);
       const month = currentMonthText || '';
       const title = paid ? 'BIÊN LAI HỌC PHÍ' : 'THÔNG BÁO HỌC PHÍ';
       const filePrefix = paid ? 'Bien-lai' : 'Thong-bao-hoc-phi';
       const classText = item.tenLop || item.lop || '';
-      const classDisplay = paid ? classText : classText + (item.truong ? ' · ' + item.truong : '');
+      const classDisplay = classText;
 
       ctx.fillStyle = pale; roundRect(ctx, 8, 8, 744, 1164, 34); ctx.fill();
       const headerGradient = ctx.createLinearGradient(0, 0, 760, 330);
       headerGradient.addColorStop(0, primary); headerGradient.addColorStop(1, paid ? '#00b874' : accent);
       ctx.fillStyle = headerGradient; roundRect(ctx, 8, 8, 744, 330, 34); ctx.fill();
-      ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(690, 24, 145, 0, Math.PI * 2); ctx.fill();
+      ctx.save(); ctx.globalAlpha = .92; ctx.fillStyle = decoration; ctx.beginPath(); ctx.arc(688, 52, 116, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; setCardFont(ctx, 750, 15); ctx.fillText(paid ? 'ĐÃ THU' : (isPrimary ? 'CẤP 1' : 'CẤP 2'), 680, 78);
       ctx.fillStyle = paid ? '#f8c93a' : '#fff'; roundRect(ctx, 58, 48, 82, 82, 22); ctx.fill();
       ctx.fillStyle = paid ? '#006746' : primary; setCardFont(ctx, 800, 29); ctx.textAlign = 'center'; ctx.fillText('TA', 99, 101);
       ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; setCardFont(ctx, 750, 26); ctx.fillText('THIÊN ÂN EDUCATION', 162, 80);
@@ -1378,7 +1383,7 @@
 
       ctx.fillStyle = '#fff'; roundRect(ctx, 40, 356, 680, 170, 24); ctx.fill();
       drawCardRow(ctx, 'Học sinh', item.hoTen || '', 390, primary);
-      drawCardRow(ctx, paid ? 'Lớp' : 'Lớp / Trường', classDisplay, 438, primary);
+      drawCardRow(ctx, 'Lớp', classDisplay, 438, primary);
       drawCardRow(ctx, 'Nội dung', paid ? 'Đã đóng học phí tháng ' + month : 'Học phí cần đóng tháng ' + month, 486, primary);
 
       ctx.fillStyle = primary; roundRect(ctx, 40, 550, 680, 128, 25); ctx.fill();
@@ -1389,12 +1394,15 @@
 
       const finish = function () {
         ctx.fillStyle = '#475569'; setCardFont(ctx, 400, 17, true); ctx.textAlign = 'center';
-        ctx.fillText(paid ? 'Cảm ơn Quý phụ huynh đã hoàn thành học phí!' : 'Cảm ơn Quý phụ huynh đã tin tưởng và đồng hành!', 380, 1110);
+        ctx.fillText(paid ? 'Chân thành cảm ơn Quý phụ huynh!' : 'Chân thành cảm ơn Quý phụ huynh!', 380, 1110);
         ctx.fillStyle = primary; setCardFont(ctx, 700, 14); ctx.fillText('THIÊN ÂN EDUCATION  ·  KHƠI NGUỒN TRI THỨC', 380, 1144);
         currentFeeCardDataUrl = canvas.toDataURL('image/png');
         currentFeeCardFileName = filePrefix + '-' + safeFileName(item.hoTen || item.maHocSinh) + '-' + month.replace('/', '-') + '.png';
         document.getElementById('feeCardPreview').src = currentFeeCardDataUrl;
         document.getElementById('feeCardModalTitle').textContent = paid ? 'Biên lai học phí' : 'Thông báo học phí';
+        document.getElementById('feeShareMessage').value = paid
+          ? 'Thiên Ân Education gửi Quý phụ huynh biên lai học phí tháng ' + month + ' của em ' + (item.hoTen || '') + '.'
+          : 'Thiên Ân Education kính gửi Quý phụ huynh thông báo học phí tháng ' + month + ' của em ' + (item.hoTen || '') + '. Quý phụ huynh vui lòng xem thông tin trong ảnh đính kèm.';
         document.getElementById('btnPrintFeeCard').style.display = paid ? '' : 'none';
         document.getElementById('btnShareFeeCard').style.display = navigator.share ? '' : 'none';
         document.getElementById('feeCardModal').classList.add('show');
@@ -1407,14 +1415,14 @@
         ctx.strokeStyle = primary; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(348, 846); ctx.lineTo(373, 871); ctx.lineTo(418, 820); ctx.stroke();
         ctx.fillStyle = primary; setCardFont(ctx, 750, 25); ctx.textAlign = 'center'; ctx.fillText('ĐÃ GHI NHẬN THANH TOÁN', 380, 945);
         ctx.fillStyle = '#475569'; setCardFont(ctx, 500, 17); ctx.fillText('Ngày đóng: ' + (item.ngayThuDisplay || formatDateDisplayClient(item.ngayThu) || '—'), 380, 984);
-        ctx.fillText('Nguồn thu: ' + (item.tenNguonTien || 'Đã ghi nhận'), 380, 1017);
         finish();
       } else {
         ctx.fillStyle = '#fff'; roundRect(ctx, 92, 748, 576, 332, 28); ctx.fill();
         ctx.strokeStyle = primary; ctx.setLineDash([7, 6]); ctx.lineWidth = 2; roundRect(ctx, 92, 748, 576, 332, 28); ctx.stroke(); ctx.setLineDash([]);
         loadCanvasImage(qrDataUrl).then(function (image) {
-          ctx.drawImage(image, 270, 792, 220, 220);
-          ctx.fillStyle = primary; setCardFont(ctx, 750, 17); ctx.textAlign = 'center'; ctx.fillText('QUÉT MÃ ĐỂ ĐÓNG ĐÚNG SỐ TIỀN', 380, 780);
+          ctx.drawImage(image, 280, 806, 200, 200);
+          ctx.fillStyle = primary; setCardFont(ctx, 700, 14); ctx.textAlign = 'center'; ctx.fillText('PHỤ HUYNH VUI LÒNG QUÉT MÃ ĐỂ ĐÓNG HỌC PHÍ', 380, 776);
+          setCardFont(ctx, 500, 13); ctx.fillText('HOẶC ĐÓNG TRỰC TIẾP', 380, 794);
           ctx.fillStyle = '#334155'; setCardFont(ctx, 600, 15); ctx.fillText('BIDV  ·  8838077136', 380, 1026);
           setCardFont(ctx, 600, 13); ctx.fillText('HỘ KINH DOANH TRẦN NGUYÊN LÂM', 380, 1048);
           finish();
@@ -1428,14 +1436,14 @@
     }
     function setCardFont(ctx, weight, size, italic) { ctx.font=(italic?'italic ':'')+weight+' '+size+'px "Segoe UI", "Helvetica Neue", Arial, sans-serif'; }
     function formatMoneyForCard(value) { return Number(value || 0).toLocaleString('vi-VN') + ' đ'; }
-    function drawCardRow(ctx, label, value, y, color) { ctx.textAlign = 'left'; ctx.fillStyle = '#64748b'; setCardFont(ctx, 500, 17); ctx.fillText(label, 70, y); ctx.textAlign = 'right'; ctx.fillStyle = color; setCardFont(ctx, 650, 17); ctx.fillText(String(value).slice(0, 52), 690, y); }
+    function drawCardRow(ctx, label, value, y, color) { ctx.textAlign = 'left'; ctx.fillStyle = '#64748b'; setCardFont(ctx, 500, 17); ctx.fillText(label, 70, y); ctx.fillStyle = color; setCardFont(ctx, 650, 17); ctx.fillText(String(value).slice(0, 52), 250, y); }
     function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight, align) { const words=String(text).split(' '),lines=[];let line='';words.forEach(function(word){const test=line?line+' '+word:word;if(ctx.measureText(test).width>maxWidth&&line){lines.push(line);line=word}else line=test});if(line)lines.push(line);ctx.textAlign=align||'left';lines.slice(0,2).forEach(function(item,index){ctx.fillText(item,x,y+index*lineHeight)}); }
     function loadCanvasImage(src) { return new Promise(function(resolve,reject){const image=new Image();image.onload=function(){resolve(image)};image.onerror=reject;image.src=src;}); }
     function safeFileName(value) { return normalizeText(value).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'hoc-sinh'; }
     function closeFeeCardModal() { document.getElementById('feeCardModal').classList.remove('show'); }
     function downloadFeeCard() { if(!currentFeeCardDataUrl)return;const link=document.createElement('a');link.href=currentFeeCardDataUrl;link.download=currentFeeCardFileName;document.body.appendChild(link);link.click();link.remove(); }
     function feeCardBlob() { const parts=currentFeeCardDataUrl.split(','),bytes=atob(parts[1]),array=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)array[i]=bytes.charCodeAt(i);return new Blob([array],{type:'image/png'}); }
-    function shareFeeCard() { if(!currentFeeCardDataUrl)return;const file=new File([feeCardBlob()],currentFeeCardFileName,{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({title:'Thiên Ân Education',text:'Thông tin học phí',files:[file]}).catch(function(){});}else{downloadFeeCard();showNotification('Thiết bị chưa hỗ trợ chia sẻ trực tiếp. Ảnh đã được tải xuống.','info');} }
+    function shareFeeCard() { if(!currentFeeCardDataUrl)return;const message=document.getElementById('feeShareMessage').value.trim()||'Thông tin học phí từ Thiên Ân Education.';const file=new File([feeCardBlob()],currentFeeCardFileName,{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({title:'Thiên Ân Education',text:message,files:[file]}).catch(function(){});}else{if(navigator.clipboard)navigator.clipboard.writeText(message).catch(function(){});downloadFeeCard();window.open('https://zalo.me/','_blank');showNotification('Ảnh đã được tải và lời nhắn đã được sao chép. Hãy chọn phụ huynh trên Zalo để gửi.','info');} }
     function printFeeCard() { if(!currentFeeCardDataUrl)return;const win=window.open('','_blank','width=850,height=1000');if(!win){showNotification('Vui lòng cho phép cửa sổ bật lên để in.','warning');return}win.document.write('<html><head><title>Biên lai học phí</title><style>@page{size:A5 portrait;margin:5mm}body{margin:0;text-align:center}img{max-width:100%;max-height:98vh}</style></head><body><img src="'+currentFeeCardDataUrl+'"><script>window.onload=function(){window.print()}<\/script></body></html>');win.document.close(); }
 
     function printTuitionReceiptDocument(item, existingWindow) {
@@ -1449,7 +1457,6 @@
       <div class="line"><div class="label">Học phí tháng:</div><div>${formatMoney(item.hocPhi || 0)}</div></div>
       <div class="line"><div class="label">Số tiền đã thu:</div><div class="amount">${formatMoney(amount)}</div></div>
       <div class="line"><div class="label">Bằng chữ:</div><div class="words">${escapeHtml(numberToVietnameseWords(amount))}</div></div>
-      <div class="line"><div class="label">Nguồn nhận:</div><div>${escapeHtml(item.tenNguonTien || '')}</div></div>
       ${item.ghiChu ? `<div class="line"><div class="label">Ghi chú:</div><div>${escapeHtml(item.ghiChu)}</div></div>` : ''}
       <div class="signatures"><div><strong>Người lập phiếu</strong><span>(Ký, ghi rõ họ tên)</span></div><div><strong>Người nộp tiền</strong><span>(Ký, ghi rõ họ tên)</span></div><div><strong>Người thu tiền</strong><span>(Ký, ghi rõ họ tên)</span></div></div>
       <div class="footer">Biên lai được tạo từ hệ thống quản lý.</div></div><script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>`;
