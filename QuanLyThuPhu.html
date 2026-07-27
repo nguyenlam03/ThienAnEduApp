@@ -1360,6 +1360,8 @@
       const month = currentMonthText || '';
       const title = paid ? 'BIÊN LAI HỌC PHÍ' : 'THÔNG BÁO HỌC PHÍ';
       const filePrefix = paid ? 'Bien-lai' : 'Thong-bao-hoc-phi';
+      const classText = item.tenLop || item.lop || '';
+      const classDisplay = paid ? classText : classText + (item.truong ? ' · ' + item.truong : '');
 
       ctx.fillStyle = pale; roundRect(ctx, 8, 8, 744, 1164, 34); ctx.fill();
       const headerGradient = ctx.createLinearGradient(0, 0, 760, 330);
@@ -1367,28 +1369,28 @@
       ctx.fillStyle = headerGradient; roundRect(ctx, 8, 8, 744, 330, 34); ctx.fill();
       ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(690, 24, 145, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = paid ? '#f8c93a' : '#fff'; roundRect(ctx, 58, 48, 82, 82, 22); ctx.fill();
-      ctx.fillStyle = paid ? '#006746' : primary; ctx.font = '900 29px Arial'; ctx.textAlign = 'center'; ctx.fillText('TA', 99, 101);
-      ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.font = '800 27px Arial'; ctx.fillText('Thiên Ân Education', 162, 80);
-      ctx.font = '700 19px Arial'; ctx.fillText('Khơi nguồn tri thức', 162, 111);
-      ctx.textAlign = 'center'; ctx.font = '900 41px Arial'; ctx.fillText(title, 380, 210);
-      ctx.font = '700 18px Arial'; ctx.fillText(paid ? ('Số ' + (item.soPhieu || '—') + '  •  Tháng ' + month) : ('Tháng ' + month), 380, 248);
-      ctx.font = '600 16px Arial'; ctx.fillText(paid ? 'Xác nhận đã ghi nhận thanh toán' : 'Kính gửi Quý phụ huynh học sinh', 380, 282);
+      ctx.fillStyle = paid ? '#006746' : primary; setCardFont(ctx, 800, 29); ctx.textAlign = 'center'; ctx.fillText('TA', 99, 101);
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; setCardFont(ctx, 750, 26); ctx.fillText('THIÊN ÂN EDUCATION', 162, 80);
+      setCardFont(ctx, 500, 18); ctx.fillText('Khơi nguồn tri thức', 162, 109);
+      ctx.textAlign = 'center'; setCardFont(ctx, 800, 39); ctx.fillText(title, 380, 210);
+      setCardFont(ctx, 650, 17); ctx.fillText(paid ? ('Số ' + (item.soPhieu || '—') + '  •  Tháng ' + month) : ('Tháng ' + month), 380, 248);
+      setCardFont(ctx, 500, 16); ctx.fillText(paid ? 'Xác nhận đã ghi nhận thanh toán' : 'Kính gửi Quý phụ huynh học sinh', 380, 282);
 
       ctx.fillStyle = '#fff'; roundRect(ctx, 40, 356, 680, 170, 24); ctx.fill();
       drawCardRow(ctx, 'Học sinh', item.hoTen || '', 390, primary);
-      drawCardRow(ctx, 'Lớp / Trường', (item.tenLop || item.lop || '') + (item.truong ? ' · ' + item.truong : ''), 438, primary);
+      drawCardRow(ctx, paid ? 'Lớp' : 'Lớp / Trường', classDisplay, 438, primary);
       drawCardRow(ctx, 'Nội dung', paid ? 'Đã đóng học phí tháng ' + month : 'Học phí cần đóng tháng ' + month, 486, primary);
 
       ctx.fillStyle = primary; roundRect(ctx, 40, 550, 680, 128, 25); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '800 18px Arial'; ctx.fillText(paid ? 'SỐ TIỀN ĐÃ ĐÓNG' : 'SỐ TIỀN CẦN ĐÓNG', 380, 586);
-      ctx.font = '900 43px Arial'; ctx.fillText(formatMoney(amount), 380, 640);
-      ctx.fillStyle = '#475569'; ctx.font = 'italic 17px Arial';
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; setCardFont(ctx, 700, 17); ctx.fillText(paid ? 'SỐ TIỀN ĐÃ ĐÓNG' : 'SỐ TIỀN CẦN ĐÓNG', 380, 586);
+      setCardFont(ctx, 800, 43); ctx.fillText(formatMoneyForCard(amount), 380, 640);
+      ctx.fillStyle = '#475569'; setCardFont(ctx, 400, 17, true);
       drawWrappedText(ctx, '(' + numberToVietnameseWords(amount) + ')', 380, 711, 650, 24, 'center');
 
       const finish = function () {
-        ctx.fillStyle = '#475569'; ctx.font = 'italic 18px Arial'; ctx.textAlign = 'center';
+        ctx.fillStyle = '#475569'; setCardFont(ctx, 400, 17, true); ctx.textAlign = 'center';
         ctx.fillText(paid ? 'Cảm ơn Quý phụ huynh đã hoàn thành học phí!' : 'Cảm ơn Quý phụ huynh đã tin tưởng và đồng hành!', 380, 1110);
-        ctx.fillStyle = primary; ctx.font = '800 15px Arial'; ctx.fillText('THIÊN ÂN EDUCATION · KHƠI NGUỒN TRI THỨC', 380, 1144);
+        ctx.fillStyle = primary; setCardFont(ctx, 700, 14); ctx.fillText('THIÊN ÂN EDUCATION  ·  KHƠI NGUỒN TRI THỨC', 380, 1144);
         currentFeeCardDataUrl = canvas.toDataURL('image/png');
         currentFeeCardFileName = filePrefix + '-' + safeFileName(item.hoTen || item.maHocSinh) + '-' + month.replace('/', '-') + '.png';
         document.getElementById('feeCardPreview').src = currentFeeCardDataUrl;
@@ -1403,8 +1405,8 @@
         ctx.fillStyle = '#fff'; roundRect(ctx, 92, 760, 576, 270, 28); ctx.fill();
         ctx.strokeStyle = accent; ctx.lineWidth = 9; ctx.beginPath(); ctx.arc(380, 845, 58, 0, Math.PI * 2); ctx.stroke();
         ctx.strokeStyle = primary; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(348, 846); ctx.lineTo(373, 871); ctx.lineTo(418, 820); ctx.stroke();
-        ctx.fillStyle = primary; ctx.font = '900 27px Arial'; ctx.textAlign = 'center'; ctx.fillText('ĐÃ GHI NHẬN THANH TOÁN', 380, 945);
-        ctx.fillStyle = '#475569'; ctx.font = '600 18px Arial'; ctx.fillText('Ngày đóng: ' + (item.ngayThuDisplay || formatDateDisplayClient(item.ngayThu) || '—'), 380, 984);
+        ctx.fillStyle = primary; setCardFont(ctx, 750, 25); ctx.textAlign = 'center'; ctx.fillText('ĐÃ GHI NHẬN THANH TOÁN', 380, 945);
+        ctx.fillStyle = '#475569'; setCardFont(ctx, 500, 17); ctx.fillText('Ngày đóng: ' + (item.ngayThuDisplay || formatDateDisplayClient(item.ngayThu) || '—'), 380, 984);
         ctx.fillText('Nguồn thu: ' + (item.tenNguonTien || 'Đã ghi nhận'), 380, 1017);
         finish();
       } else {
@@ -1412,9 +1414,9 @@
         ctx.strokeStyle = primary; ctx.setLineDash([7, 6]); ctx.lineWidth = 2; roundRect(ctx, 92, 748, 576, 332, 28); ctx.stroke(); ctx.setLineDash([]);
         loadCanvasImage(qrDataUrl).then(function (image) {
           ctx.drawImage(image, 270, 792, 220, 220);
-          ctx.fillStyle = primary; ctx.font = '900 18px Arial'; ctx.textAlign = 'center'; ctx.fillText('QUÉT MÃ ĐỂ ĐÓNG ĐÚNG SỐ TIỀN', 380, 780);
-          ctx.fillStyle = '#334155'; ctx.font = '700 16px Arial'; ctx.fillText('BIDV · 8838077136', 380, 1026);
-          ctx.font = '700 14px Arial'; ctx.fillText('HỘ KINH DOANH TRẦN NGUYÊN LÂM', 380, 1048);
+          ctx.fillStyle = primary; setCardFont(ctx, 750, 17); ctx.textAlign = 'center'; ctx.fillText('QUÉT MÃ ĐỂ ĐÓNG ĐÚNG SỐ TIỀN', 380, 780);
+          ctx.fillStyle = '#334155'; setCardFont(ctx, 600, 15); ctx.fillText('BIDV  ·  8838077136', 380, 1026);
+          setCardFont(ctx, 600, 13); ctx.fillText('HỘ KINH DOANH TRẦN NGUYÊN LÂM', 380, 1048);
           finish();
         }).catch(function () { hideBusy(); showNotification('Không tải được ảnh QR thanh toán.', 'error'); });
       }
@@ -1424,7 +1426,9 @@
       const r = Math.min(radius, width / 2, height / 2);
       ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + width, y, x + width, y + height, r); ctx.arcTo(x + width, y + height, x, y + height, r); ctx.arcTo(x, y + height, x, y, r); ctx.arcTo(x, y, x + width, y, r); ctx.closePath();
     }
-    function drawCardRow(ctx, label, value, y, color) { ctx.textAlign = 'left'; ctx.fillStyle = '#64748b'; ctx.font = '600 18px Arial'; ctx.fillText(label, 70, y); ctx.textAlign = 'right'; ctx.fillStyle = color; ctx.font = '800 18px Arial'; ctx.fillText(String(value).slice(0, 52), 690, y); }
+    function setCardFont(ctx, weight, size, italic) { ctx.font=(italic?'italic ':'')+weight+' '+size+'px "Segoe UI", "Helvetica Neue", Arial, sans-serif'; }
+    function formatMoneyForCard(value) { return Number(value || 0).toLocaleString('vi-VN') + ' đ'; }
+    function drawCardRow(ctx, label, value, y, color) { ctx.textAlign = 'left'; ctx.fillStyle = '#64748b'; setCardFont(ctx, 500, 17); ctx.fillText(label, 70, y); ctx.textAlign = 'right'; ctx.fillStyle = color; setCardFont(ctx, 650, 17); ctx.fillText(String(value).slice(0, 52), 690, y); }
     function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight, align) { const words=String(text).split(' '),lines=[];let line='';words.forEach(function(word){const test=line?line+' '+word:word;if(ctx.measureText(test).width>maxWidth&&line){lines.push(line);line=word}else line=test});if(line)lines.push(line);ctx.textAlign=align||'left';lines.slice(0,2).forEach(function(item,index){ctx.fillText(item,x,y+index*lineHeight)}); }
     function loadCanvasImage(src) { return new Promise(function(resolve,reject){const image=new Image();image.onload=function(){resolve(image)};image.onerror=reject;image.src=src;}); }
     function safeFileName(value) { return normalizeText(value).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'hoc-sinh'; }
