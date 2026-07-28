@@ -692,6 +692,47 @@ function getDiemDanhData(token, dateText) {
   });
 }
 
+function getTheoDoiDiemDanhData(token, fromDateText, toDateText) {
+  const session = requireSession_(token);
+  const fromText = String(fromDateText || '').trim();
+  const toText = String(toDateText || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fromText) || !/^\d{4}-\d{2}-\d{2}$/.test(toText)) {
+    throw new Error('Khoảng ngày theo dõi không hợp lệ.');
+  }
+  const fromDate = parseInputDate_(fromText);
+  const toDate = parseInputDate_(toText);
+  const dayCount = Math.floor((toDate.getTime() - fromDate.getTime()) / 86400000) + 1;
+  if (dayCount < 1) throw new Error('Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc.');
+  if (dayCount > 93) throw new Error('Khoảng theo dõi tối đa là 93 ngày.');
+
+  ensureSheet_(SpreadsheetApp.getActiveSpreadsheet(), SHEET_DIEMDANH, getDiemDanhHeaders_());
+  const students = JSON.parse(getHocSinhList(token, {}));
+  const studentIds = new Set(students.map(item => item.maHocSinh));
+  const records = readObjectsNoCache_(SHEET_DIEMDANH)
+    .filter(row => {
+      const date = formatDateForInput_(row.NgayDiemDanh);
+      const id = String(row.MaHocSinh || '').trim();
+      return String(row.MaKyHoc || '').trim() === session.maKyHoc &&
+        date >= fromText && date <= toText && studentIds.has(id);
+    })
+    .map(row => ({
+      ngay: formatDateForInput_(row.NgayDiemDanh),
+      maHocSinh: String(row.MaHocSinh || '').trim(),
+      trangThai: String(row.TrangThai || 'CHUA_DIEM_DANH').trim().toUpperCase(),
+      ghiChu: String(row.GhiChu || '').trim()
+    }));
+
+  return jsonResponse_({
+    fromDate: fromText,
+    toDate: toText,
+    dayCount: dayCount,
+    students: students,
+    records: records,
+    khoiList: getKhoiList_(),
+    lopList: getLopList_()
+  });
+}
+
 function saveDiemDanh(token, dateText, records) {
   const session = requireSession_(token);
   const ngay = String(dateText || '').trim();
