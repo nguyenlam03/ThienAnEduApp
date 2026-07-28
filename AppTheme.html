@@ -4,7 +4,7 @@
 
     const STORAGE_KEY = 'thienAnEducation.appTheme';
     const DEFAULT_THEME = 'default';
-    const VALID_THEMES = ['default', 'artistic'];
+    const VALID_THEMES = ['default', 'artistic', 'navy'];
 
     function normalizeTheme(theme) {
       return VALID_THEMES.includes(theme) ? theme : DEFAULT_THEME;
@@ -68,7 +68,8 @@
       DEFAULT_THEME: DEFAULT_THEME,
       THEMES: Object.freeze({
         DEFAULT: 'default',
-        ARTISTIC: 'artistic'
+        ARTISTIC: 'artistic',
+        NAVY: 'navy'
       }),
       initialTheme: initialTheme,
       get: getTheme,
@@ -428,6 +429,35 @@
   html[data-app-theme="artistic"] .checkbox-row input[type="checkbox"] {
     accent-color: #00a15c;
   }
+
+  html[data-app-theme="navy"] body{background:radial-gradient(circle at 10% 10%,rgba(213,156,28,.13),transparent 28%),radial-gradient(circle at 90% 90%,rgba(8,42,99,.12),transparent 30%),#f3f6fb;color:#0a2450}
+  html[data-app-theme="navy"] .login-wrapper{border-color:#d7b052;box-shadow:0 30px 80px rgba(5,34,79,.22)}
+  html[data-app-theme="navy"] .brand-panel{background:linear-gradient(145deg,#041b42 0%,#082a63 55%,#0b397e 100%)}
+  html[data-app-theme="navy"] .brand-panel::before{background:rgba(221,165,37,.22)}
+  html[data-app-theme="navy"] .brand-panel::after{background:rgba(255,255,255,.08)}
+  html[data-app-theme="navy"] .logo-icon,html[data-app-theme="navy"] .brand-logo{background:linear-gradient(135deg,#f7c95b,#d79514);color:#06245a;border-color:#ffe39a;box-shadow:0 10px 24px rgba(2,20,51,.25)}
+  html[data-app-theme="navy"] .check-icon{background:#e0a226;color:#061f4d}
+  html[data-app-theme="navy"] .form-badge{background:#fff4cf;color:#082a63}html[data-app-theme="navy"] .form-badge-dot{background:#d99a16}
+  html[data-app-theme="navy"] .form-title,html[data-app-theme="navy"] label{color:#082a63}
+  html[data-app-theme="navy"] select,html[data-app-theme="navy"] input,html[data-app-theme="navy"] textarea,html[data-app-theme="navy"] .multi-select-display{border-color:#c8d3e4;background:#f8fafd}
+  html[data-app-theme="navy"] select:focus,html[data-app-theme="navy"] input:focus,html[data-app-theme="navy"] textarea:focus,html[data-app-theme="navy"] .multi-select-display:focus{border-color:#0a3477;box-shadow:0 0 0 4px rgba(8,42,99,.13);background:#fff}
+  html[data-app-theme="navy"] .login-button{background:linear-gradient(135deg,#d79413,#f2c456);color:#061f4d;box-shadow:0 14px 30px rgba(200,137,17,.3)}
+  html[data-app-theme="navy"] .topbar{background:linear-gradient(135deg,#041b42,#082f6c);box-shadow:0 10px 26px rgba(4,27,66,.25)}
+  html[data-app-theme="navy"] .header-theme-select,html[data-app-theme="navy"] .header-action-select{border-color:rgba(255,220,132,.55);background:rgba(255,255,255,.12)}
+  html[data-app-theme="navy"] .ribbon{border-bottom-color:#d9c17b;box-shadow:0 8px 24px rgba(5,34,79,.08)}
+  html[data-app-theme="navy"] .ribbon-button{border-color:#c8d3e4;background:#f4f7fb;color:#082a63}html[data-app-theme="navy"] .ribbon-button:hover{background:#e9eef6}
+  html[data-app-theme="navy"] .ribbon-button.active{background:linear-gradient(135deg,#d79413,#f0bd43);color:#061f4d;border-color:#d79413;box-shadow:0 10px 22px rgba(200,137,17,.26)}
+  html[data-app-theme="navy"] .page-card,html[data-app-theme="navy"] .welcome-card,html[data-app-theme="navy"] .stat-card,html[data-app-theme="navy"] .finance-card,html[data-app-theme="navy"] .source-card,html[data-app-theme="navy"] .fee-stat-card,html[data-app-theme="navy"] .attendance-stat{border-color:#d5deeb;box-shadow:0 18px 50px rgba(5,34,79,.08)}
+  html[data-app-theme="navy"] .page-title,html[data-app-theme="navy"] .welcome-title,html[data-app-theme="navy"] .quick-title,html[data-app-theme="navy"] .finance-card-title,html[data-app-theme="navy"] .source-detail-title,html[data-app-theme="navy"] .fee-chart-title{color:#082a63}
+  html[data-app-theme="navy"] .quick-icon,html[data-app-theme="navy"] .pill-badge,html[data-app-theme="navy"] .class-badge{background:#fff2c7;color:#082a63}
+  html[data-app-theme="navy"] .primary-button,html[data-app-theme="navy"] .save-button{background:linear-gradient(135deg,#061f4d,#0a3a83);box-shadow:0 12px 26px rgba(6,31,77,.25)}
+  html[data-app-theme="navy"] .secondary-button,html[data-app-theme="navy"] .column-config-button,html[data-app-theme="navy"] .sync-button,html[data-app-theme="navy"] .csv-button{border-color:#d9a32d;background:#fff3c8;color:#082a63}
+  html[data-app-theme="navy"] .print-button,html[data-app-theme="navy"] .transfer-button{background:#082a63;color:#fff}
+  html[data-app-theme="navy"] .modal-header{background:linear-gradient(135deg,#041b42,#082f6c)}
+  html[data-app-theme="navy"] .table-wrap{border-color:#c8d3e4}html[data-app-theme="navy"] .table-wrap thead th,html[data-app-theme="navy"] thead{background:#edf1f7;color:#082a63}html[data-app-theme="navy"] tbody tr:hover{background:#fff9e8}
+  html[data-app-theme="navy"] .finance-tab.active,html[data-app-theme="navy"] .attendance-tab.active{color:#082a63;border-bottom-color:#d99a16}
+  html[data-app-theme="navy"] .fee-view-tab.active{background:#082a63;border-color:#082a63}
+  html[data-app-theme="navy"] .busy-spinner{border-color:#dbe3ef;border-top-color:#d99a16}
 
   @media (max-width: 900px) {
     .header-theme-picker {

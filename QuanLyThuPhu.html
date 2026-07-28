@@ -1367,12 +1367,10 @@
       canvas.width = 760;
       canvas.height = 1180;
       const ctx = canvas.getContext('2d');
-      const grade = Number(String(item.khoi || item.lop || '').match(/[1-9]/)?.[0] || 0);
-      const isPrimary = grade > 0 && grade <= 5;
-      const primary = paid ? '#009b62' : (isPrimary ? '#df3f86' : '#167fc5');
-      const accent = paid ? '#f8c93a' : (isPrimary ? '#ff91bd' : '#59b9ec');
-      const decoration = paid ? '#f8c93a' : (isPrimary ? '#f76da8' : '#65c8f1');
-      const pale = paid ? '#effaf4' : (isPrimary ? '#fff0f6' : '#eff8ff');
+      const primary = '#06265d';
+      const accent = '#d99a16';
+      const decoration = '#f3c453';
+      const pale = '#fffdfa';
       const amount = paid ? Number(item.soTienDaThu || 0) : Number(item.conLai || 0);
       const month = currentMonthText || '';
       const title = paid ? 'BIÊN LAI HỌC PHÍ' : 'THÔNG BÁO HỌC PHÍ';
@@ -1382,33 +1380,32 @@
 
       ctx.fillStyle = pale; roundRect(ctx, 8, 8, 744, 1164, 34); ctx.fill();
       const headerGradient = ctx.createLinearGradient(0, 0, 760, 330);
-      headerGradient.addColorStop(0, primary); headerGradient.addColorStop(1, paid ? '#00b874' : accent);
+      headerGradient.addColorStop(0, '#ffffff'); headerGradient.addColorStop(1, '#fff9e9');
       ctx.fillStyle = headerGradient; roundRect(ctx, 8, 8, 744, 330, 34); ctx.fill();
-      ctx.save(); ctx.globalAlpha = .92; ctx.fillStyle = decoration; ctx.beginPath(); ctx.arc(688, 52, 116, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-      ctx.fillStyle = paid ? '#f8c93a' : '#fff'; roundRect(ctx, 58, 48, 82, 82, 22); ctx.fill();
-      ctx.fillStyle = paid ? '#006746' : primary; setCardFont(ctx, 800, 29); ctx.textAlign = 'center'; ctx.fillText('TA', 99, 101);
-      ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; setCardFont(ctx, 750, 26); ctx.fillText(String(APP_BRAND_NAME || 'Thiên Ân Education').toUpperCase(), 162, 80);
-      setCardFont(ctx, 500, 18); ctx.fillText(APP_BRAND_TAGLINE || 'Khơi nguồn tri thức', 162, 109);
+      ctx.save(); ctx.globalAlpha = .28; ctx.fillStyle = decoration; ctx.beginPath(); ctx.arc(688, 52, 116, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      ctx.fillStyle = '#fff'; roundRect(ctx, 58, 48, 82, 82, 22); ctx.fill();ctx.strokeStyle=primary;ctx.lineWidth=2;roundRect(ctx,58,48,82,82,22);ctx.stroke();
+      ctx.fillStyle = primary; setCardFont(ctx, 800, 29); ctx.textAlign = 'center'; ctx.fillText('TA', 99, 101);
+      ctx.fillStyle = primary; ctx.textAlign = 'left'; setCardFont(ctx, 750, 26); ctx.fillText(String(APP_BRAND_NAME || 'Thiên Ân Education').toUpperCase(), 162, 80);
+      ctx.fillStyle = accent; setCardFont(ctx, 500, 18, true); ctx.fillText(APP_BRAND_TAGLINE || 'Khơi nguồn tri thức', 162, 109);
       ctx.textAlign = 'center'; setCardFont(ctx, 800, 39); ctx.fillText(title, 380, 210);
-      setCardFont(ctx, 650, 17); ctx.fillText(paid ? ('Số ' + (item.soPhieu || '—') + '  •  Tháng ' + month) : ('Tháng ' + month), 380, 248);
-      setCardFont(ctx, 500, 16); ctx.fillText(paid ? 'Xác nhận đã ghi nhận thanh toán' : 'Kính gửi Quý phụ huynh học sinh', 380, 282);
+      ctx.fillStyle=primary;roundRect(ctx,paid?195:265,225,paid?370:230,44,16);ctx.fill();ctx.fillStyle='#fff';setCardFont(ctx,700,18);ctx.fillText(paid ? ('Số ' + (item.soPhieu || '—') + '  •  Tháng ' + month) : ('THÁNG ' + month), 380, 254);
+      ctx.fillStyle=primary;setCardFont(ctx,500,17,true);ctx.fillText(paid ? 'Xác nhận đã ghi nhận thanh toán' : 'Kính gửi Quý phụ huynh học sinh!', 380, 301);
 
-      ctx.fillStyle = '#fff'; roundRect(ctx, 40, 356, 680, 170, 24); ctx.fill();
+      ctx.fillStyle = '#fff'; roundRect(ctx, 40, 356, 680, 170, 24); ctx.fill();ctx.strokeStyle=primary;ctx.lineWidth=2;roundRect(ctx,40,356,680,170,24);ctx.stroke();
       drawCardRow(ctx, 'Học sinh', item.hoTen || '', 390, primary);
       drawCardRow(ctx, 'Lớp', classDisplay, 438, primary);
       drawCardRow(ctx, 'Nội dung', paid ? 'Đã đóng học phí tháng ' + month : 'Học phí cần đóng tháng ' + month, 486, primary);
 
-      ctx.fillStyle = primary; roundRect(ctx, 40, 550, 680, 128, 25); ctx.fill();
+      ctx.fillStyle = primary; roundRect(ctx, 40, 550, 680, 128, 25); ctx.fill();ctx.strokeStyle=accent;ctx.lineWidth=4;roundRect(ctx,40,550,680,128,25);ctx.stroke();
       ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; setCardFont(ctx, 700, 17); ctx.fillText(paid ? 'SỐ TIỀN ĐÃ ĐÓNG' : 'SỐ TIỀN CẦN ĐÓNG', 380, 586);
       setCardFont(ctx, 800, 43); ctx.fillText(formatMoneyForCard(amount), 380, 640);
       ctx.fillStyle = '#475569'; setCardFont(ctx, 400, 17, true);
       drawWrappedText(ctx, '(' + numberToVietnameseWords(amount) + ')', 380, 711, 650, 24, 'center');
 
       const finalize = function () {
-        ctx.fillStyle = '#475569'; setCardFont(ctx, 400, 17, true); ctx.textAlign = 'center';
-        ctx.fillText(paid ? 'Chân thành cảm ơn Quý phụ huynh!' : 'Chân thành cảm ơn Quý phụ huynh!', 380, 1110);
-        ctx.fillStyle = primary; setCardFont(ctx, 700, 14); ctx.fillText(String(APP_BRAND_NAME || '').toUpperCase() + '  ·  ' + String(APP_BRAND_TAGLINE || '').toUpperCase(), 380, 1144);
-        ctx.strokeStyle = primary; ctx.lineWidth = 5; roundRect(ctx, 10, 10, 740, 1160, 32); ctx.stroke();
+        ctx.fillStyle = primary; setCardFont(ctx, 400, 17, true); ctx.textAlign = 'center';ctx.fillText('Chân thành cảm ơn Quý phụ huynh!', 380, 1098);
+        ctx.fillStyle=primary;roundRect(ctx,10,1120,740,50,0);ctx.fill();ctx.fillStyle=decoration;setCardFont(ctx,700,13);ctx.fillText(String(APP_BRAND_NAME || '').toUpperCase() + '  |  ' + String(APP_BRAND_TAGLINE || '').toUpperCase(), 380, 1151);
+        ctx.strokeStyle = primary; ctx.lineWidth = 5; roundRect(ctx, 10, 10, 740, 1160, 32); ctx.stroke();ctx.strokeStyle=accent;ctx.lineWidth=2;roundRect(ctx,16,16,728,1148,28);ctx.stroke();
         currentFeeCardDataUrl = canvas.toDataURL('image/png');
         currentFeeCardFileName = filePrefix + '-' + safeFileName(item.hoTen || item.maHocSinh) + '-' + month.replace('/', '-') + '.png';
         document.getElementById('feeCardPreview').src = currentFeeCardDataUrl;
@@ -1426,12 +1423,13 @@
         loadCanvasImage(logoDataUrl).then(function (logo) {
           ctx.fillStyle = '#fff'; roundRect(ctx, 58, 48, 82, 82, 22); ctx.fill();
           drawImageContain(ctx, logo, 66, 56, 66, 66);
+          ctx.strokeStyle = primary; ctx.lineWidth = 2; roundRect(ctx, 58, 48, 82, 82, 22); ctx.stroke();
           finalize();
         }).catch(finalize);
       };
 
       if (paid) {
-        ctx.fillStyle = '#fff'; roundRect(ctx, 92, 760, 576, 270, 28); ctx.fill();
+        ctx.fillStyle = '#fff'; roundRect(ctx, 92, 760, 576, 270, 28); ctx.fill();ctx.strokeStyle=accent;ctx.lineWidth=3;roundRect(ctx,92,760,576,270,28);ctx.stroke();
         ctx.strokeStyle = accent; ctx.lineWidth = 9; ctx.beginPath(); ctx.arc(380, 845, 58, 0, Math.PI * 2); ctx.stroke();
         ctx.strokeStyle = primary; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(348, 846); ctx.lineTo(373, 871); ctx.lineTo(418, 820); ctx.stroke();
         ctx.fillStyle = primary; setCardFont(ctx, 750, 25); ctx.textAlign = 'center'; ctx.fillText('ĐÃ GHI NHẬN THANH TOÁN', 380, 945);
@@ -1439,12 +1437,11 @@
         finish();
       } else {
         ctx.fillStyle = '#fff'; roundRect(ctx, 92, 748, 576, 332, 28); ctx.fill();
-        ctx.strokeStyle = primary; ctx.setLineDash([7, 6]); ctx.lineWidth = 2; roundRect(ctx, 92, 748, 576, 332, 28); ctx.stroke(); ctx.setLineDash([]);
+        ctx.strokeStyle = primary; ctx.lineWidth = 2; roundRect(ctx, 92, 748, 576, 332, 28); ctx.stroke();
         loadCanvasImage(qrDataUrl).then(function (image) {
           ctx.drawImage(image, 280, 806, 200, 200);
-          ctx.fillStyle = primary; setCardFont(ctx, 700, 14); ctx.textAlign = 'center'; ctx.fillText('PHỤ HUYNH VUI LÒNG QUÉT MÃ ĐỂ ĐÓNG HỌC PHÍ', 380, 776);
-          setCardFont(ctx, 500, 13); ctx.fillText('HOẶC ĐÓNG TRỰC TIẾP', 380, 794);
-          ctx.fillStyle = '#334155'; setCardFont(ctx, 600, 15); ctx.fillText('BIDV  ·  8838077136', 380, 1026);
+          ctx.fillStyle=primary;roundRect(ctx,112,760,536,36,12);ctx.fill();ctx.fillStyle='#fff';setCardFont(ctx,650,13);ctx.textAlign='center';ctx.fillText('PHỤ HUYNH VUI LÒNG QUÉT QR HOẶC ĐÓNG HỌC PHÍ TRỰC TIẾP',380,783);
+          ctx.fillStyle = primary; setCardFont(ctx, 650, 15); ctx.fillText('BIDV  ·  8838077136', 380, 1026);
           setCardFont(ctx, 600, 13); ctx.fillText('HỘ KINH DOANH TRẦN NGUYÊN LÂM', 380, 1048);
           finish();
         }).catch(function () { hideBusy(); showNotification('Không tải được ảnh QR thanh toán.', 'error'); });

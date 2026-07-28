@@ -127,6 +127,7 @@
           >
             <option value="default">Mặc định</option>
             <option value="artistic">Artistic Expression</option>
+            <option value="navy">Xanh Navy</option>
           </select>
         </label>
 
@@ -233,7 +234,7 @@
       const appliedTheme = AppTheme.set(theme);
       const themeName = appliedTheme === 'artistic'
         ? 'Artistic Expression'
-        : 'Mặc định';
+        : (appliedTheme === 'navy' ? 'Xanh Navy' : 'Mặc định');
 
       showNotification('Đã chuyển sang giao diện ' + themeName + '.', 'success');
     }
