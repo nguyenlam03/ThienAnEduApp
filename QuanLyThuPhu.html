@@ -1450,16 +1450,15 @@
       const finish = function () {
         const assetJobs = [
           loadCanvasImage(TUITION_BOOKS_IMAGE_DATA_URL).then(function (books) {
-            drawImageContain(ctx, books, 810, 8, 245, 215);
+            drawImageContain(ctx, books, 868, 18, 178, 158);
           }).catch(function () {
-            drawEducationBooks(ctx, 850, 25, 190, 190, primary, accent);
+            drawEducationBooks(ctx, 884, 25, 155, 150, primary, accent);
           })
         ];
         if (logoDataUrl) {
           assetJobs.push(loadCanvasImage(logoDataUrl).then(function (logo) {
             ctx.fillStyle = '#fff'; roundRect(ctx, 28, 24, 148, 148, 28); ctx.fill();
             drawImageContain(ctx, logo, 38, 34, 128, 128);
-            ctx.strokeStyle = primary; ctx.lineWidth = 2.5; roundRect(ctx, 28, 24, 148, 148, 28); ctx.stroke();
           }).catch(function () {}));
         }
         Promise.all(assetJobs).then(finalize).catch(finalize);
@@ -1478,13 +1477,13 @@
       } else {
         loadCanvasImage(qrDataUrl).then(function (image) {
           ctx.textAlign = 'center';
-          ctx.fillStyle = '#006b58'; setCardFont(ctx, 800, 36); ctx.fillText('BIDV', 454, 950);
-          ctx.fillStyle = '#e21d2d'; setCardFont(ctx, 800, 27); ctx.fillText('VIETQR', 626, 949);
-          ctx.strokeStyle = primary; ctx.lineWidth = 2.5; roundRect(ctx, 386, 960, 308, 308, 17); ctx.stroke();
-          ctx.drawImage(image, 394, 968, 292, 292);
-          ctx.fillStyle = primary; setCardFont(ctx, 700, 24); ctx.fillText('BIDV  •  8838077136', 540, 1297);
-          setCardFont(ctx, 700, 19); drawFittedText(ctx, 'HỘ KINH DOANH TRẦN NGUYÊN LÂM', 540, 1324, 640, 19, 700);
-          ctx.fillStyle = muted; setCardFont(ctx, 500, 14); ctx.fillText('Ngân hàng TMCP Đầu tư và Phát triển Việt Nam', 540, 1347);
+          ctx.fillStyle = '#006b58'; setCardFont(ctx, 800, 36); ctx.fillText('BIDV', 454, 932);
+          ctx.fillStyle = '#e21d2d'; setCardFont(ctx, 800, 27); ctx.fillText('VIETQR', 626, 931);
+          ctx.strokeStyle = primary; ctx.lineWidth = 2.5; roundRect(ctx, 386, 942, 308, 308, 17); ctx.stroke();
+          drawNavyPaymentQr(ctx, image, 394, 950, 292, primary, accent);
+          ctx.fillStyle = primary; setCardFont(ctx, 700, 24); ctx.fillText('BIDV  •  8838077136', 540, 1279);
+          setCardFont(ctx, 700, 19); drawFittedText(ctx, 'HỘ KINH DOANH TRẦN NGUYÊN LÂM', 540, 1306, 640, 19, 700);
+          ctx.fillStyle = muted; setCardFont(ctx, 500, 14); ctx.fillText('Ngân hàng TMCP Đầu tư và Phát triển Việt Nam', 540, 1329);
           finish();
         }).catch(function () { hideBusy(); showNotification('Không tải được ảnh QR thanh toán.', 'error'); });
       }
@@ -1553,10 +1552,42 @@
       drawCardIcon(ctx, icon, 122, centerY, primary);
       ctx.textAlign = 'left'; ctx.fillStyle = ink; setCardFont(ctx, 750, 29);
       ctx.fillText(label, 178, top + 59);
-      ctx.fillStyle = ink; setCardFont(ctx, 700, 30); ctx.fillText(':', 420, top + 59);
+      ctx.fillStyle = ink; setCardFont(ctx, 700, 30); ctx.fillText(':', 410, top + 59);
       ctx.fillStyle = primary;
-      const fitted = drawFittedText(ctx, value, 470, top + (prominent ? 67 : 59), prominent ? 430 : 485, prominent ? 50 : 31, prominent ? 800 : 700);
-      if (prominent) drawHeart(ctx, Math.min(962, 470 + fitted.width + 28), centerY + 3, 19, '#d99a16');
+      const fitted = drawFittedText(ctx, value, 440, top + (prominent ? 67 : 59), prominent ? 455 : 520, prominent ? 50 : 31, prominent ? 800 : 700);
+      if (prominent) drawHeart(ctx, Math.min(962, 440 + fitted.width + 28), centerY + 3, 19, '#d99a16');
+    }
+    function drawNavyPaymentQr(ctx, image, x, y, size, primary, accent) {
+      const qrCanvas = document.createElement('canvas');
+      qrCanvas.width = size; qrCanvas.height = size;
+      const qrCtx = qrCanvas.getContext('2d');
+      qrCtx.drawImage(image, 0, 0, size, size);
+      try {
+        const pixels = qrCtx.getImageData(0, 0, size, size);
+        const data = pixels.data;
+        for (let index = 0; index < data.length; index += 4) {
+          if (data[index + 3] > 0 && data[index] < 115 && data[index + 1] < 115 && data[index + 2] < 115) {
+            data[index] = 6; data[index + 1] = 38; data[index + 2] = 93;
+          }
+        }
+        qrCtx.putImageData(pixels, 0, 0);
+      } catch (error) {}
+      const center = size / 2;
+      qrCtx.fillStyle = '#fff'; qrCtx.beginPath(); qrCtx.arc(center, center, size * .105, 0, Math.PI * 2); qrCtx.fill();
+      drawApricotFlower(qrCtx, center, center, size * .095, accent);
+      ctx.drawImage(qrCanvas, x, y, size, size);
+    }
+    function drawApricotFlower(ctx, x, y, radius, color) {
+      ctx.save(); ctx.translate(x, y);
+      for (let index = 0; index < 5; index++) {
+        ctx.save(); ctx.rotate(index * Math.PI * 2 / 5);
+        ctx.fillStyle = color; ctx.beginPath();
+        ctx.ellipse(0, -radius * .48, radius * .29, radius * .54, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+      ctx.fillStyle = '#f6c945'; ctx.beginPath(); ctx.arc(0, 0, radius * .25, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#fff4c2'; ctx.lineWidth = Math.max(1.5, radius * .07); ctx.beginPath(); ctx.arc(0, 0, radius * .14, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
     }
     function drawCardIcon(ctx, type, x, y, primary) {
       ctx.save(); ctx.translate(x, y);
