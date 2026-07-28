@@ -564,6 +564,7 @@
     const APP_CACHE_ENABLED = <?!= JSON.stringify(cacheEnabled) ?>;
     const APP_BRAND_NAME = <?!= JSON.stringify(brandName) ?>;
     const APP_BRAND_TAGLINE = <?!= JSON.stringify(brandTagline) ?>;
+    const TUITION_BOOKS_IMAGE_DATA_URL = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(<?!= JSON.stringify(include('TuitionBooksAsset')) ?>);
 
     let feeStudents = [];
     let currentMonthText = '';
@@ -1382,13 +1383,13 @@
       pageGradient.addColorStop(0, 'rgba(255,255,255,0)');
       pageGradient.addColorStop(1, 'rgba(6,38,93,.025)');
       ctx.fillStyle = pageGradient; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = primary; ctx.lineWidth = 3; ctx.strokeRect(1.5, 1.5, 1077, 1437);
 
-      drawDefaultBrandMark(ctx, 56, 34, 138, primary, accent);
+      drawDefaultBrandMark(ctx, 28, 24, 148, primary, accent);
       ctx.fillStyle = primary; ctx.textAlign = 'left';
-      drawFittedText(ctx, String(APP_BRAND_NAME || 'Thiên Ân Education').toUpperCase(), 220, 91, 570, 39, 700);
+      drawFittedText(ctx, String(APP_BRAND_NAME || 'Thiên Ân Education').toUpperCase(), 205, 87, 570, 39, 700);
       ctx.fillStyle = accent; setCardFont(ctx, 500, 25, true);
-      drawFittedText(ctx, APP_BRAND_TAGLINE || 'Khởi nguồn tri thức – Vững bước tương lai', 220, 139, 590, 25, 500, true);
-      drawEducationBooks(ctx, 870, 25, 170, 178, primary, accent);
+      drawFittedText(ctx, APP_BRAND_TAGLINE || 'Khởi nguồn tri thức – Vững bước tương lai', 205, 137, 600, 25, 500, true);
 
       ctx.fillStyle = primary; ctx.textAlign = 'center';
       drawFittedText(ctx, title, 540, 283, 850, 62, 800);
@@ -1400,14 +1401,14 @@
       ctx.fillText('THÁNG ' + month, 540, 365);
 
       if (!paid) {
-        drawHeart(ctx, 238, 428, 18, accent);
-        drawHeart(ctx, 842, 428, 18, accent);
+        drawHeart(ctx, 207, 428, 23, accent);
+        drawHeart(ctx, 873, 428, 23, accent);
       }
       ctx.fillStyle = primary; setCardScriptFont(ctx, paid ? 31 : 35); ctx.textAlign = 'center';
       ctx.fillText(paid ? 'Xác nhận đã ghi nhận thanh toán' : 'Kính gửi Quý phụ huynh học sinh!', 540, 438);
 
-      ctx.fillStyle = '#fff'; roundRect(ctx, 60, 470, 960, 376, 30); ctx.fill();
-      ctx.strokeStyle = primary; ctx.lineWidth = 3; roundRect(ctx, 60, 470, 960, 376, 30); ctx.stroke();
+      ctx.fillStyle = '#fff'; roundRect(ctx, 52, 470, 976, 376, 30); ctx.fill();
+      ctx.strokeStyle = primary; ctx.lineWidth = 3; roundRect(ctx, 52, 470, 976, 376, 30); ctx.stroke();
       drawFeeInfoRow(ctx, 'student', 'HỌC SINH', item.hoTen || '', 470, primary, ink, false);
       drawFeeInfoRow(ctx, 'class', 'LỚP', classText, 564, primary, ink, false);
       drawFeeInfoRow(ctx, 'money', 'SỐ TIỀN', formatMoneyForCard(amount), 658, primary, ink, true);
@@ -1417,20 +1418,22 @@
         ctx.beginPath(); ctx.moveTo(104, y); ctx.lineTo(976, y); ctx.stroke();
       });
 
-      ctx.fillStyle = primary; roundRect(ctx, 130, 872, 820, 48, 14); ctx.fill();
+      ctx.fillStyle = primary; roundRect(ctx, 75, 866, 930, 50, 14); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; setCardFont(ctx, 650, 18);
-      drawFittedText(ctx, paid ? 'ĐÃ GHI NHẬN THANH TOÁN HỌC PHÍ' : 'Phụ huynh vui lòng quét mã QR hoặc đóng học phí trực tiếp tại Trung tâm', 540, 904, 780, 18, 650);
+      drawFittedText(ctx, paid ? 'ĐÃ GHI NHẬN THANH TOÁN HỌC PHÍ' : 'Phụ huynh vui lòng quét mã QR hoặc đóng học phí trực tiếp tại Trung tâm', 540, 899, 880, 19, 650);
 
       const finalize = function () {
         ctx.fillStyle = primary; setCardScriptFont(ctx, 31); ctx.textAlign = 'center';
-        ctx.fillText('Chân thành cảm ơn Quý phụ huynh!', 540, 1349);
-        ctx.fillStyle = primary; ctx.fillRect(0, 1372, 1080, 68);
-        ctx.fillStyle = accent; ctx.fillRect(0, 1368, 1080, 4);
+        ctx.fillText('Chân thành cảm ơn Quý phụ huynh!', 540, 1370);
+        drawHeart(ctx, 178, 1362, 20, accent);
+        drawHeart(ctx, 902, 1362, 20, accent);
+        ctx.fillStyle = primary; ctx.fillRect(0, 1388, 1080, 52);
+        ctx.fillStyle = accent; ctx.fillRect(0, 1384, 1080, 4);
         ctx.textAlign = 'left'; setCardFont(ctx, 750, 22);
-        drawFittedText(ctx, String(APP_BRAND_NAME || 'Thiên Ân Education').toUpperCase(), 92, 1415, 335, 22, 750);
-        ctx.fillStyle = '#fff'; ctx.fillRect(447, 1391, 3, 28);
+        drawFittedText(ctx, String(APP_BRAND_NAME || 'Thiên Ân Education').toUpperCase(), 78, 1423, 350, 20, 750);
+        ctx.fillStyle = '#fff'; ctx.fillRect(447, 1400, 3, 26);
         ctx.fillStyle = accent; setCardFont(ctx, 700, 16);
-        drawFittedText(ctx, String(APP_BRAND_TAGLINE || 'Khởi nguồn tri thức – Vững bước tương lai').toUpperCase(), 480, 1413, 520, 16, 700);
+        drawFittedText(ctx, String(APP_BRAND_TAGLINE || 'Khởi nguồn tri thức – Vững bước tương lai').toUpperCase(), 480, 1422, 520, 15, 700);
         currentFeeCardDataUrl = canvas.toDataURL('image/png');
         currentFeeCardFileName = filePrefix + '-' + safeFileName(item.hoTen || item.maHocSinh) + '-' + month.replace('/', '-') + '.png';
         document.getElementById('feeCardPreview').src = currentFeeCardDataUrl;
@@ -1445,13 +1448,21 @@
         hideBusy();
       };
       const finish = function () {
-        if (!logoDataUrl) { finalize(); return; }
-        loadCanvasImage(logoDataUrl).then(function (logo) {
-          ctx.fillStyle = '#fff'; roundRect(ctx, 56, 34, 138, 138, 28); ctx.fill();
-          drawImageContain(ctx, logo, 66, 44, 118, 118);
-          ctx.strokeStyle = primary; ctx.lineWidth = 2.5; roundRect(ctx, 56, 34, 138, 138, 28); ctx.stroke();
-          finalize();
-        }).catch(finalize);
+        const assetJobs = [
+          loadCanvasImage(TUITION_BOOKS_IMAGE_DATA_URL).then(function (books) {
+            drawImageContain(ctx, books, 810, 8, 245, 215);
+          }).catch(function () {
+            drawEducationBooks(ctx, 850, 25, 190, 190, primary, accent);
+          })
+        ];
+        if (logoDataUrl) {
+          assetJobs.push(loadCanvasImage(logoDataUrl).then(function (logo) {
+            ctx.fillStyle = '#fff'; roundRect(ctx, 28, 24, 148, 148, 28); ctx.fill();
+            drawImageContain(ctx, logo, 38, 34, 128, 128);
+            ctx.strokeStyle = primary; ctx.lineWidth = 2.5; roundRect(ctx, 28, 24, 148, 148, 28); ctx.stroke();
+          }).catch(function () {}));
+        }
+        Promise.all(assetJobs).then(finalize).catch(finalize);
       };
 
       if (paid) {
@@ -1467,13 +1478,13 @@
       } else {
         loadCanvasImage(qrDataUrl).then(function (image) {
           ctx.textAlign = 'center';
-          ctx.fillStyle = '#006b58'; setCardFont(ctx, 800, 34); ctx.fillText('BIDV', 462, 960);
-          ctx.fillStyle = '#e21d2d'; setCardFont(ctx, 800, 25); ctx.fillText('VIETQR', 618, 959);
-          ctx.strokeStyle = primary; ctx.lineWidth = 2; roundRect(ctx, 418, 974, 244, 244, 20); ctx.stroke();
-          ctx.drawImage(image, 429, 985, 222, 222);
-          ctx.fillStyle = primary; setCardFont(ctx, 700, 24); ctx.fillText('BIDV  •  8838077136', 540, 1250);
-          setCardFont(ctx, 700, 19); ctx.fillText('HỘ KINH DOANH TRẦN NGUYÊN LÂM', 540, 1280);
-          ctx.fillStyle = muted; setCardFont(ctx, 500, 15); ctx.fillText('Ngân hàng TMCP Đầu tư và Phát triển Việt Nam', 540, 1307);
+          ctx.fillStyle = '#006b58'; setCardFont(ctx, 800, 36); ctx.fillText('BIDV', 454, 950);
+          ctx.fillStyle = '#e21d2d'; setCardFont(ctx, 800, 27); ctx.fillText('VIETQR', 626, 949);
+          ctx.strokeStyle = primary; ctx.lineWidth = 2.5; roundRect(ctx, 386, 960, 308, 308, 17); ctx.stroke();
+          ctx.drawImage(image, 394, 968, 292, 292);
+          ctx.fillStyle = primary; setCardFont(ctx, 700, 24); ctx.fillText('BIDV  •  8838077136', 540, 1297);
+          setCardFont(ctx, 700, 19); drawFittedText(ctx, 'HỘ KINH DOANH TRẦN NGUYÊN LÂM', 540, 1324, 640, 19, 700);
+          ctx.fillStyle = muted; setCardFont(ctx, 500, 14); ctx.fillText('Ngân hàng TMCP Đầu tư và Phát triển Việt Nam', 540, 1347);
           finish();
         }).catch(function () { hideBusy(); showNotification('Không tải được ảnh QR thanh toán.', 'error'); });
       }
@@ -1495,12 +1506,15 @@
         size--;
       } while (size > 12);
       ctx.fillText(value, x, y);
+      return { width: ctx.measureText(value).width, size: size };
     }
     function drawHeart(ctx, x, y, size, color) {
       ctx.save(); ctx.translate(x, y); ctx.scale(size / 20, size / 20);
-      ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(0, 7);
-      ctx.bezierCurveTo(-19, -5, -10, -18, 0, -8);
-      ctx.bezierCurveTo(10, -18, 19, -5, 0, 12); ctx.fill(); ctx.restore();
+      ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(0, 14);
+      ctx.bezierCurveTo(-4, 8, -18, 1, -18, -8);
+      ctx.bezierCurveTo(-18, -18, -5, -21, 0, -12);
+      ctx.bezierCurveTo(5, -21, 18, -18, 18, -8);
+      ctx.bezierCurveTo(18, 1, 4, 8, 0, 14); ctx.fill(); ctx.restore();
     }
     function drawDefaultBrandMark(ctx, x, y, size, primary, accent) {
       ctx.fillStyle = '#fff'; roundRect(ctx, x, y, size, size, 28); ctx.fill();
@@ -1541,8 +1555,8 @@
       ctx.fillText(label, 178, top + 59);
       ctx.fillStyle = ink; setCardFont(ctx, 700, 30); ctx.fillText(':', 420, top + 59);
       ctx.fillStyle = primary;
-      drawFittedText(ctx, value, 470, top + (prominent ? 67 : 59), 485, prominent ? 50 : 31, prominent ? 800 : 700);
-      if (prominent) drawHeart(ctx, 972, centerY + 2, 15, '#d99a16');
+      const fitted = drawFittedText(ctx, value, 470, top + (prominent ? 67 : 59), prominent ? 430 : 485, prominent ? 50 : 31, prominent ? 800 : 700);
+      if (prominent) drawHeart(ctx, Math.min(962, 470 + fitted.width + 28), centerY + 3, 19, '#d99a16');
     }
     function drawCardIcon(ctx, type, x, y, primary) {
       ctx.save(); ctx.translate(x, y);
