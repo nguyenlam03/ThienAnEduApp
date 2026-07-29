@@ -1716,10 +1716,10 @@
       ctx.fillStyle = '#fff'; roundRect(ctx, 52, 470, 976, 376, 30); ctx.fill();
       ctx.strokeStyle = primary; ctx.lineWidth = 3; roundRect(ctx, 52, 470, 976, 376, 30); ctx.stroke();
       drawFeeInfoRow(ctx, 'student', 'HỌC SINH', item.hoTen || '', 470, primary, ink, false);
-      drawFeeInfoRow(ctx, 'class', 'LỚP', classText, 564, primary, ink, false);
-      drawFeeInfoRow(ctx, 'money', 'SỐ TIỀN', formatMoneyForCard(amount), 658, primary, ink, true);
-      drawFeeContentRow(ctx, item, month, paid, 752, primary, ink);
-      [564, 658, 752].forEach(function(y) {
+      drawFeeInfoRow(ctx, 'class', 'LỚP', classText, 552, primary, ink, false);
+      drawFeeInfoRow(ctx, 'money', 'SỐ TIỀN', formatMoneyForCard(amount), 634, primary, ink, true);
+      drawFeeContentRow(ctx, item, month, paid, 728, primary, ink);
+      [552, 634, 728].forEach(function(y) {
         ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.moveTo(104, y); ctx.lineTo(976, y); ctx.stroke();
       });
@@ -1853,38 +1853,22 @@
         drawFittedText(ctx, paid ? 'Đã đóng học phí tháng ' + month : 'Học phí cần đóng tháng ' + month, 440, top + 59, 520, 29, 700);
         return;
       }
-      const parts = [{ tenKhoanThu: 'Học phí', soTien: baseFee }].concat(extraItems);
-      const text = parts.map(function (entry) {
-        return entry.tenKhoanThu + ': ' + formatMoneyForCard(entry.soTien);
-      }).join('  •  ');
-      let size = 18;
-      let lines = [];
-      while (size >= 12) {
-        setCardFont(ctx, 650, size);
-        lines = wrapCardText(ctx, text, 520);
-        if (lines.length <= 4) break;
-        size--;
+      let entries = [{ tenKhoanThu: 'Học phí', soTien: baseFee }].concat(extraItems);
+      if (entries.length > 5) {
+        const remaining = entries.slice(4);
+        entries = entries.slice(0, 4).concat([{
+          tenKhoanThu: 'Các khoản khác (' + remaining.length + ')',
+          soTien: remaining.reduce(function (sum, entry) { return sum + Number(entry.soTien || 0); }, 0)
+        }]);
       }
-      const lineHeight = Math.max(15, size + 3);
-      lines.slice(0, 4).forEach(function (line, index) {
-        ctx.fillText(line, 440, top + 28 + index * lineHeight);
+      const count = entries.length;
+      const preferredSize = count <= 2 ? 24 : (count === 3 ? 21 : (count === 4 ? 19 : 17));
+      const lineHeight = count <= 2 ? 31 : (count === 3 ? 26 : (count === 4 ? 22 : 19));
+      const firstBaseline = top + 59 - ((count - 1) * lineHeight / 2);
+      entries.forEach(function (entry, index) {
+        const text = entry.tenKhoanThu + ': ' + formatMoneyForCard(entry.soTien);
+        drawFittedText(ctx, text, 440, firstBaseline + index * lineHeight, 520, preferredSize, 700);
       });
-    }
-    function wrapCardText(ctx, text, maxWidth) {
-      const words = String(text || '').split(/\s+/);
-      const lines = [];
-      let current = '';
-      words.forEach(function (word) {
-        const candidate = current ? current + ' ' + word : word;
-        if (current && ctx.measureText(candidate).width > maxWidth) {
-          lines.push(current);
-          current = word;
-        } else {
-          current = candidate;
-        }
-      });
-      if (current) lines.push(current);
-      return lines;
     }
     function drawNavyPaymentQr(ctx, image, x, y, size, primary, accent) {
       const qrCanvas = document.createElement('canvas');
