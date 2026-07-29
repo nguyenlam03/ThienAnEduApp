@@ -12,6 +12,7 @@ const SHEET_NGUONTIEN = 'NguonTien';
 const SHEET_DOITUONG_THUCHI = 'DoiTuongThuChi';
 const SHEET_DIEMDANH = 'DiemDanh';
 const SHEET_CAUHINH = 'CauHinh';
+const SHEET_DANHMUC_KHOANTHU_PHI = 'DanhMucKhoanThuPhi';
 const CONFIG_NOTIFICATION_DURATION = 'NOTIFICATION_DURATION_SECONDS';
 const CONFIG_BRAND_NAME = 'APP_BRAND_NAME';
 const CONFIG_BRAND_TAGLINE = 'APP_BRAND_TAGLINE';
@@ -113,6 +114,7 @@ function setupDatabase() {
   ensureSheet_(ss, SHEET_NGUONTIEN, getNguonTienHeaders_());
   ensureSheet_(ss, SHEET_DOITUONG_THUCHI, getDoiTuongThuChiHeaders_());
   ensureSheet_(ss, SHEET_DIEMDANH, getDiemDanhHeaders_());
+  ensureDanhMucKhoanThuPhiSheet_();
   ensureAppConfigSheet_();
 
   // Dữ liệu thu phí được lưu theo từng sheet tháng, ví dụ: Thang07.2026.
@@ -1388,6 +1390,140 @@ function hasMappingForKyHoc_(maKyHoc) {
    QUẢN LÝ THU PHÍ THEO SHEET THÁNG
 ========================================================= */
 
+function getDanhMucKhoanThuPhiHeaders_() {
+  return [
+    'MaKhoanThu',
+    'TenKhoanThu',
+    'SoTienMacDinh',
+    'ThuTu',
+    'TrangThai',
+    'CreatedAt',
+    'UpdatedAt'
+  ];
+}
+
+function ensureDanhMucKhoanThuPhiSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ensureSheet_(ss, SHEET_DANHMUC_KHOANTHU_PHI, getDanhMucKhoanThuPhiHeaders_());
+  if (sheet.getLastRow() < 2) {
+    const now = new Date();
+    sheet.getRange(2, 1, 2, getDanhMucKhoanThuPhiHeaders_().length).setValues([
+      ['KTP_DUNG_CU', 'Dụng cụ học tập', 0, 1, 'ACTIVE', now, now],
+      ['KTP_CSVC', 'Phụ phí CSVC', 0, 2, 'ACTIVE', now, now]
+    ]);
+  }
+  return sheet;
+}
+
+function getDanhMucKhoanThuPhiList_() {
+  const sheet = ensureDanhMucKhoanThuPhiSheet_();
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 2) return [];
+  const headers = values[0].map(header => String(header || '').trim());
+  const index = buildHeaderIndex_(headers);
+  return values.slice(1).map(row => ({
+    maKhoanThu: String(row[index.MaKhoanThu] || '').trim(),
+    tenKhoanThu: String(row[index.TenKhoanThu] || '').trim(),
+    soTienMacDinh: number_(row[index.SoTienMacDinh]),
+    thuTu: number_(row[index.ThuTu]),
+    trangThai: String(row[index.TrangThai] || 'ACTIVE').trim().toUpperCase()
+  })).filter(item => item.maKhoanThu && item.tenKhoanThu)
+    .sort((a, b) => a.thuTu - b.thuTu || a.tenKhoanThu.localeCompare(b.tenKhoanThu, 'vi'));
+}
+
+function getDanhMucKhoanThuPhi(token) {
+  requireSession_(token);
+  return jsonResponse_({ categories: getDanhMucKhoanThuPhiList_() });
+}
+
+function saveDanhMucKhoanThuPhi(token, data) {
+  requireSession_(token);
+  data = data || {};
+  const inputId = String(data.maKhoanThu || '').trim().toUpperCase();
+  const tenKhoanThu = String(data.tenKhoanThu || '').trim();
+  const soTienMacDinh = number_(data.soTienMacDinh);
+  const thuTu = Math.max(0, number_(data.thuTu));
+  const trangThai = String(data.trangThai || 'ACTIVE').trim().toUpperCase() === 'INACTIVE'
+    ? 'INACTIVE'
+    : 'ACTIVE';
+  if (!tenKhoanThu) throw new Error('Vui lòng nhập tên khoản thu.');
+  if (soTienMacDinh < 0) throw new Error('Số tiền mặc định không được nhỏ hơn 0.');
+
+  const sheet = ensureDanhMucKhoanThuPhiSheet_();
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('Hệ thống đang cập nhật danh mục khoản thu. Vui lòng thử lại.');
+  let savedId = inputId;
+  try {
+    const values = sheet.getDataRange().getValues();
+    const headers = values[0].map(header => String(header || '').trim());
+    const index = buildHeaderIndex_(headers);
+    let targetIndex = -1;
+    for (let rowIndex = 1; rowIndex < values.length; rowIndex++) {
+      const rowId = String(values[rowIndex][index.MaKhoanThu] || '').trim().toUpperCase();
+      const rowName = String(values[rowIndex][index.TenKhoanThu] || '').trim().toLocaleLowerCase('vi');
+      if (inputId && rowId === inputId) targetIndex = rowIndex;
+      if (rowName === tenKhoanThu.toLocaleLowerCase('vi') && rowId !== inputId) {
+        throw new Error('Tên khoản thu đã tồn tại.');
+      }
+    }
+    savedId = inputId || ('KTP_' + Utilities.getUuid().slice(0, 10).toUpperCase());
+    const now = new Date();
+    const row = targetIndex >= 0 ? values[targetIndex].slice() : new Array(headers.length).fill('');
+    row[index.MaKhoanThu] = savedId;
+    row[index.TenKhoanThu] = tenKhoanThu;
+    row[index.SoTienMacDinh] = soTienMacDinh;
+    row[index.ThuTu] = thuTu;
+    row[index.TrangThai] = trangThai;
+    row[index.CreatedAt] = targetIndex >= 0 ? (row[index.CreatedAt] || now) : now;
+    row[index.UpdatedAt] = now;
+    if (targetIndex >= 0) sheet.getRange(targetIndex + 1, 1, 1, headers.length).setValues([row]);
+    else sheet.getRange(sheet.getLastRow() + 1, 1, 1, headers.length).setValues([row]);
+  } finally {
+    lock.releaseLock();
+  }
+  bumpDataVersion_();
+  return jsonResponse_({
+    success: true,
+    maKhoanThu: savedId,
+    categories: getDanhMucKhoanThuPhiList_(),
+    message: inputId ? 'Đã cập nhật khoản thu.' : 'Đã thêm khoản thu mới.'
+  });
+}
+
+function parseKhoanThuThem_(value) {
+  if (!value) return [];
+  try {
+    const parsed = Array.isArray(value) ? value : JSON.parse(String(value));
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(item => ({
+      maKhoanThu: String(item.maKhoanThu || '').trim(),
+      tenKhoanThu: String(item.tenKhoanThu || '').trim(),
+      soTien: Math.max(0, number_(item.soTien))
+    })).filter(item => item.maKhoanThu && item.tenKhoanThu && item.soTien > 0);
+  } catch (error) {
+    return [];
+  }
+}
+
+function normalizeKhoanThuThemInput_(value) {
+  const input = Array.isArray(value) ? value : parseKhoanThuThem_(value);
+  const categoryMap = getDanhMucKhoanThuPhiList_().reduce((map, item) => {
+    map[item.maKhoanThu] = item;
+    return map;
+  }, {});
+  const seen = {};
+  return input.map(item => {
+    const code = String(item.maKhoanThu || '').trim();
+    const category = categoryMap[code];
+    const amount = number_(item.soTien);
+    if (!category) throw new Error('Khoản thu không tồn tại trong danh mục: ' + code + '.');
+    if (amount < 0) throw new Error('Số tiền khoản thu không được nhỏ hơn 0.');
+    if (seen[code]) throw new Error('Khoản thu bị chọn trùng: ' + category.tenKhoanThu + '.');
+    seen[code] = true;
+    return { maKhoanThu: code, tenKhoanThu: category.tenKhoanThu, soTien: amount };
+  }).filter(item => item.soTien > 0);
+}
+
 /**
  * Trả dữ liệu thu phí của một tháng.
  *
@@ -1404,7 +1540,7 @@ function getQuanLyThuPhiData(token, yearMonth) {
   ensureThuChiSheets_(session.maKyHoc);
 
   const cacheKey = buildCacheKey_(
-    'thuphi_snapshot_v3_' + session.maKyHoc + '_' + ym.year + '_' + ym.month
+    'thuphi_snapshot_v4_' + session.maKyHoc + '_' + ym.year + '_' + ym.month
   );
 
   const cached = cacheGetString_(cacheKey);
@@ -1418,6 +1554,7 @@ function getQuanLyThuPhiData(token, yearMonth) {
 
   const sources = getNguonTienList_(session.maKyHoc)
     .filter(item => item.trangThai === 'ACTIVE');
+  const feeCategories = getDanhMucKhoanThuPhiList_();
 
   const rows = snapshot.rows
     .filter(row => {
@@ -1444,6 +1581,12 @@ function getQuanLyThuPhiData(token, yearMonth) {
         String(row.TrangThaiThu || '').trim() === 'Tạm nghỉ';
       const rowHocPhi = number_(row.HocPhi);
       const hocPhiGoc = number_(row.HocPhiGoc) || rowHocPhi;
+      const khoanThuThem = parseKhoanThuThem_(row.KhoanThuThemJson);
+      const tongKhoanThuThem = khoanThuThem.reduce((sum, item) => sum + number_(item.soTien), 0);
+      const hasStoredBaseFee = row.HocPhiCoBan !== undefined && String(row.HocPhiCoBan).trim() !== '';
+      const hocPhiCoBan = hasStoredBaseFee
+        ? number_(row.HocPhiCoBan)
+        : Math.max(hocPhiGoc - tongKhoanThuThem, 0);
       const hocPhi = tamNghi ? 0 : rowHocPhi;
       const daThu = tamNghi ? 0 : number_(row.SoTienDaThu);
       const conLai = tamNghi ? 0 : Math.max(hocPhi - daThu, 0);
@@ -1467,6 +1610,9 @@ function getQuanLyThuPhiData(token, yearMonth) {
         sdtPhuHuynh: String(row.SDTPhuHuynh || '').trim(),
 
         hocPhiGoc: hocPhiGoc,
+        hocPhiCoBan: hocPhiCoBan,
+        khoanThuThem: khoanThuThem,
+        tongKhoanThuThem: tongKhoanThuThem,
         hocPhi: hocPhi,
         soTienDaThu: daThu,
         conLai: conLai,
@@ -1526,6 +1672,7 @@ function getQuanLyThuPhiData(token, yearMonth) {
     snapshotCreated: snapshot.created,
     snapshotLocked: true,
     sources: sources,
+    feeCategories: feeCategories,
 
     summary: {
       totalStudents: totalStudents,
@@ -1608,7 +1755,10 @@ function saveThuPhiHocSinh(token, data) {
 
   const maHocSinh = String(data.maHocSinh || '').trim();
   const yearMonth = String(data.yearMonth || '').trim();
-  const hocPhiInput = number_(data.hocPhi);
+  const hocPhiCoBanInput = number_(data.hocPhiCoBan !== undefined ? data.hocPhiCoBan : data.hocPhi);
+  const khoanThuThemInput = normalizeKhoanThuThemInput_(data.khoanThuThem || []);
+  const tongKhoanThuThemInput = khoanThuThemInput.reduce((sum, item) => sum + number_(item.soTien), 0);
+  const hocPhiInput = hocPhiCoBanInput + tongKhoanThuThemInput;
   const soTienDaThuInput = number_(data.soTienDaThu);
   const tamNghi = toBoolean_(data.tamNghi);
   const ngayThuText = String(data.ngayThu || '').trim();
@@ -1623,8 +1773,8 @@ function saveThuPhiHocSinh(token, data) {
     throw new Error('Vui lòng chọn tháng thu phí.');
   }
 
-  if (!tamNghi && hocPhiInput < 0) {
-    throw new Error('Học phí tháng không được nhỏ hơn 0.');
+  if (!tamNghi && hocPhiCoBanInput < 0) {
+    throw new Error('Học phí cơ bản không được nhỏ hơn 0.');
   }
 
   if (!tamNghi && soTienDaThuInput < 0) {
@@ -1676,6 +1826,9 @@ function saveThuPhiHocSinh(token, data) {
       'MaKyHoc',
       'HocPhi',
       'HocPhiGoc',
+      'HocPhiCoBan',
+      'KhoanThuThemJson',
+      'TongKhoanThuThem',
       'TamNghi',
       'SoTienDaThu',
       'DaDong',
@@ -1724,7 +1877,10 @@ function saveThuPhiHocSinh(token, data) {
     const existingSoPhieu = String(row[headerIndex.SoPhieu] || '').trim();
 
     if (tamNghi) {
-      row[headerIndex.HocPhiGoc] = oldHocPhiGoc;
+      row[headerIndex.HocPhiGoc] = hocPhiInput || oldHocPhiGoc;
+      row[headerIndex.HocPhiCoBan] = hocPhiCoBanInput;
+      row[headerIndex.KhoanThuThemJson] = JSON.stringify(khoanThuThemInput);
+      row[headerIndex.TongKhoanThuThem] = tongKhoanThuThemInput;
       row[headerIndex.HocPhi] = 0;
       row[headerIndex.TamNghi] = 'Có';
       row[headerIndex.SoTienDaThu] = 0;
@@ -1741,6 +1897,9 @@ function saveThuPhiHocSinh(token, data) {
       const conLai = Math.max(hocPhi - soTienDaThu, 0);
 
       row[headerIndex.HocPhiGoc] = hocPhi;
+      row[headerIndex.HocPhiCoBan] = hocPhiCoBanInput;
+      row[headerIndex.KhoanThuThemJson] = JSON.stringify(khoanThuThemInput);
+      row[headerIndex.TongKhoanThuThem] = tongKhoanThuThemInput;
       row[headerIndex.HocPhi] = hocPhi;
       row[headerIndex.TamNghi] = 'Không';
       row[headerIndex.SoTienDaThu] = soTienDaThu;
@@ -1786,6 +1945,10 @@ function saveThuPhiHocSinh(token, data) {
   return jsonResponse_({
     success: true,
     soPhieu: savedSoPhieu,
+    hocPhi: hocPhiInput,
+    hocPhiCoBan: hocPhiCoBanInput,
+    khoanThuThem: khoanThuThemInput,
+    tongKhoanThuThem: tongKhoanThuThemInput,
     message: tamNghi
       ? 'Đã cập nhật trạng thái tạm nghỉ.'
       : (soTienDaThuInput > 0
@@ -1864,6 +2027,9 @@ function ensureThuPhiMonthSnapshot_(maKyHoc, year, month, options) {
         NgayVao: toDateOnly_(student.ngayVaoRaw) || student.ngayVaoRaw || '',
         HocPhi: hocPhi,
         HocPhiGoc: hocPhi,
+        HocPhiCoBan: hocPhi,
+        KhoanThuThemJson: '[]',
+        TongKhoanThuThem: 0,
         TamNghi: 'Không',
         SoTienDaThu: 0,
         DaDong: 'Không',
@@ -1966,6 +2132,11 @@ function syncHocSinhToThuPhiMonth_(maKyHoc, yearMonth, student, hocPhiValue) {
     const newHocPhi = number_(hocPhiValue);
     const soTienDaThu = number_(row[index.SoTienDaThu]);
     const tamNghi = toBoolean_(row[index.TamNghi]);
+    const savedExtraItems = index.KhoanThuThemJson !== undefined
+      ? parseKhoanThuThem_(row[index.KhoanThuThemJson])
+      : [];
+    const savedExtraTotal = savedExtraItems.reduce((sum, item) => sum + number_(item.soTien), 0);
+    const newTotalFee = newHocPhi + savedExtraTotal;
 
     row[index.SapXep] = number_(student.SapXep);
     row[index.Khoi] = String(student.Khoi || '').trim();
@@ -1977,13 +2148,15 @@ function syncHocSinhToThuPhiMonth_(maKyHoc, yearMonth, student, hocPhiValue) {
     row[index.GioiTinh] = String(student.GioiTinh || '').trim();
     row[index.SDTPhuHuynh] = String(student.SDTPhuHuynh || '').trim();
     row[index.NgayVao] = student.NgayVao || student.NgaySinh || '';
-    row[index.HocPhiGoc] = newHocPhi;
-    row[index.HocPhi] = tamNghi ? 0 : newHocPhi;
-    row[index.ConLai] = tamNghi ? 0 : Math.max(newHocPhi - soTienDaThu, 0);
+    row[index.HocPhiGoc] = newTotalFee;
+    row[index.HocPhi] = tamNghi ? 0 : newTotalFee;
+    if (index.HocPhiCoBan !== undefined) row[index.HocPhiCoBan] = newHocPhi;
+    if (index.TongKhoanThuThem !== undefined) row[index.TongKhoanThuThem] = savedExtraTotal;
+    row[index.ConLai] = tamNghi ? 0 : Math.max(newTotalFee - soTienDaThu, 0);
     row[index.DaDong] = !tamNghi && soTienDaThu > 0 ? 'Có' : 'Không';
     row[index.TrangThaiThu] = tamNghi
       ? 'Tạm nghỉ'
-      : getTrangThaiThuPhi_(newHocPhi, soTienDaThu);
+      : getTrangThaiThuPhi_(newTotalFee, soTienDaThu);
     row[index.TrangThai] = 'ACTIVE';
     row[index.UpdatedAt] = new Date();
 
@@ -2054,6 +2227,9 @@ function addHocSinhToThuPhiMonth_(maKyHoc, yearMonth, maHocSinh) {
       NgayVao: toDateOnly_(student.ngayVaoRaw) || student.ngayVaoRaw || '',
       HocPhi: hocPhi,
       HocPhiGoc: hocPhi,
+      HocPhiCoBan: hocPhi,
+      KhoanThuThemJson: '[]',
+      TongKhoanThuThem: 0,
       TamNghi: 'Không',
       SoTienDaThu: 0,
       DaDong: 'Không',
@@ -2256,6 +2432,9 @@ function getThuPhiMonthHeaders_() {
     'NgayVao',
     'HocPhi',
     'HocPhiGoc',
+    'HocPhiCoBan',
+    'KhoanThuThemJson',
+    'TongKhoanThuThem',
     'TamNghi',
     'SoTienDaThu',
     'DaDong',
