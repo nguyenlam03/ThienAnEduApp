@@ -1755,6 +1755,8 @@ function saveThuPhiHocSinh(token, data) {
 
   const maHocSinh = String(data.maHocSinh || '').trim();
   const yearMonth = String(data.yearMonth || '').trim();
+  const cheDoLuu = String(data.cheDoLuu || 'THU_PHI').trim().toUpperCase();
+  const chiCapNhatKhoanThu = cheDoLuu === 'CAP_NHAT_KHOAN_THU';
   const hocPhiCoBanInput = number_(data.hocPhiCoBan !== undefined ? data.hocPhiCoBan : data.hocPhi);
   const khoanThuThemInput = normalizeKhoanThuThemInput_(data.khoanThuThem || []);
   const tongKhoanThuThemInput = khoanThuThemInput.reduce((sum, item) => sum + number_(item.soTien), 0);
@@ -1777,15 +1779,19 @@ function saveThuPhiHocSinh(token, data) {
     throw new Error('Học phí cơ bản không được nhỏ hơn 0.');
   }
 
-  if (!tamNghi && soTienDaThuInput < 0) {
+  if (!chiCapNhatKhoanThu && !tamNghi && soTienDaThuInput < 0) {
     throw new Error('Số tiền đã thu không được nhỏ hơn 0.');
   }
 
-  if (!tamNghi && soTienDaThuInput > 0 && !ngayThuText) {
+  if (!chiCapNhatKhoanThu && !tamNghi && soTienDaThuInput <= 0) {
+    throw new Error('Vui lòng nhập số tiền cần ghi nhận thu.');
+  }
+
+  if (!chiCapNhatKhoanThu && !tamNghi && soTienDaThuInput > 0 && !ngayThuText) {
     throw new Error('Vui lòng nhập ngày đóng học phí.');
   }
 
-  if (!tamNghi && soTienDaThuInput > 0 && !getNguonTienDefinition_(maNguonTien)) {
+  if (!chiCapNhatKhoanThu && !tamNghi && soTienDaThuInput > 0 && !getNguonTienDefinition_(maNguonTien)) {
     throw new Error('Vui lòng chọn nguồn nhận tiền học phí.');
   }
 
@@ -1876,7 +1882,20 @@ function saveThuPhiHocSinh(token, data) {
     const oldHocPhiGoc = number_(row[headerIndex.HocPhiGoc]) || oldHocPhi;
     const existingSoPhieu = String(row[headerIndex.SoPhieu] || '').trim();
 
-    if (tamNghi) {
+    if (chiCapNhatKhoanThu && !tamNghi) {
+      const soTienDaThuHienTai = number_(row[headerIndex.SoTienDaThu]);
+      const conLai = Math.max(hocPhiInput - soTienDaThuHienTai, 0);
+
+      row[headerIndex.HocPhiGoc] = hocPhiInput;
+      row[headerIndex.HocPhiCoBan] = hocPhiCoBanInput;
+      row[headerIndex.KhoanThuThemJson] = JSON.stringify(khoanThuThemInput);
+      row[headerIndex.TongKhoanThuThem] = tongKhoanThuThemInput;
+      row[headerIndex.HocPhi] = hocPhiInput;
+      row[headerIndex.TamNghi] = 'Không';
+      row[headerIndex.ConLai] = conLai;
+      row[headerIndex.GhiChu] = ghiChu;
+      row[headerIndex.TrangThaiThu] = getTrangThaiThuPhi_(hocPhiInput, soTienDaThuHienTai);
+    } else if (tamNghi) {
       row[headerIndex.HocPhiGoc] = hocPhiInput || oldHocPhiGoc;
       row[headerIndex.HocPhiCoBan] = hocPhiCoBanInput;
       row[headerIndex.KhoanThuThemJson] = JSON.stringify(khoanThuThemInput);
@@ -1917,22 +1936,26 @@ function saveThuPhiHocSinh(token, data) {
     row[headerIndex.TrangThai] = 'ACTIVE';
     row[headerIndex.UpdatedAt] = new Date();
 
-    const ledgerResult = upsertThuChiHocPhiNoLock_({
-      maKyHoc: session.maKyHoc,
-      yearMonth: yearMonth,
-      maHocSinh: maHocSinh,
-      hoTen: headerIndex.HoTen !== undefined ? String(row[headerIndex.HoTen] || '').trim() : '',
-      ngayThu: tamNghi ? '' : row[headerIndex.NgayDong],
-      soTien: tamNghi ? 0 : number_(row[headerIndex.SoTienDaThu]),
-      maNguonTien: tamNghi ? '' : String(row[headerIndex.NguonTienThu] || '').trim(),
-      ghiChu: String(row[headerIndex.GhiChu] || '').trim(),
-      tamNghi: tamNghi,
-      soPhieu: existingSoPhieu
-    });
+    if (chiCapNhatKhoanThu && !tamNghi) {
+      savedSoPhieu = existingSoPhieu;
+    } else {
+      const ledgerResult = upsertThuChiHocPhiNoLock_({
+        maKyHoc: session.maKyHoc,
+        yearMonth: yearMonth,
+        maHocSinh: maHocSinh,
+        hoTen: headerIndex.HoTen !== undefined ? String(row[headerIndex.HoTen] || '').trim() : '',
+        ngayThu: tamNghi ? '' : row[headerIndex.NgayDong],
+        soTien: tamNghi ? 0 : number_(row[headerIndex.SoTienDaThu]),
+        maNguonTien: tamNghi ? '' : String(row[headerIndex.NguonTienThu] || '').trim(),
+        ghiChu: String(row[headerIndex.GhiChu] || '').trim(),
+        tamNghi: tamNghi,
+        soPhieu: existingSoPhieu
+      });
 
-    savedSoPhieu = ledgerResult && ledgerResult.soPhieu
-      ? ledgerResult.soPhieu
-      : existingSoPhieu;
+      savedSoPhieu = ledgerResult && ledgerResult.soPhieu
+        ? ledgerResult.soPhieu
+        : existingSoPhieu;
+    }
     row[headerIndex.SoPhieu] = savedSoPhieu;
 
     sheet.getRange(targetArrayIndex + 1, 1, 1, headers.length).setValues([row]);
@@ -1949,7 +1972,9 @@ function saveThuPhiHocSinh(token, data) {
     hocPhiCoBan: hocPhiCoBanInput,
     khoanThuThem: khoanThuThemInput,
     tongKhoanThuThem: tongKhoanThuThemInput,
-    message: tamNghi
+    message: chiCapNhatKhoanThu && !tamNghi
+      ? 'Đã cập nhật các khoản phải thu; chưa ghi nhận thu tiền.'
+      : tamNghi
       ? 'Đã cập nhật trạng thái tạm nghỉ.'
       : (soTienDaThuInput > 0
         ? 'Đã cập nhật học phí và phiếu thu ' + (savedSoPhieu || '') + '.'

@@ -132,8 +132,32 @@
     .fee-modal .modal-footer {
       padding: 14px 20px 18px;
       flex-shrink: 0;
+      flex-wrap: wrap;
       border-top: 1px solid #e2e8f0;
       background: #ffffff;
+    }
+
+    .fee-action-note {
+      margin-bottom: 16px;
+      padding: 11px 14px;
+      border: 1px solid #bae6fd;
+      border-radius: 13px;
+      background: #f0f9ff;
+      color: #075985;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .fee-update-button {
+      height: 42px;
+      padding: 0 18px;
+      border: 1px solid #0284c7;
+      border-radius: 14px;
+      background: #ffffff;
+      color: #0369a1;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
     }
 
     .fee-form-grid {
@@ -495,7 +519,7 @@
   <div id="feeModal" class="modal-backdrop">
     <div class="modal fee-modal">
       <div class="modal-header">
-        <div class="modal-title">Thu học phí</div>
+        <div class="modal-title">Cập nhật khoản thu / Thu học phí</div>
         <button class="close-button" onclick="closeFeeModal()">×</button>
       </div>
 
@@ -505,6 +529,11 @@
         <div class="student-info-box">
           <div id="formStudentName" class="student-info-name">Học sinh</div>
           <div id="formStudentSub" class="student-info-sub">Thông tin lớp</div>
+        </div>
+
+        <div class="fee-action-note">
+          <strong>Cập nhật khoản thu</strong> chỉ lưu học phí và các khoản phụ, chưa ghi nhận đã thu tiền.
+          Chỉ nút <strong>Xác nhận thu phí</strong> mới tạo hoặc cập nhật phiếu thu.
         </div>
 
         <div class="fee-form-grid">
@@ -557,8 +586,8 @@
           </div>
 
           <div class="field">
-            <label>Đã thu</label>
-            <input id="formSoTienDaThu" type="text" inputmode="numeric" oninput="feePaidEdited=true; formatMoneyInput('formSoTienDaThu'); updateFeePreview();" placeholder="Nhập số tiền đã thu">
+            <label>Số tiền ghi nhận đã thu</label>
+            <input id="formSoTienDaThu" type="text" inputmode="numeric" oninput="formatMoneyInput('formSoTienDaThu'); updateFeePreview();" placeholder="Nhập số tiền thực nhận">
           </div>
 
           <div class="field">
@@ -575,8 +604,9 @@
 
       <div class="modal-footer">
         <button class="cancel-button" onclick="closeFeeModal()">Huỷ</button>
-        <button id="btnSaveFee" class="save-button" onclick="saveThuPhi(false)">Lưu</button>
-        <button class="print-button" onclick="saveThuPhi(true)">Lưu & in</button>
+        <button id="btnUpdateFeeCharges" class="fee-update-button" onclick="saveThuPhi(false, 'CAP_NHAT_KHOAN_THU')">Cập nhật khoản thu</button>
+        <button id="btnCollectFee" class="save-button" onclick="saveThuPhi(false, 'THU_PHI')">Xác nhận thu phí</button>
+        <button id="btnCollectFeePrint" class="print-button" onclick="saveThuPhi(true, 'THU_PHI')">Thu phí & in biên lai</button>
       </div>
     </div>
   </div>
@@ -636,7 +666,6 @@
     let feeCategories = [];
     let sourceBeforeTemporary = '';
     let currentFeeStudent = null;
-    let feePaidEdited = false;
     let currentFeeCardDataUrl = '';
     let currentFeeCardFileName = '';
 
@@ -1292,7 +1321,6 @@
       }
 
       currentFeeStudent = item;
-      feePaidEdited = false;
       document.getElementById('formMaHocSinh').value = item.maHocSinh;
       document.getElementById('formSoPhieu').value = item.soPhieu || '';
       document.getElementById('formStudentName').textContent = item.hoTen;
@@ -1322,11 +1350,7 @@
         item.tamNghi ? 0 : baseFee
       );
       document.getElementById('formSoTienDaThu').value = formatMoneyInputValue(
-        item.tamNghi
-          ? 0
-          : (Number(item.soTienDaThu || 0) > 0
-            ? item.soTienDaThu
-            : item.hocPhi || 0)
+        item.tamNghi ? 0 : Number(item.soTienDaThu || 0)
       );
 
       document.getElementById('formNguonTienThu').value = item.tamNghi
@@ -1389,15 +1413,14 @@
 
         if (rememberCurrentValues) {
           feeInput.value = formatMoneyInputValue(feeBeforeTemporary || 0);
-          paidInput.value = formatMoneyInputValue(
-            paidBeforeTemporary > 0 ? paidBeforeTemporary : feeBeforeTemporary || 0
-          );
+          paidInput.value = formatMoneyInputValue(paidBeforeTemporary || 0);
           dateInput.value = dateBeforeTemporary || getTodayInput();
           sourceSelect.value = sourceBeforeTemporary || '';
         }
       }
 
       updateFeePreview();
+      setFeeActionButtonsBusy(false, '');
     }
 
     function updateFeePreview() {
@@ -1405,9 +1428,6 @@
       const hocPhiCoBan = tamNghi ? 0 : Number(getMoneyRawValue('formSoTienPhaiThu') || 0);
       const tongKhoanThuThem = tamNghi ? 0 : collectFeeExtraItems().reduce(function (sum, item) { return sum + Number(item.soTien || 0); }, 0);
       const tongPhaiThu = hocPhiCoBan + tongKhoanThuThem;
-      if (!tamNghi && !feePaidEdited && currentFeeStudent && Number(currentFeeStudent.soTienDaThu || 0) <= 0) {
-        document.getElementById('formSoTienDaThu').value = formatMoneyInputValue(tongPhaiThu);
-      }
       const daThu = tamNghi ? 0 : Number(getMoneyRawValue('formSoTienDaThu') || 0);
       const conLai = Math.max(tongPhaiThu - daThu, 0);
 
@@ -1420,8 +1440,29 @@
       document.getElementById('feeModal').classList.remove('show');
     }
 
-    function saveThuPhi(printAfter) {
-      const btn = document.getElementById('btnSaveFee');
+    function setFeeActionButtonsBusy(busy, activeButtonId) {
+      const tamNghi = document.getElementById('formTamNghi').checked;
+      [
+        { id: 'btnUpdateFeeCharges', label: 'Cập nhật khoản thu' },
+        { id: 'btnCollectFee', label: 'Xác nhận thu phí' },
+        { id: 'btnCollectFeePrint', label: 'Thu phí & in biên lai' }
+      ].forEach(function (config) {
+        const button = document.getElementById(config.id);
+        if (!button) return;
+        const label = tamNghi && config.id === 'btnUpdateFeeCharges'
+          ? 'Cập nhật tạm nghỉ'
+          : config.label;
+        button.disabled = busy || (tamNghi && config.id !== 'btnUpdateFeeCharges');
+        button.textContent = busy && config.id === activeButtonId ? 'Đang xử lý...' : label;
+      });
+    }
+
+    function saveThuPhi(printAfter, cheDoLuu) {
+      cheDoLuu = String(cheDoLuu || 'THU_PHI').toUpperCase();
+      const chiCapNhatKhoanThu = cheDoLuu === 'CAP_NHAT_KHOAN_THU';
+      const activeButtonId = chiCapNhatKhoanThu
+        ? 'btnUpdateFeeCharges'
+        : (printAfter ? 'btnCollectFeePrint' : 'btnCollectFee');
       const tamNghi = document.getElementById('formTamNghi').checked;
       const extraItems = collectFeeExtraItems();
       const invalidExtra = extraItems.find(function (item) { return Number(item.soTien || 0) <= 0; });
@@ -1436,6 +1477,7 @@
       const data = {
         maHocSinh: document.getElementById('formMaHocSinh').value,
         yearMonth: document.getElementById('filterMonth').value,
+        cheDoLuu: cheDoLuu,
         hocPhiCoBan: String(hocPhiCoBan),
         khoanThuThem: extraItems,
         hocPhi: String(tongPhaiThu),
@@ -1451,35 +1493,55 @@
         return;
       }
 
-      if (!tamNghi && Number(data.soTienDaThu || 0) > 0 && !data.ngayThu) {
+      if (!chiCapNhatKhoanThu && !tamNghi && Number(data.soTienDaThu || 0) <= 0) {
+        showNotification('Vui lòng nhập số tiền cần ghi nhận thu.', 'warning');
+        return;
+      }
+
+      if (!chiCapNhatKhoanThu && !tamNghi && Number(data.soTienDaThu || 0) > 0 && !data.ngayThu) {
         showNotification('Vui lòng nhập ngày thu.', 'warning');
         return;
       }
 
-      if (!tamNghi && Number(data.soTienDaThu || 0) > 0 && !data.maNguonTien) {
+      if (!chiCapNhatKhoanThu && !tamNghi && Number(data.soTienDaThu || 0) > 0 && !data.maNguonTien) {
         showNotification('Vui lòng chọn nguồn nhận tiền.', 'warning');
         return;
       }
 
-      const pendingPrintWindow = printAfter && !tamNghi && Number(data.soTienDaThu || 0) > 0
+      const pendingPrintWindow = !chiCapNhatKhoanThu && printAfter && !tamNghi && Number(data.soTienDaThu || 0) > 0
         ? window.open('', '_blank', 'width=850,height=900')
         : null;
-      if (printAfter && !tamNghi && Number(data.soTienDaThu || 0) > 0 && !pendingPrintWindow) {
+      if (!chiCapNhatKhoanThu && printAfter && !tamNghi && Number(data.soTienDaThu || 0) > 0 && !pendingPrintWindow) {
         showNotification('Trình duyệt đang chặn cửa sổ in. Phiếu vẫn sẽ được lưu.', 'warning');
       }
 
-      btn.disabled = true;
-      btn.textContent = 'Đang lưu...';
-      showBusy(tamNghi ? 'Đang cập nhật trạng thái tạm nghỉ...' : 'Đang lưu phiếu thu học phí...');
+      setFeeActionButtonsBusy(true, activeButtonId);
+      showBusy(tamNghi
+        ? 'Đang cập nhật trạng thái tạm nghỉ...'
+        : (chiCapNhatKhoanThu ? 'Đang cập nhật các khoản phải thu...' : 'Đang ghi nhận thu học phí...'));
 
       google.script.run
         .withSuccessHandler(function (res) {
           const result = parseServerJson(res) || {};
-          btn.disabled = false;
-          btn.textContent = 'Lưu';
+          setFeeActionButtonsBusy(false, activeButtonId);
           hideBusy();
 
           const savedTotalFee = Number(result.hocPhi !== undefined ? result.hocPhi : data.hocPhi || 0);
+          const savedPaid = tamNghi
+            ? 0
+            : (chiCapNhatKhoanThu
+              ? Number((currentFeeStudent && currentFeeStudent.soTienDaThu) || 0)
+              : Number(data.soTienDaThu || 0));
+          const savedDate = tamNghi
+            ? ''
+            : (chiCapNhatKhoanThu
+              ? String((currentFeeStudent && currentFeeStudent.ngayThu) || '')
+              : data.ngayThu);
+          const savedSource = tamNghi
+            ? ''
+            : (chiCapNhatKhoanThu
+              ? String((currentFeeStudent && currentFeeStudent.maNguonTien) || '')
+              : data.maNguonTien);
           const savedItem = Object.assign({}, currentFeeStudent || {}, {
             soPhieu: result.soPhieu || document.getElementById('formSoPhieu').value || '',
             hocPhi: tamNghi ? 0 : savedTotalFee,
@@ -1487,17 +1549,17 @@
             hocPhiCoBan: Number(result.hocPhiCoBan !== undefined ? result.hocPhiCoBan : data.hocPhiCoBan || 0),
             khoanThuThem: result.khoanThuThem || data.khoanThuThem || [],
             tongKhoanThuThem: Number(result.tongKhoanThuThem !== undefined ? result.tongKhoanThuThem : tongKhoanThuThem),
-            soTienDaThu: Number(data.soTienDaThu || 0),
-            conLai: tamNghi ? 0 : Math.max(savedTotalFee - Number(data.soTienDaThu || 0), 0),
+            soTienDaThu: savedPaid,
+            conLai: tamNghi ? 0 : Math.max(savedTotalFee - savedPaid, 0),
             tamNghi: tamNghi,
-            ngayThu: data.ngayThu,
-            ngayThuDisplay: formatDateDisplayClient(data.ngayThu),
-            maNguonTien: data.maNguonTien,
-            tenNguonTien: getMoneySourceName(data.maNguonTien),
+            ngayThu: savedDate,
+            ngayThuDisplay: formatDateDisplayClient(savedDate),
+            maNguonTien: savedSource,
+            tenNguonTien: getMoneySourceName(savedSource),
             ghiChu: data.ghiChu,
             trangThai: tamNghi
               ? 'Tạm nghỉ'
-              : getFeeStatusClient(Number(data.hocPhi || 0), Number(data.soTienDaThu || 0)),
+              : getFeeStatusClient(savedTotalFee, savedPaid),
             monthText: currentMonthText
           });
 
@@ -1508,19 +1570,20 @@
 
           document.getElementById('formSoPhieu').value = savedItem.soPhieu;
           closeFeeModal();
-          showMessage(result.message || 'Đã lưu thông tin thu phí.', 'success');
+          showMessage(result.message || (chiCapNhatKhoanThu
+            ? 'Đã cập nhật khoản phải thu; chưa ghi nhận thu tiền.'
+            : 'Đã ghi nhận thu học phí.'), 'success');
 
           renderSummary(buildLocalFeeSummary());
           renderTable();
 
-          if (printAfter && !tamNghi && savedItem.soPhieu && savedItem.soTienDaThu > 0) {
+          if (!chiCapNhatKhoanThu && printAfter && !tamNghi && savedItem.soPhieu && savedItem.soTienDaThu > 0) {
             printTuitionReceiptDocument(savedItem, pendingPrintWindow);
           }
 
         })
         .withFailureHandler(function (error) {
-          btn.disabled = false;
-          btn.textContent = 'Lưu';
+          setFeeActionButtonsBusy(false, activeButtonId);
           hideBusy();
           if (pendingPrintWindow) pendingPrintWindow.close();
           showNotification(getErrorMessage(error), 'error');
