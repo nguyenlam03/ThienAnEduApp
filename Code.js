@@ -3604,8 +3604,23 @@ function getQuanLyTaiChinhData(token, yearMonth) {
   });
   if (familyExpense + familySaving > familyIncome && familyIncome > 0) familyWarnings.push({ level: 'danger', message: 'Tổng chi và tiết kiệm gia đình đang lớn hơn thu nhập thực tế trong tháng.' });
 
+  const receivers = readObjectsNoCache_(SHEET_DOITUONG_THUCHI).filter(row => {
+    const type = String(row.Loai || 'BOTH').trim().toUpperCase();
+    const status = String(row.TrangThai || 'ACTIVE').trim().toUpperCase();
+    return (type === 'CHI' || type === 'BOTH') && status === 'ACTIVE';
+  }).map(row => ({
+    maDoiTuong: String(row.MaDoiTuong || '').trim(),
+    loai: String(row.Loai || 'BOTH').trim().toUpperCase(),
+    tenDoiTuong: String(row.TenDoiTuong || '').trim(),
+    soDienThoai: String(row.SoDienThoai || '').trim(),
+    diaChi: String(row.DiaChi || '').trim(),
+    ghiChu: String(row.GhiChu || '').trim()
+  })).filter(item => item.maDoiTuong && item.tenDoiTuong)
+    .sort((a, b) => a.tenDoiTuong.localeCompare(b.tenDoiTuong, 'vi'));
+
   return jsonResponse_({
     month: month, config: config, staff: getNhanSuTaiChinhList_(session.maKyHoc), recurringExpenses: getKhoanChiDinhKyList_(session.maKyHoc),
+    people: receivers,
     categories: readObjectsNoCache_(SHEET_DANHMUC_THUCHI).filter(row => String(row.Loai || '').trim().toUpperCase() === 'CHI' && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() === 'ACTIVE').map(row => ({ maDanhMuc: String(row.MaDanhMuc || '').trim(), tenDanhMuc: String(row.TenDanhMuc || '').trim() })),
     fee: feeSummary, plan: planData,
     performance: { cashIncome: cashIncome, cashExpense: businessCashExpense, cashResult: cashIncome - businessCashExpense, currentCash: currentCash,
