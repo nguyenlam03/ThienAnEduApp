@@ -45,9 +45,20 @@
     .read-note{font-size:12px;color:#64748b;margin-top:6px}
     .input-action-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}.quick-add-button{width:42px;height:42px;border:1px solid #7dd3fc;border-radius:12px;background:#e0f2fe;color:#0369a1;font-size:22px;font-weight:900;cursor:pointer}.attachment-preview{margin-top:8px;padding:10px 12px;border:1px dashed #94a3b8;border-radius:12px;background:#f8fafc;font-size:12px;color:#475569}.attachment-link{color:#0369a1;font-weight:800;text-decoration:none}.attachment-link:hover{text-decoration:underline}
     .empty-mini{padding:24px;text-align:center;color:#64748b}
+    .finance-reality{margin:0 0 18px}.finance-reality-title{font-size:17px;font-weight:900;color:#0f172a;margin-bottom:11px}
+    .finance-reality-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+    .reality-card{border:1px solid #dbeafe;border-radius:17px;padding:15px;background:linear-gradient(180deg,#fff,#f8fafc)}
+    .reality-card.available{border-color:#86efac;background:#f0fdf4}.reality-card.danger{border-color:#fca5a5;background:#fff1f2}
+    .reality-label{font-size:12px;font-weight:800;color:#64748b}.reality-value{font-size:23px;font-weight:900;color:#0f172a;margin-top:6px}.reality-note{font-size:11px;color:#64748b;margin-top:5px;line-height:1.45}
+    .finance-alerts{display:grid;gap:8px;margin:12px 0 18px}.finance-alert{padding:11px 13px;border-radius:12px;font-size:13px;font-weight:750;border:1px solid #bae6fd;background:#f0f9ff;color:#075985}
+    .finance-alert.warning{border-color:#fde68a;background:#fffbeb;color:#92400e}.finance-alert.danger{border-color:#fecaca;background:#fef2f2;color:#b91c1c}
+    .plan-table{min-width:1280px}.plan-progress{height:7px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin-top:6px}.plan-progress>span{display:block;height:100%;background:#16a34a;border-radius:999px}.plan-progress.over>span{background:#dc2626}
+    .plan-group{display:inline-flex;padding:5px 9px;border-radius:999px;background:#eef2ff;color:#4338ca;font-size:11px;font-weight:800}.plan-status{font-size:12px;font-weight:800}.plan-status.done{color:#15803d}.plan-status.pending{color:#b45309}.plan-status.over{color:#dc2626}
+    .plan-summary-line{display:flex;gap:9px;align-items:center;flex-wrap:wrap;color:#475569;font-size:12px}.plan-month-badge{padding:7px 11px;border-radius:999px;background:#e0f2fe;color:#0369a1;font-weight:800}
+    .fee-action-note{padding:11px 14px;border:1px solid #bae6fd;border-radius:13px;background:#f0f9ff;color:#075985;font-size:13px;line-height:1.55}
     @media(max-width:1350px){.finance-filter{grid-template-columns:repeat(4,minmax(0,1fr))}.source-grid,.source-detail-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
-    @media(max-width:900px){.finance-actions{flex-wrap:wrap;justify-content:flex-start}.stat-grid{grid-template-columns:1fr 1fr}.source-grid,.source-detail-grid,.report-grid{grid-template-columns:1fr}.finance-filter{grid-template-columns:1fr 1fr}.finance-form-grid{grid-template-columns:1fr}.finance-form-grid .full{grid-column:1}.page-header{align-items:flex-start;flex-direction:column}}
-    @media(max-width:560px){.stat-grid,.finance-filter{grid-template-columns:1fr}}
+    @media(max-width:900px){.finance-actions{flex-wrap:wrap;justify-content:flex-start}.stat-grid,.finance-reality-grid{grid-template-columns:1fr 1fr}.source-grid,.source-detail-grid,.report-grid{grid-template-columns:1fr}.finance-filter{grid-template-columns:1fr 1fr}.finance-form-grid{grid-template-columns:1fr}.finance-form-grid .full{grid-column:1}.page-header{align-items:flex-start;flex-direction:column}}
+    @media(max-width:560px){.stat-grid,.finance-filter,.finance-reality-grid{grid-template-columns:1fr}}
   </style>
   <?!= include('AppTheme'); ?>
 </head>
@@ -107,6 +118,7 @@
           <button class="finance-tab" data-tab="categories" onclick="switchTab('categories')">📁 Danh mục</button>
           <button class="finance-tab" data-tab="people" onclick="switchTab('people')">👥 Người nộp/nhận</button>
           <button class="finance-tab" data-tab="cashbook" onclick="switchTab('cashbook')">💳 Sổ quỹ</button>
+          <button class="finance-tab" data-tab="plan" onclick="switchTab('plan')">🗓 Kế hoạch chi</button>
           <button class="finance-tab" data-tab="reports" onclick="switchTab('reports')">📈 Báo cáo</button>
         </div>
 
@@ -116,6 +128,11 @@
             <div class="stat-card"><div class="stat-label">Tổng chi hoạt động</div><div id="statTotalExpense" class="stat-value money-expense">0đ</div><div class="stat-note">Không tính chuyển tiền nội bộ</div></div>
             <div class="stat-card"><div class="stat-label">Chênh lệch thu chi</div><div id="statNet" class="stat-value money-balance">0đ</div><div class="stat-note">Tổng thu trừ tổng chi</div></div>
             <div class="stat-card"><div class="stat-label">Tổng số dư</div><div id="statClosingBalance" class="stat-value money-balance">0đ</div><div id="statOpeningNote" class="stat-note"></div></div>
+          </div>
+          <div class="finance-reality">
+            <div class="finance-reality-title">Bức tranh tiền thực tế trong tháng</div>
+            <div id="financeRealityGrid" class="finance-reality-grid"></div>
+            <div id="financeAlerts" class="finance-alerts"></div>
           </div>
           <div id="sourceCards" class="source-grid"></div>
           <div class="finance-card">
@@ -183,6 +200,19 @@
         <section id="tab-categories" class="tab-panel">
           <div class="toolbar-line"><div class="toolbar-left"><span class="pill-badge">📁 Danh mục thu chi</span></div><div class="toolbar-right"><button class="primary-button" onclick="openCategoryModal()">+ Thêm danh mục</button></div></div>
           <div class="report-grid"><div class="finance-card"><div class="finance-card-title" style="color:#15803d">Danh mục thu</div><div id="incomeCategoryList"></div></div><div class="finance-card"><div class="finance-card-title" style="color:#dc2626">Danh mục chi</div><div id="expenseCategoryList"></div></div></div>
+        </section>
+
+        <section id="tab-plan" class="tab-panel">
+          <div class="toolbar-line">
+            <div class="toolbar-left plan-summary-line"><span id="planMonthBadge" class="plan-month-badge"></span><span id="planStudentNote"></span></div>
+            <div class="toolbar-right"><button class="secondary-button" onclick="initializeMonthlyPlan()">Tạo kế hoạch mẫu</button><button class="secondary-button" onclick="openFinanceConfigModal()">⚙ Cấu hình tháng</button><button class="primary-button" onclick="openPlanModal()">+ Khoản phải chi</button></div>
+          </div>
+          <div class="table-wrap">
+            <table class="finance-table plan-table">
+              <thead><tr><th>STT</th><th>Khoản phải chi</th><th>Nhóm</th><th>Người nhận</th><th>Phải chi</th><th>Đã chi</th><th>Còn lại</th><th>Tỷ lệ doanh thu</th><th>Hạn thanh toán</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+              <tbody id="monthlyPlanBody"></tbody>
+            </table>
+          </div>
         </section>
 
         <section id="tab-people" class="tab-panel">
@@ -272,7 +302,9 @@
     <div class="modal-header"><div id="transactionModalTitle" class="modal-title">Phiếu thu</div><button class="close-button" onclick="closeModal('transactionModal')">×</button></div>
     <div class="modal-body">
       <input id="formTransactionId" type="hidden">
+      <input id="formTransactionPlanId" type="hidden">
       <div class="finance-form-grid">
+        <div id="transactionPlanLink" class="field full" style="display:none"><div class="fee-action-note"><strong>Khoản kế hoạch:</strong> <span id="transactionPlanName"></span>. Phiếu chi này sẽ tự cập nhật số đã chi và còn phải chi.</div></div>
         <div class="field"><label>Số phiếu</label><input id="formTransactionReceiptNo" class="receipt-field" type="text" readonly placeholder="Hệ thống tự tạo khi lưu"></div>
         <div class="field"><label>Ngày lập *</label><input id="formTransactionDate" type="date"></div>
         <div class="field"><label>Loại phiếu *</label><select id="formTransactionType" onchange="handleTransactionTypeChange()"><option value="THU">Phiếu thu</option><option value="CHI">Phiếu chi</option></select></div>
@@ -287,6 +319,47 @@
       </div>
     </div>
     <div class="modal-footer"><button class="cancel-button" onclick="closeModal('transactionModal')">Huỷ</button><button id="btnSaveTransaction" class="save-button" onclick="saveTransaction(false)">Lưu</button><button class="print-button" onclick="saveTransaction(true)">Lưu & in</button></div>
+  </div>
+</div>
+
+<div id="planModal" class="modal-backdrop">
+  <div class="modal finance-modal">
+    <div class="modal-header"><div id="planModalTitle" class="modal-title">Khoản phải chi</div><button class="close-button" onclick="closeModal('planModal')">×</button></div>
+    <div class="modal-body">
+      <input id="formPlanId" type="hidden">
+      <div class="finance-form-grid">
+        <div class="field"><label>Tháng *</label><input id="formPlanMonth" type="month" readonly></div>
+        <div class="field"><label>Danh mục chi *</label><select id="formPlanCategory"></select></div>
+        <div class="field full"><label>Tên khoản phải chi *</label><input id="formPlanName" type="text" placeholder="Ví dụ: Lương Thầy Quý"></div>
+        <div class="field"><label>Nhóm tài chính *</label><select id="formPlanGroup"><option value="LUONG">Lương</option><option value="BAN_TRU">Cơm bán trú</option><option value="VAN_HANH">Vận hành</option><option value="HOC_CU">Học cụ</option><option value="THUE">Thuế, phí</option><option value="GIA_DINH">Gia đình / chủ sở hữu</option><option value="KHAC">Khác</option></select></div>
+        <div class="field"><label>Người nhận</label><input id="formPlanPerson" type="text"></div>
+        <div class="field"><label>Số tiền phải chi *</label><input id="formPlanAmount" type="text" inputmode="numeric" oninput="formatMoneyInputById('formPlanAmount')"></div>
+        <div class="field"><label>Hạn thanh toán</label><input id="formPlanDueDate" type="date"></div>
+        <div class="field full"><label class="checkbox-row"><input id="formPlanRequired" type="checkbox" checked><span>Khoản bắt buộc phải chi trong tháng</span></label></div>
+        <div class="field full"><label>Ghi chú</label><textarea id="formPlanNote"></textarea></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="cancel-button" onclick="closeModal('planModal')">Huỷ</button><button class="save-button" onclick="saveMonthlyPlanItem()">Lưu khoản phải chi</button></div>
+  </div>
+</div>
+
+<div id="financeConfigModal" class="modal-backdrop">
+  <div class="modal finance-modal">
+    <div class="modal-header"><div class="modal-title">Cấu hình tài chính tháng</div><button class="close-button" onclick="closeModal('financeConfigModal')">×</button></div>
+    <div class="modal-body">
+      <div class="finance-form-grid">
+        <div class="field"><label>Tháng</label><input id="formFinanceMonth" type="month" readonly></div>
+        <div class="field"><label>Số học sinh</label><input id="formFinanceStudents" type="number" min="0"></div>
+        <div class="field"><label>Doanh thu dự kiến</label><input id="formFinanceRevenue" type="text" inputmode="numeric" oninput="formatMoneyInputById('formFinanceRevenue')"></div>
+        <div class="field"><label>Tỷ lệ dự phòng thuế (%)</label><input id="formFinanceTaxRate" type="number" min="0" step="0.1"></div>
+        <div class="field"><label>Ngưỡng quỹ lương (%)</label><input id="formFinanceSalaryLimit" type="number" min="0" step="0.1"></div>
+        <div class="field"><label>Ngưỡng bán trú (%)</label><input id="formFinanceBoardingLimit" type="number" min="0" step="0.1"></div>
+        <div class="field"><label>Ngưỡng tổng chi (%)</label><input id="formFinanceExpenseLimit" type="number" min="0" step="0.1"></div>
+        <div class="field"><label>Tỷ lệ dự phòng mùa thấp điểm (%)</label><input id="formFinanceReserveRate" type="number" min="0" step="0.1"></div>
+        <div class="field full"><label>Ghi chú</label><textarea id="formFinanceNote"></textarea></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="cancel-button" onclick="closeModal('financeConfigModal')">Huỷ</button><button class="save-button" onclick="saveFinanceMonthConfig()">Lưu cấu hình</button></div>
   </div>
 </div>
 
@@ -342,7 +415,7 @@ const APP_TOKEN=<?!= JSON.stringify(token) ?>;
 const APP_URL=<?!= JSON.stringify(appUrl) ?>;
 const APP_CACHE_ENABLED=<?!= JSON.stringify(cacheEnabled) ?>;
 const APP_BRAND_NAME=<?!= JSON.stringify(brandName) ?>;
-let financeData={categories:[],people:[],sources:[],sourceSummaries:[],transactions:[],recentTransactions:[],cashbook:[],reports:{categories:[],sources:[]},summary:{},range:{}};
+let financeData={categories:[],people:[],sources:[],sourceSummaries:[],transactions:[],recentTransactions:[],cashbook:[],reports:{categories:[],sources:[]},summary:{},range:{},monthlyFinance:{items:[],summary:{},config:{},warnings:[]}};
 let activeTab='dashboard';
 let financeSearchTimer=null;
 let financeLoadSequence=0;
@@ -355,7 +428,7 @@ document.addEventListener('DOMContentLoaded',function(){
     clearTimeout(financeSearchTimer);
     financeSearchTimer=setTimeout(()=>loadFinanceData({silent:true}),320);
   });
-  ['transactionModal','quickPersonModal','transferModal','sourceModal','categoryModal'].forEach(id=>{
+  ['transactionModal','quickPersonModal','transferModal','sourceModal','categoryModal','planModal','financeConfigModal'].forEach(id=>{
     document.getElementById(id).addEventListener('click',e=>{if(e.target.id===id)closeModal(id)});
   });
   document.getElementById('formTransactionSource').addEventListener('change',updateTransactionMethodNote);
@@ -387,7 +460,7 @@ function loadFinanceData(options){
   if(!settings.silent)showBusy('Đang tải dữ liệu thu chi...');
   google.script.run.withSuccessHandler(res=>{if(requestId!==financeLoadSequence){if(!settings.silent)hideBusy();return}financeData=parseServerJson(res)||financeData;if(!settings.silent)hideBusy();renderAll()}).withFailureHandler(e=>{if(requestId!==financeLoadSequence)return;if(!settings.silent)hideBusy();showMessage(getErrorMessage(e),'error')}).getQuanLyThuChiData(APP_TOKEN,filters)
 }
-function renderAll(){renderSourceOptions();renderFilterCategories();renderSummary();renderSourceCards();renderTransactions();renderCashbook();renderCategories();renderPeople();renderReports();renderWarning()}
+function renderAll(){renderSourceOptions();renderFilterCategories();renderSummary();renderMonthlyFinance();renderSourceCards();renderTransactions();renderCashbook();renderCategories();renderPeople();renderReports();renderWarning()}
 function renderSourceOptions(){
   const current=v('filterSource')||'ALL';fillSourceSelect('filterSource',true,current);fillSourceSelect('formTransactionSource',false,v('formTransactionSource'));fillSourceSelect('formTransferFrom',false,v('formTransferFrom'));fillSourceSelect('formTransferTo',false,v('formTransferTo'))
 }
@@ -461,6 +534,47 @@ function renderPeople(){
     ?list.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(labels[x.loai]||x.loai)}</td><td><strong>${esc(x.tenDoiTuong)}</strong></td><td>${esc(x.soDienThoai||'')}</td><td>${esc(x.diaChi||'')}</td><td>${esc(x.ghiChu||'')}</td></tr>`).join('')
     :'<tr><td colspan="6"><div class="empty-box">Chưa có người nộp hoặc người nhận.</div></td></tr>';
 }
+function renderMonthlyFinance(){
+  const data=financeData.monthlyFinance||{},s=data.summary||{},c=data.config||{},items=data.items||[],month=data.thang||v('filterFromDate').slice(0,7);
+  const cards=[
+    ['Đã thu trong tháng',s.actualRevenue,'Tiền thu thực tế đã ghi vào sổ quỹ',''],
+    ['Tiền hiện có',s.currentCash,'Tổng số dư tất cả tài khoản và tiền mặt',''],
+    ['Tổng phải chi',s.totalPlan,'Toàn bộ nghĩa vụ đã lập kế hoạch trong tháng',''],
+    ['Đã thanh toán',s.totalPaid,'Phiếu chi đã liên kết với kế hoạch',''],
+    ['Còn phải chi',s.totalRemaining,'Tiền cần giữ lại để thanh toán',''],
+    ['Tiền sau nghĩa vụ chi',s.availableCash,'Tiền hiện có trừ các khoản còn phải chi',Number(s.availableCash||0)<0?'danger':'available'],
+    ['Quỹ dự phòng mục tiêu',s.reserveTarget,(c.tyLeDuPhong||0)+'% doanh thu dùng làm cơ sở',''],
+    ['Hạn mức chi an toàn',s.safeToSpendCash,'Tiền sau nghĩa vụ chi và sau quỹ dự phòng',Number(s.safeToSpendCash||0)<0?'danger':'available']
+  ];
+  document.getElementById('financeRealityGrid').innerHTML=cards.map(x=>`<div class="reality-card ${x[3]}"><div class="reality-label">${x[0]}</div><div class="reality-value">${money(x[1])}</div><div class="reality-note">${x[2]}</div></div>`).join('');
+  document.getElementById('financeAlerts').innerHTML=(data.warnings||[]).map(x=>`<div class="finance-alert ${esc(x.level||'')}">${esc(x.message)}</div>`).join('');
+  t('planMonthBadge','Tháng '+formatMonthText(month));
+  t('planStudentNote',(c.soHocSinh||0)+' học sinh · Doanh thu kế hoạch '+money(c.doanhThuDuKien||0)+' · Chi phí bình quân '+money(s.costPerStudent||0)+'/học sinh');
+  const labels={LUONG:'Lương',BAN_TRU:'Bán trú',VAN_HANH:'Vận hành',HOC_CU:'Học cụ',THUE:'Thuế, phí',GIA_DINH:'Gia đình / chủ sở hữu',KHAC:'Khác'};
+  const revenue=Number(s.revenueBasis||0);
+  document.getElementById('monthlyPlanBody').innerHTML=items.length?items.map((x,i)=>{
+    const rate=revenue>0?Number(x.soTienPhaiChi||0)*100/revenue:0,progress=Number(x.soTienPhaiChi||0)>0?Math.min(100,Number(x.soTienDaChi||0)*100/Number(x.soTienPhaiChi||0)):0;
+    const state=Number(x.vuotKeHoach||0)>0?['Vượt kế hoạch','over']:Number(x.soTienPhaiChi||0)<=0?(x.batBuoc?['Chưa xác định','pending']:['Không phát sinh','done']):Number(x.conPhaiChi||0)<=0?['Đã hoàn tất','done']:['Chưa thanh toán đủ','pending'];
+    const pay=Number(x.conPhaiChi||0)>0?`<button class="mini-button edit" onclick="openPlanPayment('${attr(x.maKeHoachChi)}')">Ghi phiếu chi</button>`:'';
+    return `<tr><td>${i+1}</td><td><strong>${esc(x.tenKhoanChi)}</strong><div class="stat-note">${esc(x.ghiChu||'')}</div></td><td><span class="plan-group">${esc(labels[x.nhomChi]||x.nhomChi)}</span></td><td>${esc(x.nguoiNhan||'')}</td><td><strong>${money(x.soTienPhaiChi)}</strong></td><td>${money(x.soTienDaChi)}<div class="plan-progress ${state[1]==='over'?'over':''}"><span style="width:${progress}%"></span></div></td><td class="money-expense"><strong>${money(x.conPhaiChi)}</strong></td><td>${rate.toFixed(1)}%</td><td>${esc(formatDateDisplayClient(x.hanThanhToan)||'')}</td><td><span class="plan-status ${state[1]}">${state[0]}</span></td><td><div class="action-group">${pay}<button class="mini-button" onclick="openPlanModal('${attr(x.maKeHoachChi)}')">Sửa</button><button class="mini-button delete" onclick="deleteMonthlyPlanItem('${attr(x.maKeHoachChi)}')">Xoá</button></div></td></tr>`
+  }).join(''):'<tr><td colspan="11"><div class="empty-box">Chưa có kế hoạch chi cho tháng này.</div></td></tr>';
+}
+function formatMonthText(value){const p=String(value||'').split('-');return p.length===2?p[1]+'/'+p[0]:value}
+function openPlanModal(id){
+  const data=financeData.monthlyFinance||{},item=(data.items||[]).find(x=>x.maKeHoachChi===id),month=data.thang||v('filterFromDate').slice(0,7);
+  document.getElementById('formPlanId').value=item?item.maKeHoachChi:'';document.getElementById('formPlanMonth').value=month;
+  const category=document.getElementById('formPlanCategory');category.innerHTML='';(financeData.categories||[]).filter(x=>x.loai==='CHI'&&x.trangThai==='ACTIVE').forEach(x=>category.appendChild(new Option(x.tenDanhMuc,x.maDanhMuc)));
+  if(item&&Array.from(category.options).some(o=>o.value===item.maDanhMuc))category.value=item.maDanhMuc;
+  document.getElementById('formPlanName').value=item?item.tenKhoanChi:'';document.getElementById('formPlanGroup').value=item?item.nhomChi:'KHAC';document.getElementById('formPlanPerson').value=item?item.nguoiNhan:'';document.getElementById('formPlanAmount').value=item?numberText(item.soTienPhaiChi):'';document.getElementById('formPlanDueDate').value=item&&item.hanThanhToan?item.hanThanhToan:month+'-28';document.getElementById('formPlanRequired').checked=item?item.batBuoc:true;document.getElementById('formPlanNote').value=item?item.ghiChu:'';t('planModalTitle',item?'Cập nhật khoản phải chi':'Thêm khoản phải chi');openModal('planModal')
+}
+function saveMonthlyPlanItem(){
+  const data={maKeHoachChi:v('formPlanId'),thang:v('formPlanMonth'),maDanhMuc:v('formPlanCategory'),tenKhoanChi:v('formPlanName').trim(),nhomChi:v('formPlanGroup'),nguoiNhan:v('formPlanPerson').trim(),soTienPhaiChi:rawMoney('formPlanAmount')||'0',hanThanhToan:v('formPlanDueDate'),batBuoc:document.getElementById('formPlanRequired').checked,ghiChu:v('formPlanNote').trim()};
+  if(!data.tenKhoanChi||!data.maDanhMuc){showNotification('Vui lòng nhập tên khoản chi và chọn danh mục.','warning');return}showBusy('Đang lưu kế hoạch chi...');google.script.run.withSuccessHandler(r=>{hideBusy();closeModal('planModal');showMessage((parseServerJson(r)||{}).message||'Đã lưu khoản phải chi.','success');loadFinanceData()}).withFailureHandler(e=>{hideBusy();showNotification(getErrorMessage(e),'error')}).saveKeHoachChiThang(APP_TOKEN,data)
+}
+function deleteMonthlyPlanItem(id){if(!confirm('Xoá khoản phải chi này khỏi kế hoạch tháng?'))return;showBusy('Đang xoá khoản kế hoạch...');google.script.run.withSuccessHandler(r=>{hideBusy();showMessage((parseServerJson(r)||{}).message||'Đã xoá.','success');loadFinanceData()}).withFailureHandler(e=>{hideBusy();showNotification(getErrorMessage(e),'error')}).deleteKeHoachChiThang(APP_TOKEN,id)}
+function initializeMonthlyPlan(){const month=(financeData.monthlyFinance&&financeData.monthlyFinance.thang)||v('filterFromDate').slice(0,7);if(!confirm('Tạo kế hoạch mẫu tháng '+formatMonthText(month)+' từ số liệu hiện tại của trung tâm?'))return;showBusy('Đang tạo kế hoạch chi mẫu...');google.script.run.withSuccessHandler(r=>{hideBusy();showMessage((parseServerJson(r)||{}).message||'Đã tạo kế hoạch.','success');loadFinanceData()}).withFailureHandler(e=>{hideBusy();showNotification(getErrorMessage(e),'error')}).khoiTaoKeHoachChiThangMau(APP_TOKEN,month)}
+function openFinanceConfigModal(){const data=financeData.monthlyFinance||{},c=data.config||{};document.getElementById('formFinanceMonth').value=data.thang||v('filterFromDate').slice(0,7);document.getElementById('formFinanceStudents').value=c.soHocSinh||0;document.getElementById('formFinanceRevenue').value=numberText(c.doanhThuDuKien||0);document.getElementById('formFinanceTaxRate').value=c.tyLeThue||2;document.getElementById('formFinanceSalaryLimit').value=c.nguongLuong||35;document.getElementById('formFinanceBoardingLimit').value=c.nguongBanTru||25;document.getElementById('formFinanceExpenseLimit').value=c.nguongTongChi||65;document.getElementById('formFinanceReserveRate').value=c.tyLeDuPhong||10;document.getElementById('formFinanceNote').value=c.ghiChu||'';openModal('financeConfigModal')}
+function saveFinanceMonthConfig(){const data={thang:v('formFinanceMonth'),soHocSinh:v('formFinanceStudents'),doanhThuDuKien:rawMoney('formFinanceRevenue'),tyLeThue:v('formFinanceTaxRate'),nguongLuong:v('formFinanceSalaryLimit'),nguongBanTru:v('formFinanceBoardingLimit'),nguongTongChi:v('formFinanceExpenseLimit'),tyLeDuPhong:v('formFinanceReserveRate'),ghiChu:v('formFinanceNote').trim()};showBusy('Đang lưu cấu hình tài chính...');google.script.run.withSuccessHandler(r=>{hideBusy();closeModal('financeConfigModal');showMessage((parseServerJson(r)||{}).message||'Đã lưu cấu hình.','success');loadFinanceData()}).withFailureHandler(e=>{hideBusy();showNotification(getErrorMessage(e),'error')}).saveCauHinhTaiChinhThang(APP_TOKEN,data)}
 function renderCategoryList(id,type){
   const list=(financeData.categories||[]).filter(x=>x.loai===type);
   document.getElementById(id).innerHTML=list.length?list.map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid #f1f5f9"><div><strong>${esc(x.tenDanhMuc)}</strong><div class="stat-note">${x.trangThai==='ACTIVE'?'Đang sử dụng':'Đã ngừng'}</div></div><div><button class="mini-button edit" onclick="editCategory('${attr(x.maDanhMuc)}')">Sửa</button> <button class="mini-button" onclick="toggleCategory('${attr(x.maDanhMuc)}',${x.trangThai!=='ACTIVE'})">${x.trangThai==='ACTIVE'?'Ngừng':'Bật'}</button></div></div>`).join(''):'<div class="empty-mini">Chưa có danh mục.</div>'
@@ -488,7 +602,7 @@ function renderTransactionPeople(selected){
   if(selected)select.value=selected;
   t('formTransactionPersonLabel',type==='CHI'?'Người nhận':'Người nộp');
 }
-function handleTransactionTypeChange(){renderTransactionCategories();renderTransactionPeople('')}
+function handleTransactionTypeChange(){if(v('formTransactionType')!=='CHI')setTransactionPlanLink('','');renderTransactionCategories();renderTransactionPeople('')}
 function openQuickPersonModal(typeOverride){
   const type=typeOverride||v('formTransactionType');
   document.getElementById('formQuickPersonType').value=type;
@@ -511,8 +625,10 @@ function prepareVoucherImage(){
 function openTransactionModal(type){
   const isExpense=type==='CHI';
   document.getElementById('formTransactionId').value='';
+  setTransactionPlanLink('','');
   document.getElementById('formTransactionReceiptNo').value='';
   document.getElementById('formTransactionType').disabled=false;
+  document.getElementById('formTransactionCategory').disabled=false;
   document.getElementById('formTransactionType').value=isExpense?'CHI':'THU';
   document.getElementById('formTransactionDate').value=dateToInput(new Date());
   document.getElementById('formTransactionAmount').value='';
@@ -527,16 +643,23 @@ function openTransactionModal(type){
   t('transactionModalTitle',isExpense?'Phiếu chi':'Phiếu thu');
   openModal('transactionModal')
 }
+function setTransactionPlanLink(id,name){document.getElementById('formTransactionPlanId').value=id||'';document.getElementById('transactionPlanLink').style.display=id?'':'none';t('transactionPlanName',name||'')}
+function openPlanPayment(id){
+  const item=((financeData.monthlyFinance||{}).items||[]).find(x=>x.maKeHoachChi===id);if(!item||Number(item.conPhaiChi||0)<=0)return;
+  openTransactionModal('CHI');setTransactionPlanLink(item.maKeHoachChi,item.tenKhoanChi);document.getElementById('formTransactionType').disabled=true;renderTransactionCategories(item.maDanhMuc);document.getElementById('formTransactionCategory').disabled=true;document.getElementById('formTransactionAmount').value=numberText(item.conPhaiChi);document.getElementById('formTransactionContent').value='Thanh toán '+item.tenKhoanChi;renderTransactionPeople(item.nguoiNhan||'');document.getElementById('formTransactionNote').value='Theo kế hoạch chi tháng '+formatMonthText((financeData.monthlyFinance||{}).thang||'');t('transactionModalTitle','Ghi nhận chi - '+item.tenKhoanChi)
+}
 function editTransaction(id){
   const x=(financeData.transactions||[]).find(i=>i.maGiaoDich===id);
   if(!x||!x.editable)return;
   document.getElementById('formTransactionId').value=x.maGiaoDich;
+  const planItem=((financeData.monthlyFinance||{}).items||[]).find(item=>item.maKeHoachChi===x.maKeHoachChi);setTransactionPlanLink(x.maKeHoachChi||'',planItem?planItem.tenKhoanChi:'Khoản kế hoạch đã liên kết');
   document.getElementById('formTransactionReceiptNo').value=x.soPhieu||'';
   document.getElementById('formTransactionType').value=x.loai;
   document.getElementById('formTransactionType').disabled=true;
   document.getElementById('formTransactionDate').value=x.ngayGiaoDich;
   fillSourceSelect('formTransactionSource',false,x.maNguonTien);
   renderTransactionCategories(x.maDanhMuc);
+  document.getElementById('formTransactionCategory').disabled=!!x.maKeHoachChi;
   document.getElementById('formTransactionAmount').value=numberText(x.soTien);
   document.getElementById('formTransactionContent').value=x.noiDung||'';
   renderTransactionPeople(x.nguoiNopNhan||'');
@@ -550,7 +673,7 @@ function editTransaction(id){
 function renderTransactionCategories(selected){const type=v('formTransactionType'),s=document.getElementById('formTransactionCategory');s.innerHTML='';(financeData.categories||[]).filter(x=>x.loai===type&&x.trangThai==='ACTIVE').forEach(x=>s.appendChild(new Option(x.tenDanhMuc,x.maDanhMuc)));if(selected)s.value=selected}
 function updateTransactionMethodNote(){const code=v('formTransactionSource'),bank=['VIETCOMBANK','VIETINBANK','BIDV'].includes(code);t('transactionMethodNote',code?'Hình thức: '+(bank?'Chuyển khoản':'Tiền mặt'):'')}
 function saveTransaction(printAfter){
-  const data={maGiaoDich:v('formTransactionId'),loai:v('formTransactionType'),ngayGiaoDich:v('formTransactionDate'),maNguonTien:v('formTransactionSource'),maDanhMuc:v('formTransactionCategory'),soTien:rawMoney('formTransactionAmount'),noiDung:v('formTransactionContent').trim(),nguoiNopNhan:v('formTransactionPerson').trim(),soChungTu:v('formTransactionVoucher').trim(),ghiChu:v('formTransactionNote').trim()};
+  const data={maGiaoDich:v('formTransactionId'),maKeHoachChi:v('formTransactionPlanId'),loai:v('formTransactionType'),ngayGiaoDich:v('formTransactionDate'),maNguonTien:v('formTransactionSource'),maDanhMuc:v('formTransactionCategory'),soTien:rawMoney('formTransactionAmount'),noiDung:v('formTransactionContent').trim(),nguoiNopNhan:v('formTransactionPerson').trim(),soChungTu:v('formTransactionVoucher').trim(),ghiChu:v('formTransactionNote').trim()};
   if(!data.ngayGiaoDich||!data.maNguonTien||!data.maDanhMuc||!data.noiDung||Number(data.soTien)<=0){showNotification('Vui lòng nhập đầy đủ ngày lập, nguồn tiền, danh mục, nội dung và số tiền.','warning');return}
   const receiptDraft={loai:data.loai,ngayGiaoDich:data.ngayGiaoDich,ngayDisplay:formatDateDisplayClient(data.ngayGiaoDich),tenNguonTien:getSourceNameByCode(data.maNguonTien),tenDanhMuc:getCategoryNameByCode(data.maDanhMuc),noiDung:data.noiDung,nguoiNopNhan:data.nguoiNopNhan,soChungTu:data.soChungTu,ghiChu:data.ghiChu,soTien:Number(data.soTien),trangThai:'HOAT_DONG'};
   const pendingPrintWindow=printAfter?window.open('','_blank','width=850,height=900'):null;
