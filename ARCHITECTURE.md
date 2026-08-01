@@ -15,7 +15,7 @@
 | --- | --- |
 | `CoreSecurity.js` | Tài khoản, mật khẩu băm, phiên đăng nhập, vai trò và quyền |
 | `CoreGovernance.js` | Repository/Service cho nhật ký kiểm toán và khóa sổ tài chính |
-| `FinanceDomain.js` | Công thức học phí, lợi nhuận, dòng tiền và tiền an toàn |
+| `FinanceDomain.js` | Công thức học phí, lợi nhuận, dòng tiền, tiền an toàn và phân bổ hũ tài chính |
 | `CashbookDomain.js` | Chuẩn hóa, kiểm tra lệnh thu/chi và chuyển nguồn |
 | `ArchitectureTests.js` | Kiểm thử đơn vị không làm thay đổi dữ liệu Sheet |
 
@@ -32,6 +32,15 @@
 - `NguoiDung`: tài khoản và mật khẩu SHA-256 có muối riêng; không lưu mật khẩu nguyên văn. Định dạng được tối ưu cho giới hạn thực thi của Google Apps Script.
 - `NhatKyHeThong`: người thao tác, thời gian, hành động, đối tượng và dữ liệu thay đổi đã loại thông tin nhạy cảm.
 - `KhoaSoTaiChinh`: trạng thái mở/khóa theo kỳ học và tháng.
+- `HuTaiChinhThang`: tỷ lệ phân bổ sáu hũ tài chính theo kỳ học và tháng; số thực chi được tổng hợp từ sổ thu chi.
+
+## Nguồn dữ liệu tài chính duy nhất
+
+- `DanhMucThuChi.MaHuMacDinh` xác định hũ mặc định của từng danh mục chi.
+- `SoThuChi.MaHuTaiChinh` lưu hũ thực tế được chọn trên phiếu chi; người dùng có thể đổi so với mặc định.
+- Không tạo sổ giao dịch hũ riêng. Báo cáo hũ đọc trực tiếp các phiếu đang hoạt động trong `SoThuChi`, nên sửa hoặc huỷ phiếu không tạo dữ liệu trùng.
+- Học phí dùng để phân bổ hũ là các bút toán `THU_HOC_PHI` đã ghi vào `SoThuChi`. Dữ liệu phải thu từ sheet tháng chỉ dùng đối chiếu và cảnh báo chưa đồng bộ.
+- Số đầu kỳ được tính từ toàn bộ phân bổ và phát sinh của các tháng trước trong cùng kỳ học; số cuối kỳ bằng đầu kỳ cộng phân bổ trong kỳ trừ phát sinh sử dụng.
 
 ## Quy tắc khóa sổ
 

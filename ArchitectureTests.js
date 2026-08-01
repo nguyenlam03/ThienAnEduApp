@@ -37,6 +37,30 @@ function runArchitectureUnitTests() {
     equal(result.projectedProfit, 68340000, 'Lợi nhuận dự kiến sai');
     equal(result.safeCash, 45000000, 'Tiền thực có thể sử dụng sai');
   });
+  test('Hũ tài chính phân bổ đúng doanh thu và số dư sau thực chi', function () {
+    var result = FinanceDomain.calculateJars({
+      revenue: 100000000,
+      jars: [
+        { code: 'VAN_HANH', name: 'Vận hành', ratio: 40, order: 1 },
+        { code: 'LUONG', name: 'Lương', ratio: 30, order: 2 },
+        { code: 'LOI_NHUAN', name: 'Lợi nhuận', ratio: 30, order: 3 }
+      ],
+      actualByJar: { VAN_HANH: 15000000, LUONG: 10000000 }
+    });
+    equal(result.summary.ratioTotal, 100, 'Tổng tỷ lệ hũ sai');
+    equal(result.summary.allocatedTotal, 100000000, 'Tổng tiền phân bổ sai');
+    equal(result.items[0].remaining, 25000000, 'Số dư hũ vận hành sai');
+  });
+  test('Hũ tài chính chuyển số dư cuối tháng trước thành số đầu kỳ', function () {
+    var result = FinanceDomain.calculateJars({
+      revenue: 10000000,
+      jars: [{ code: 'DU_PHONG', name: 'Dự phòng', ratio: 10, order: 1 }],
+      openingByJar: { DU_PHONG: 5000000 },
+      actualByJar: { DU_PHONG: 2000000 }
+    });
+    equal(result.items[0].opening, 5000000, 'Số đầu kỳ sai');
+    equal(result.items[0].closing, 4000000, 'Số cuối kỳ sai');
+  });
   test('Định dạng tháng tài chính hợp lệ', function () {
     equal(GovernanceService.validateMonth('2026-08'), '2026-08', 'Không nhận tháng hợp lệ');
     var failed = false;
@@ -49,6 +73,10 @@ function runArchitectureUnitTests() {
     var failed = false;
     try { CashbookDomain.transaction({ loai: 'CHI', ngayGiaoDich: '2026-02-31', maDanhMuc: 'CHI_KHAC', maNguonTien: 'TIEN_MAT', noiDung: 'Sai ngày', soTien: 1 }); } catch (error) { failed = true; }
     equal(failed, true, 'Không chặn ngày không tồn tại');
+  });
+  test('Phiếu chi giữ hũ tài chính do người dùng lựa chọn', function () {
+    var command = CashbookDomain.transaction({ loai: 'CHI', ngayGiaoDich: '2026-08-01', maDanhMuc: 'CHI_MARKETING', maHuTaiChinh: 'dau_tu', maNguonTien: 'TIEN_MAT', noiDung: 'Quảng cáo tuyển sinh', soTien: 2000000 });
+    equal(command.maHuTaiChinh, 'DAU_TU', 'Không giữ hũ tài chính trên phiếu chi');
   });
 
   var failed = results.filter(function (item) { return !item.passed; }).length;
