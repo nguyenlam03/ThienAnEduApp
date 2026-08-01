@@ -299,6 +299,18 @@
       box-shadow: none;
     }
 
+    .login-continue {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      box-sizing: border-box;
+    }
+
+    .login-continue.show {
+      display: flex;
+    }
+
     .small-note {
       margin-top: 24px;
       text-align: center;
@@ -527,6 +539,9 @@
         <button id="btnLogin" class="login-button" onclick="login()">
           Đăng nhập hệ thống
         </button>
+        <a id="continueLoginLink" class="login-button login-continue" href="#" target="_top">
+          Vào màn hình chính
+        </a>
 
         <div class="small-note">
           Dữ liệu được bảo vệ bằng mật khẩu nội bộ.
@@ -621,6 +636,7 @@
       const username = document.getElementById('username').value;
       const password = document.getElementById('password').value;
       const btnLogin = document.getElementById('btnLogin');
+      const continueLink = document.getElementById('continueLoginLink');
 
       if (!username.trim()) {
         showMessage('Vui lòng nhập tên tài khoản.', 'error');
@@ -639,6 +655,9 @@
 
       btnLogin.disabled = true;
       btnLogin.textContent = 'Đang kiểm tra...';
+      btnLogin.style.display = '';
+      continueLink.classList.remove('show');
+      continueLink.removeAttribute('href');
       const attemptId = ++loginAttemptId;
       clearTimeout(loginTimeoutId);
       loginTimeoutId = setTimeout(function () {
@@ -670,10 +689,13 @@
           }
 
           if (data.success === true) {
-            showMessage('Đăng nhập thành công. Đang chuyển vào hệ thống...', 'success');
+            showMessage('Đăng nhập thành công. Vui lòng nhấn “Vào màn hình chính”.', 'success');
 
             if (data.redirectUrl) {
-              window.top.location.href = data.redirectUrl;
+              btnLogin.style.display = 'none';
+              continueLink.href = data.redirectUrl;
+              continueLink.classList.add('show');
+              continueLink.focus();
             } else {
               showMessage('Không tạo được đường dẫn chuyển trang.', 'error');
               resetButton();
@@ -696,8 +718,12 @@
 
     function resetButton() {
       const btnLogin = document.getElementById('btnLogin');
+      const continueLink = document.getElementById('continueLoginLink');
       btnLogin.disabled = false;
       btnLogin.textContent = 'Đăng nhập hệ thống';
+      btnLogin.style.display = '';
+      continueLink.classList.remove('show');
+      continueLink.removeAttribute('href');
     }
 
     function getErrorMessage(error) {
