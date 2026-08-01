@@ -101,6 +101,7 @@
       background: #dcf3e7;
       color: #008f55;
     }
+    .account-form{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}.account-form .full{grid-column:1/-1}.account-table{min-width:650px}.account-actions{display:flex;justify-content:flex-end;gap:8px}@media(max-width:650px){.account-form{grid-template-columns:1fr}.account-form .full{grid-column:1}}
   </style>
   <?!= include('AppTheme'); ?>
 </head>
@@ -114,6 +115,8 @@
       </div>
 
       <div class="session-box">
+        <span class="session-label">Tài khoản:</span>
+        <strong><?= currentUserName ?> · <?= currentUserRole ?></strong>
         <span class="session-label">Kỳ học:</span>
         <strong><?= tenKyHoc ?></strong>
 
@@ -136,6 +139,8 @@
           <option value="" disabled>Cache dữ liệu: <?!= cacheEnabled ? 'Đang bật' : 'Đang tắt' ?></option>
           <option value="TOGGLE_CACHE"><?!= cacheEnabled ? 'Tắt cache dữ liệu' : 'Bật cache dữ liệu' ?></option>
           <option value="CLEAR_CACHE">Làm mới dữ liệu</option>
+          <? if (currentUserRole === 'OWNER' || currentUserRole === 'ADMIN') { ?><option value="MANAGE_USERS">Quản lý tài khoản</option><? } ?>
+          <option value="CHANGE_PASSWORD">Đổi mật khẩu</option>
           <option value="LOGOUT">Đăng xuất</option>
         </select>
       </div>
@@ -221,6 +226,36 @@
     </main>
   </div>
 
+  <div id="changePasswordModal" class="modal-backdrop">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header"><div class="modal-title">Đổi mật khẩu</div><button class="close-button" onclick="closeChangePasswordModal()">×</button></div>
+      <div class="modal-body">
+        <div class="field"><label>Mật khẩu hiện tại</label><input id="currentPassword" type="password" autocomplete="current-password"></div>
+        <div class="field"><label>Mật khẩu mới</label><input id="newPassword" type="password" minlength="8" autocomplete="new-password"></div>
+        <div class="field"><label>Nhập lại mật khẩu mới</label><input id="confirmPassword" type="password" minlength="8" autocomplete="new-password"></div>
+      </div>
+      <div class="modal-footer"><button class="cancel-button" onclick="closeChangePasswordModal()">Hủy</button><button class="save-button" onclick="saveChangedPassword()">Đổi mật khẩu</button></div>
+    </div>
+  </div>
+
+  <div id="userManagementModal" class="modal-backdrop">
+    <div class="modal" style="max-width:820px;max-height:calc(100vh - 32px);display:flex;flex-direction:column">
+      <div class="modal-header"><div class="modal-title">Quản lý tài khoản và vai trò</div><button class="close-button" onclick="closeUserManagement()">×</button></div>
+      <div class="modal-body" style="overflow:auto">
+        <input id="accountId" type="hidden">
+        <div class="account-form">
+          <div class="field"><label>Tên đăng nhập</label><input id="accountUsername" autocomplete="off"></div>
+          <div class="field"><label>Họ tên</label><input id="accountFullName"></div>
+          <div class="field"><label>Vai trò</label><select id="accountRole"><? if (currentUserRole === 'OWNER') { ?><option value="OWNER">Chủ cơ sở</option><? } ?><option value="ADMIN">Quản trị</option><option value="FINANCE">Tài chính</option><option value="TEACHER">Giáo viên</option><option value="VIEWER">Chỉ xem</option></select></div>
+          <div class="field"><label>Trạng thái</label><select id="accountStatus"><option value="ACTIVE">Đang hoạt động</option><option value="INACTIVE">Tạm khóa</option></select></div>
+          <div class="field full"><label>Mật khẩu <span style="font-weight:500;color:#64748b">(bỏ trống nếu không đổi)</span></label><input id="accountPassword" type="password" minlength="8" autocomplete="new-password"></div>
+        </div>
+        <div class="account-actions"><button class="secondary-button" onclick="resetAccountForm()">Nhập mới</button><button class="primary-button" onclick="saveAccount()">Lưu tài khoản</button></div>
+        <div class="table-wrap" style="margin-top:16px"><table class="account-table"><thead><tr><th>Tài khoản</th><th>Họ tên</th><th>Vai trò</th><th>Trạng thái</th><th></th></tr></thead><tbody id="accountTableBody"></tbody></table></div>
+      </div>
+    </div>
+  </div>
+
   <script>window.APP_NOTIFICATION_DURATION_MS = <?!= JSON.stringify(notificationDurationMs) ?>;</script>
   <?!= include('AppNotification'); ?>
   <?!= include('AppBusy'); ?>
@@ -229,6 +264,8 @@
     const APP_TOKEN = <?!= JSON.stringify(token) ?>;
     const APP_URL = <?!= JSON.stringify(appUrl) ?>;
     const APP_CACHE_ENABLED = <?!= JSON.stringify(cacheEnabled) ?>;
+    const APP_CURRENT_USER_ROLE = <?!= JSON.stringify(currentUserRole) ?>;
+    let accountList = [];
 
     document.addEventListener('DOMContentLoaded', function () {
       AppTheme.bindSelect(document.getElementById('headerThemeSelect'));
@@ -265,7 +302,92 @@
 
       if (action === 'CLEAR_CACHE') {
         clearCacheAndReloadPage();
+        return;
       }
+
+      if (action === 'CHANGE_PASSWORD') {
+        openChangePasswordModal();
+        return;
+      }
+
+      if (action === 'MANAGE_USERS') {
+        openUserManagement();
+      }
+    }
+
+    function parseServer(response) {
+      return typeof response === 'string' ? JSON.parse(response) : response;
+    }
+    function escapeHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, function (character) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character];
+      });
+    }
+
+    function openUserManagement() {
+      document.getElementById('userManagementModal').classList.add('show');
+      resetAccountForm();
+      showBusy('Đang tải danh sách tài khoản...');
+      google.script.run.withSuccessHandler(function (response) {
+        hideBusy(); accountList = parseServer(response) || []; renderAccountList();
+      }).withFailureHandler(function (error) {
+        hideBusy(); closeUserManagement(); showNotification(getErrorMessage(error), 'error');
+      }).getNguoiDungList(APP_TOKEN);
+    }
+
+    function closeUserManagement() { document.getElementById('userManagementModal').classList.remove('show'); }
+    function resetAccountForm() {
+      ['accountId','accountUsername','accountFullName','accountPassword'].forEach(function (id) { document.getElementById(id).value = ''; });
+      document.getElementById('accountRole').value = 'VIEWER'; document.getElementById('accountStatus').value = 'ACTIVE';
+    }
+    function renderAccountList() {
+      const labels = {OWNER:'Chủ cơ sở',ADMIN:'Quản trị',FINANCE:'Tài chính',TEACHER:'Giáo viên',VIEWER:'Chỉ xem'};
+      document.getElementById('accountTableBody').innerHTML = accountList.map(function (user) {
+        return '<tr><td><strong>'+escapeHtml(user.tenDangNhap)+'</strong></td><td>'+escapeHtml(user.hoTen)+'</td><td>'+escapeHtml(labels[user.vaiTro]||user.vaiTro)+'</td><td>'+(user.trangThai==='ACTIVE'?'Đang hoạt động':'Tạm khóa')+'</td><td><button class="mini-button edit" onclick="editAccount(\''+escapeHtml(user.maNguoiDung)+'\')">Sửa</button></td></tr>';
+      }).join('') || '<tr><td colspan="5">Chưa có tài khoản.</td></tr>';
+    }
+    function editAccount(id) {
+      const user = accountList.find(function (item) { return item.maNguoiDung === id; }); if (!user) return;
+      document.getElementById('accountId').value=user.maNguoiDung;document.getElementById('accountUsername').value=user.tenDangNhap;document.getElementById('accountFullName').value=user.hoTen;document.getElementById('accountRole').value=user.vaiTro;document.getElementById('accountStatus').value=user.trangThai;document.getElementById('accountPassword').value='';
+    }
+    function saveAccount() {
+      const payload={maNguoiDung:document.getElementById('accountId').value,tenDangNhap:document.getElementById('accountUsername').value,hoTen:document.getElementById('accountFullName').value,vaiTro:document.getElementById('accountRole').value,trangThai:document.getElementById('accountStatus').value,matKhau:document.getElementById('accountPassword').value};
+      showBusy('Đang lưu tài khoản...');google.script.run.withSuccessHandler(function(response){hideBusy();showNotification((parseServer(response)||{}).message||'Đã lưu tài khoản.','success');openUserManagement()}).withFailureHandler(function(error){hideBusy();showNotification(getErrorMessage(error),'error')}).saveNguoiDung(APP_TOKEN,payload);
+    }
+
+    function openChangePasswordModal() {
+      document.getElementById('currentPassword').value = '';
+      document.getElementById('newPassword').value = '';
+      document.getElementById('confirmPassword').value = '';
+      document.getElementById('changePasswordModal').classList.add('show');
+      setTimeout(function () { document.getElementById('currentPassword').focus(); }, 50);
+    }
+
+    function closeChangePasswordModal() {
+      document.getElementById('changePasswordModal').classList.remove('show');
+    }
+
+    function saveChangedPassword() {
+      const currentPassword = document.getElementById('currentPassword').value;
+      const newPassword = document.getElementById('newPassword').value;
+      const confirmPassword = document.getElementById('confirmPassword').value;
+      if (newPassword !== confirmPassword) {
+        showNotification('Mật khẩu nhập lại chưa khớp.', 'error');
+        return;
+      }
+      showBusy('Đang đổi mật khẩu...');
+      google.script.run
+        .withSuccessHandler(function (response) {
+          hideBusy();
+          const result = typeof response === 'string' ? JSON.parse(response) : response;
+          showNotification(result.message || 'Đã đổi mật khẩu.', 'success');
+          setTimeout(function () { window.top.location.href = APP_URL + '?page=Login'; }, 1000);
+        })
+        .withFailureHandler(function (error) {
+          hideBusy();
+          showNotification(getErrorMessage(error), 'error');
+        })
+        .changeMyPassword(APP_TOKEN, currentPassword, newPassword);
     }
 
     function logoutApp() {

@@ -486,7 +486,19 @@
         <div class="form-title">Đăng nhập</div>
 
         <div class="form-subtitle">
-          Vui lòng chọn kỳ học hiện tại và nhập mật khẩu để vào hệ thống quản lý.
+          Vui lòng nhập tài khoản, chọn kỳ học và mật khẩu để vào hệ thống quản lý.
+        </div>
+
+        <div class="form-group">
+          <label for="username">Tài khoản</label>
+          <input
+            type="text"
+            id="username"
+            value="admin"
+            placeholder="Nhập tên tài khoản"
+            autocomplete="username"
+            onkeydown="handleEnter(event)"
+          >
         </div>
 
         <div class="form-group">
@@ -542,7 +554,7 @@
     document.addEventListener('DOMContentLoaded', function () {
       AppTheme.bindSelect(document.getElementById('loginTheme'));
       loadKyHoc();
-      document.getElementById('password').focus();
+      document.getElementById('username').focus();
     });
 
     function changeLoginTheme(theme) {
@@ -603,8 +615,14 @@
 
     function login() {
       const kyHoc = document.getElementById('kyHoc').value;
+      const username = document.getElementById('username').value;
       const password = document.getElementById('password').value;
       const btnLogin = document.getElementById('btnLogin');
+
+      if (!username.trim()) {
+        showMessage('Vui lòng nhập tên tài khoản.', 'error');
+        return;
+      }
 
       if (!kyHoc) {
         showMessage('Vui lòng chọn kỳ học.', 'error');
@@ -651,7 +669,7 @@
           showMessage('Lỗi đăng nhập: ' + getErrorMessage(error), 'error');
           resetButton();
         })
-        .checkLogin(password, kyHoc);
+        .checkLogin(password, kyHoc, username);
     }
 
     function resetButton() {
