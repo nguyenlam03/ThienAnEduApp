@@ -29,7 +29,7 @@
 
 ## Dữ liệu quản trị mới
 
-- `NguoiDung`: tài khoản và mật khẩu SHA-256 lặp, có muối riêng; không lưu mật khẩu nguyên văn.
+- `NguoiDung`: tài khoản và mật khẩu SHA-256 có muối riêng; không lưu mật khẩu nguyên văn. Định dạng được tối ưu cho giới hạn thực thi của Google Apps Script.
 - `NhatKyHeThong`: người thao tác, thời gian, hành động, đối tượng và dữ liệu thay đổi đã loại thông tin nhạy cảm.
 - `KhoaSoTaiChinh`: trạng thái mở/khóa theo kỳ học và tháng.
 

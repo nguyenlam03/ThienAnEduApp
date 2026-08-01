@@ -486,7 +486,14 @@
         <div class="form-title">Đăng nhập</div>
 
         <div class="form-subtitle">
-          Vui lòng nhập tài khoản, chọn kỳ học và mật khẩu để vào hệ thống quản lý.
+          Vui lòng chọn kỳ học, nhập tài khoản và mật khẩu để vào hệ thống quản lý.
+        </div>
+
+        <div class="form-group">
+          <label for="kyHoc">Kỳ học</label>
+          <select id="kyHoc">
+            <option value="">Đang tải dữ liệu kỳ học...</option>
+          </select>
         </div>
 
         <div class="form-group">
@@ -499,13 +506,6 @@
             autocomplete="username"
             onkeydown="handleEnter(event)"
           >
-        </div>
-
-        <div class="form-group">
-          <label for="kyHoc">Kỳ học</label>
-          <select id="kyHoc">
-            <option value="">Đang tải dữ liệu kỳ học...</option>
-          </select>
         </div>
 
         <div class="form-group">
@@ -551,10 +551,13 @@
   <?!= include('AppNotification'); ?>
 
   <script>
+    let loginAttemptId = 0;
+    let loginTimeoutId = null;
+
     document.addEventListener('DOMContentLoaded', function () {
       AppTheme.bindSelect(document.getElementById('loginTheme'));
       loadKyHoc();
-      document.getElementById('username').focus();
+      document.getElementById('kyHoc').focus();
     });
 
     function changeLoginTheme(theme) {
@@ -636,12 +639,29 @@
 
       btnLogin.disabled = true;
       btnLogin.textContent = 'Đang kiểm tra...';
+      const attemptId = ++loginAttemptId;
+      clearTimeout(loginTimeoutId);
+      loginTimeoutId = setTimeout(function () {
+        if (attemptId !== loginAttemptId) return;
+        loginAttemptId++;
+        resetButton();
+        showMessage('Hệ thống phản hồi quá lâu. Vui lòng thử đăng nhập lại.', 'error');
+      }, 30000);
 
       showMessage('Đang kiểm tra thông tin đăng nhập...', 'info');
 
       google.script.run
         .withSuccessHandler(function (res) {
-          const data = parseServerJson(res);
+          if (attemptId !== loginAttemptId) return;
+          clearTimeout(loginTimeoutId);
+          let data;
+          try {
+            data = parseServerJson(res);
+          } catch (error) {
+            showMessage('Phản hồi đăng nhập không hợp lệ. Vui lòng thử lại.', 'error');
+            resetButton();
+            return;
+          }
 
           if (!data) {
             showMessage('Không nhận được phản hồi từ hệ thống.', 'error');
@@ -666,6 +686,8 @@
           resetButton();
         })
         .withFailureHandler(function (error) {
+          if (attemptId !== loginAttemptId) return;
+          clearTimeout(loginTimeoutId);
           showMessage('Lỗi đăng nhập: ' + getErrorMessage(error), 'error');
           resetButton();
         })

@@ -353,7 +353,15 @@ function checkLogin(password, maKyHoc, username) {
   const auth = SecurityService.authenticate(inputUsername, inputPassword, inputKyHoc);
   if (!auth.success) return jsonResponse_(auth);
   const webAppUrl = ScriptApp.getService().getUrl();
-  const session = SecurityService.getSession(auth.token);
+  const session = {
+    valid: true,
+    maKyHoc: auth.maKyHoc,
+    tenKyHoc: auth.tenKyHoc,
+    maNguoiDung: auth.user.maNguoiDung,
+    tenDangNhap: auth.user.tenDangNhap,
+    hoTen: auth.user.hoTen,
+    vaiTro: auth.user.vaiTro
+  };
   safeWriteAuditLog_(session, 'LOGIN', 'PHIEN_DANG_NHAP', auth.token.slice(0, 8), null, {
     maKyHoc: auth.maKyHoc
   });

@@ -55,14 +55,16 @@ var SecurityService = (function () {
   }
 
   function createPasswordHash(password) {
-    var iterations = 1000;
     var salt = Utilities.getUuid().replace(/-/g, '').slice(0, 24);
-    return ['v2', iterations, salt, derivePassword(password, salt, iterations)].join('$');
+    return ['v3', salt, hashPassword(salt + ':' + String(password || ''))].join('$');
   }
 
   function verifyPassword(password, storedHash) {
     storedHash = String(storedHash || '');
     var parts = storedHash.split('$');
+    if (parts.length === 3 && parts[0] === 'v3') {
+      return safeEqual(hashPassword(parts[1] + ':' + String(password || '')), parts[2]);
+    }
     if (parts.length === 4 && parts[0] === 'v2') {
       var iterations = Number(parts[1]);
       if (!iterations || iterations > 20000) return false;
@@ -136,7 +138,12 @@ var SecurityService = (function () {
     var user = getUsers().find(function (item) {
       return item.tenDangNhap === username && item.trangThai === 'ACTIVE';
     });
-    if (!user || !verifyPassword(password, user.matKhauHash)) {
+    var ownerPropertyHash = user && user.vaiTro === 'OWNER'
+      ? String(PropertiesService.getScriptProperties().getProperty(PASSWORD_HASH_PROPERTY) || '')
+      : '';
+    var ownerLegacyMatch = !!user && user.vaiTro === 'OWNER' && ownerPropertyHash.indexOf('v2$') !== 0 &&
+      ownerPropertyHash.indexOf('v3$') !== 0 && safeEqual(hashPassword(password), ownerPropertyHash);
+    if (!user || (!ownerLegacyMatch && !verifyPassword(password, user.matKhauHash))) {
       cache.put(attemptKey, String(attempts + 1), LOGIN_LOCK_SECONDS);
       return { success: false, message: 'Tên đăng nhập hoặc mật khẩu không đúng.' };
     }
@@ -146,10 +153,14 @@ var SecurityService = (function () {
 
     var token = createSession(user, term);
     cache.remove(attemptKey);
-    if (user.matKhauHash.indexOf('v2$') !== 0) {
-      updateUserRow(user.maNguoiDung, { MatKhauHash: createPasswordHash(password) });
+    var loginUpdates = { LastLoginAt: new Date() };
+    if (user.matKhauHash.indexOf('v3$') !== 0) {
+      loginUpdates.MatKhauHash = createPasswordHash(password);
+      if (user.vaiTro === 'OWNER') {
+        PropertiesService.getScriptProperties().setProperty(PASSWORD_HASH_PROPERTY, loginUpdates.MatKhauHash);
+      }
     }
-    touchLastLogin(user.maNguoiDung);
+    try { updateUserRow(user.maNguoiDung, loginUpdates); } catch (error) { console.warn(error); }
     return {
       success: true,
       token: token,
