@@ -78,6 +78,10 @@ function runArchitectureUnitTests() {
     equal(command.maHuTaiChinh, 'DAU_TU', 'Không giữ hũ tài chính trên phiếu chi');
   });
 
+  test('Mã hũ UUID cũ có dấu gạch ngang vẫn được nhận diện', function () {
+    equal(normalizeMaHuTaiChinh_('HU_2D4703A1-9'), 'HU_2D4703A1-9', 'Hũ cũ bị lọc khỏi danh sách');
+  });
+
   var failed = results.filter(function (item) { return !item.passed; }).length;
   return jsonResponse_({ passed: results.length - failed, failed: failed, total: results.length, results: results });
 }

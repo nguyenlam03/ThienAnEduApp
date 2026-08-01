@@ -2739,7 +2739,9 @@ function getDefaultDanhMucThuChi_() {
 
 function normalizeMaHuTaiChinh_(value) {
   const code = String(value || '').trim().toUpperCase();
-  return /^[A-Z0-9_]{2,40}$/.test(code) ? code : '';
+  // Các mã đã tạo ở phiên bản trước có thể chứa dấu gạch ngang từ UUID.
+  // Giữ tương thích để các hũ đã lưu không bị lọc khỏi giao diện.
+  return /^[A-Z0-9_-]{2,40}$/.test(code) ? code : '';
 }
 
 function inferHuTaiChinhForCategory_(maDanhMuc, tenDanhMuc) {
@@ -2806,7 +2808,7 @@ function ensureQuanLyTaiChinhSheets_() {
 function ensureThuChiSheets_(maKyHoc) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const props = PropertiesService.getScriptProperties();
-  const schemaVersion = '9';
+  const schemaVersion = '10';
   const schemaKey = 'THUCHI_SCHEMA_VERSION';
   const sourceKey = maKyHoc
     ? 'THUCHI_NGUON_INIT_' + String(maKyHoc || '').trim()
@@ -2820,7 +2822,8 @@ function ensureThuChiSheets_(maKyHoc) {
     ss.getSheetByName(SHEET_DOITUONG_THUCHI) &&
     ss.getSheetByName(SHEET_KEHOACH_CHI_THANG) &&
     ss.getSheetByName(SHEET_CAUHINH_TAICHINH_THANG) &&
-    ss.getSheetByName(SHEET_DANHMUC_HU_TAICHINH);
+    ss.getSheetByName(SHEET_DANHMUC_HU_TAICHINH) &&
+    props.getProperty('THUCHI_JAR_MIGRATION_V1') === '1';
 
   const sourceReady = !maKyHoc || props.getProperty(sourceKey) === '1';
 
@@ -3017,6 +3020,58 @@ function ensureThuChiSheets_(maKyHoc) {
       props.setProperty(receiptMigrationKey, '1');
     }
 
+    const jarMigrationKey = 'THUCHI_JAR_MIGRATION_V1';
+    if (props.getProperty(jarMigrationKey) !== '1') {
+      const categoryValues = categorySheet.getDataRange().getValues();
+      const categoryHeaders = categoryValues[0].map(header => String(header || '').trim());
+      const categoryIndex = buildHeaderIndex_(categoryHeaders);
+      const categoryJarMap = {};
+      let categoryChanged = false;
+
+      for (let i = 1; i < categoryValues.length; i++) {
+        const type = String(categoryValues[i][categoryIndex.Loai] || '').trim().toUpperCase();
+        const categoryCode = String(categoryValues[i][categoryIndex.MaDanhMuc] || '').trim();
+        let jarCode = normalizeMaHuTaiChinh_(categoryValues[i][categoryIndex.MaHuMacDinh]);
+        if (type === 'CHI' && !jarCode) {
+          jarCode = inferHuTaiChinhForCategory_(categoryCode, categoryValues[i][categoryIndex.TenDanhMuc]);
+          categoryValues[i][categoryIndex.MaHuMacDinh] = jarCode;
+          categoryValues[i][categoryIndex.UpdatedAt] = now;
+          categoryChanged = true;
+        }
+        if (categoryCode) categoryJarMap[categoryCode] = jarCode;
+      }
+
+      if (categoryChanged && categoryValues.length > 1) {
+        categorySheet
+          .getRange(2, 1, categoryValues.length - 1, categoryHeaders.length)
+          .setValues(categoryValues.slice(1));
+      }
+
+      const ledgerValues = ledgerSheet.getDataRange().getValues();
+      if (ledgerValues.length > 1) {
+        const ledgerHeaders = ledgerValues[0].map(header => String(header || '').trim());
+        const ledgerIndex = buildHeaderIndex_(ledgerHeaders);
+        let ledgerChanged = false;
+
+        for (let i = 1; i < ledgerValues.length; i++) {
+          if (String(ledgerValues[i][ledgerIndex.LoaiGiaoDich] || '').trim().toUpperCase() !== 'CHI') continue;
+          if (normalizeMaHuTaiChinh_(ledgerValues[i][ledgerIndex.MaHuTaiChinh])) continue;
+          const categoryCode = String(ledgerValues[i][ledgerIndex.MaDanhMuc] || '').trim();
+          ledgerValues[i][ledgerIndex.MaHuTaiChinh] = categoryJarMap[categoryCode] || inferHuTaiChinhForCategory_(categoryCode, ledgerValues[i][ledgerIndex.TenDanhMuc]);
+          ledgerValues[i][ledgerIndex.UpdatedAt] = now;
+          ledgerChanged = true;
+        }
+
+        if (ledgerChanged) {
+          ledgerSheet
+            .getRange(2, 1, ledgerValues.length - 1, ledgerHeaders.length)
+            .setValues(ledgerValues.slice(1));
+        }
+      }
+
+      props.setProperty(jarMigrationKey, '1');
+    }
+
     props.setProperty(schemaKey, schemaVersion);
   } finally {
     lock.releaseLock();
@@ -3113,46 +3168,6 @@ function buildKeHoachChiThangData_(maKyHoc, yearMonth, activeTransactions, closi
       warnings.push({ level: 'warning', message: item.tenKhoanChi + ' chưa được xác định số tiền phải chi.' });
     }
 
-    const jarMigrationKey = 'THUCHI_JAR_MIGRATION_V1';
-    if (props.getProperty(jarMigrationKey) !== '1') {
-      const categoryValues = categorySheet.getDataRange().getValues();
-      const categoryHeaders = categoryValues[0].map(header => String(header || '').trim());
-      const categoryIndex = buildHeaderIndex_(categoryHeaders);
-      const categoryJarMap = {};
-      let categoryChanged = false;
-      for (let i = 1; i < categoryValues.length; i++) {
-        const type = String(categoryValues[i][categoryIndex.Loai] || '').trim().toUpperCase();
-        const categoryCode = String(categoryValues[i][categoryIndex.MaDanhMuc] || '').trim();
-        let jarCode = normalizeMaHuTaiChinh_(categoryValues[i][categoryIndex.MaHuMacDinh]);
-        if (type === 'CHI' && !jarCode) {
-          jarCode = inferHuTaiChinhForCategory_(categoryCode, categoryValues[i][categoryIndex.TenDanhMuc]);
-          categoryValues[i][categoryIndex.MaHuMacDinh] = jarCode;
-          categoryValues[i][categoryIndex.UpdatedAt] = now;
-          categoryChanged = true;
-        }
-        if (categoryCode) categoryJarMap[categoryCode] = jarCode;
-      }
-      if (categoryChanged && categoryValues.length > 1) {
-        categorySheet.getRange(2, 1, categoryValues.length - 1, categoryHeaders.length).setValues(categoryValues.slice(1));
-      }
-
-      const ledgerValues = ledgerSheet.getDataRange().getValues();
-      if (ledgerValues.length > 1) {
-        const ledgerHeaders = ledgerValues[0].map(header => String(header || '').trim());
-        const ledgerIndex = buildHeaderIndex_(ledgerHeaders);
-        let ledgerChanged = false;
-        for (let i = 1; i < ledgerValues.length; i++) {
-          if (String(ledgerValues[i][ledgerIndex.LoaiGiaoDich] || '').trim().toUpperCase() !== 'CHI') continue;
-          if (normalizeMaHuTaiChinh_(ledgerValues[i][ledgerIndex.MaHuTaiChinh])) continue;
-          const categoryCode = String(ledgerValues[i][ledgerIndex.MaDanhMuc] || '').trim();
-          ledgerValues[i][ledgerIndex.MaHuTaiChinh] = categoryJarMap[categoryCode] || inferHuTaiChinhForCategory_(categoryCode, ledgerValues[i][ledgerIndex.TenDanhMuc]);
-          ledgerValues[i][ledgerIndex.UpdatedAt] = now;
-          ledgerChanged = true;
-        }
-        if (ledgerChanged) ledgerSheet.getRange(2, 1, ledgerValues.length - 1, ledgerHeaders.length).setValues(ledgerValues.slice(1));
-      }
-      props.setProperty(jarMigrationKey, '1');
-    }
     if (item.vuotKeHoach > 0) {
       warnings.push({ level: 'danger', message: item.tenKhoanChi + ' đã vượt kế hoạch ' + formatMoneyText_(item.vuotKeHoach) + '.' });
     }
@@ -3650,7 +3665,7 @@ function saveDanhMucHuTaiChinh(token, data) {
   if (!name) throw new Error('Vui lòng nhập tên hũ tài chính.');
   if (ratio < 0 || ratio > 100) throw new Error('Tỷ lệ mặc định phải từ 0% đến 100%.');
   if (order < 1 || Math.floor(order) !== order) throw new Error('Thứ tự hũ phải là số nguyên lớn hơn hoặc bằng 1.');
-  const code = inputCode || ('HU_' + Utilities.getUuid().slice(0, 10).toUpperCase());
+  const code = inputCode || ('HU_' + Utilities.getUuid().replace(/-/g, '').slice(0, 10).toUpperCase());
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) throw new Error('Hệ thống đang cập nhật danh mục hũ tài chính.');
   try {
