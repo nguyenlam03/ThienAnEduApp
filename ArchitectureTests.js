@@ -37,7 +37,7 @@ function runArchitectureUnitTests() {
     equal(result.projectedProfit, 68340000, 'Lợi nhuận dự kiến sai');
     equal(result.safeCash, 45000000, 'Tiền thực có thể sử dụng sai');
   });
-  test('Hũ tài chính phân bổ đúng doanh thu và số dư sau thực chi', function () {
+  test('Hũ tài chính phân bổ đúng học phí phải thu và hạn mức sau chi', function () {
     var result = FinanceDomain.calculateJars({
       revenue: 100000000,
       jars: [
@@ -51,15 +51,14 @@ function runArchitectureUnitTests() {
     equal(result.summary.allocatedTotal, 100000000, 'Tổng tiền phân bổ sai');
     equal(result.items[0].remaining, 25000000, 'Số dư hũ vận hành sai');
   });
-  test('Hũ tài chính chuyển số dư cuối tháng trước thành số đầu kỳ', function () {
+  test('Hũ tài chính của mỗi tháng không mang số dư tháng trước', function () {
     var result = FinanceDomain.calculateJars({
       revenue: 10000000,
       jars: [{ code: 'DU_PHONG', name: 'Dự phòng', ratio: 10, order: 1 }],
-      openingByJar: { DU_PHONG: 5000000 },
-      actualByJar: { DU_PHONG: 2000000 }
+      actualByJar: { DU_PHONG: 200000 }
     });
-    equal(result.items[0].opening, 5000000, 'Số đầu kỳ sai');
-    equal(result.items[0].closing, 4000000, 'Số cuối kỳ sai');
+    equal(result.items[0].allocated, 1000000, 'Ngân sách tháng sai');
+    equal(result.items[0].remaining, 800000, 'Hạn mức còn lại sai');
   });
   test('Định dạng tháng tài chính hợp lệ', function () {
     equal(GovernanceService.validateMonth('2026-08'), '2026-08', 'Không nhận tháng hợp lệ');

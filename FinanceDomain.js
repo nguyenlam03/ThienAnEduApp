@@ -84,11 +84,9 @@ var FinanceDomain = (function () {
     input = input || {};
     var revenue = Math.max(0, number(input.revenue));
     var actualByJar = input.actualByJar || {};
-    var openingByJar = input.openingByJar || {};
     var jars = (input.jars || []).map(function (jar) {
       var ratio = clamp(jar.ratio, 0, 100);
       var actual = Math.max(0, number(actualByJar[jar.code]));
-      var opening = number(openingByJar[jar.code]);
       var allocated = revenue * ratio / 100;
       return {
         code: String(jar.code || ''),
@@ -96,28 +94,23 @@ var FinanceDomain = (function () {
         ratio: ratio,
         order: number(jar.order),
         note: String(jar.note || ''),
-        opening: opening,
         allocated: allocated,
         actual: actual,
-        remaining: opening + allocated - actual,
-        closing: opening + allocated - actual,
+        remaining: allocated - actual,
         usedPercent: allocated > 0 ? actual * 100 / allocated : (actual > 0 ? 100 : 0)
       };
     }).sort(function (a, b) { return a.order - b.order; });
     var ratioTotal = jars.reduce(function (sum, jar) { return sum + jar.ratio; }, 0);
     var allocatedTotal = jars.reduce(function (sum, jar) { return sum + jar.allocated; }, 0);
     var actualTotal = jars.reduce(function (sum, jar) { return sum + jar.actual; }, 0);
-    var openingTotal = jars.reduce(function (sum, jar) { return sum + jar.opening; }, 0);
     return {
       items: jars,
       summary: {
         revenue: revenue,
         ratioTotal: ratioTotal,
-        openingTotal: openingTotal,
         allocatedTotal: allocatedTotal,
         actualTotal: actualTotal,
-        remainingTotal: openingTotal + allocatedTotal - actualTotal,
-        closingTotal: openingTotal + allocatedTotal - actualTotal
+        remainingTotal: allocatedTotal - actualTotal
       }
     };
   }

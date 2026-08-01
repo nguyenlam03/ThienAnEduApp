@@ -12,6 +12,7 @@ const SHEET_KEHOACH_CHI_THANG = 'KeHoachChiThang';
 const SHEET_CAUHINH_TAICHINH_THANG = 'CauHinhTaiChinhThang';
 const SHEET_NHANSU_TAICHINH = 'NhanSuTaiChinh';
 const SHEET_KHOANCHI_DINHKY = 'KhoanChiDinhKy';
+const SHEET_DANHMUC_HU_TAICHINH = 'DanhMucHuTaiChinh';
 const SHEET_HU_TAICHINH_THANG = 'HuTaiChinhThang';
 const SHEET_DANHMUC_GIADINH = 'DanhMucTaiChinhGiaDinh';
 const SHEET_GIAODICH_GIADINH = 'GiaoDichTaiChinhGiaDinh';
@@ -2571,6 +2572,13 @@ function getHuTaiChinhThangHeaders_() {
   ];
 }
 
+function getDanhMucHuTaiChinhHeaders_() {
+  return [
+    'MaHu', 'TenHu', 'TyLeMacDinh', 'ThuTu', 'TrangThai', 'GhiChu',
+    'CreatedAt', 'UpdatedAt'
+  ];
+}
+
 function getDanhMucGiaDinhHeaders_() {
   return [
     'MaDanhMucGiaDinh', 'TenDanhMuc', 'Loai', 'Nhom', 'TyLeMacDinh',
@@ -2731,7 +2739,7 @@ function getDefaultDanhMucThuChi_() {
 
 function normalizeMaHuTaiChinh_(value) {
   const code = String(value || '').trim().toUpperCase();
-  return getDefaultHuTaiChinh_().some(item => item.code === code) ? code : '';
+  return /^[A-Z0-9_]{2,40}$/.test(code) ? code : '';
 }
 
 function inferHuTaiChinhForCategory_(maDanhMuc, tenDanhMuc) {
@@ -2764,6 +2772,7 @@ function ensureQuanLyTaiChinhSheets_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureSheet_(ss, SHEET_NHANSU_TAICHINH, getNhanSuTaiChinhHeaders_());
   ensureSheet_(ss, SHEET_KHOANCHI_DINHKY, getKhoanChiDinhKyHeaders_());
+  const jarCategorySheet = ensureSheet_(ss, SHEET_DANHMUC_HU_TAICHINH, getDanhMucHuTaiChinhHeaders_());
   ensureSheet_(ss, SHEET_HU_TAICHINH_THANG, getHuTaiChinhThangHeaders_());
   const familyCategorySheet = ensureSheet_(ss, SHEET_DANHMUC_GIADINH, getDanhMucGiaDinhHeaders_());
   ensureSheet_(ss, SHEET_GIAODICH_GIADINH, getGiaoDichGiaDinhHeaders_());
@@ -2775,6 +2784,17 @@ function ensureQuanLyTaiChinhSheets_() {
     return map;
   }, {});
   const now = new Date();
+  const jarCategoryRows = readObjectsNoCache_(SHEET_DANHMUC_HU_TAICHINH);
+  const existingJarCodes = jarCategoryRows.reduce((map, row) => {
+    const code = String(row.MaHu || '').trim().toUpperCase();
+    if (code) map[code] = true;
+    return map;
+  }, {});
+  const missingJars = getDefaultHuTaiChinh_().filter(item => !existingJarCodes[item.code]).map(item => ({
+    MaHu: item.code, TenHu: item.name, TyLeMacDinh: item.ratio, ThuTu: item.order,
+    TrangThai: 'ACTIVE', GhiChu: item.note, CreatedAt: now, UpdatedAt: now
+  }));
+  if (missingJars.length) appendObjectsToSheet_(jarCategorySheet, missingJars, getDanhMucHuTaiChinhHeaders_());
   const missing = getDefaultDanhMucGiaDinh_().filter(item => !existing[item[0]]).map(item => ({
     MaDanhMucGiaDinh: item[0], TenDanhMuc: item[1], Loai: item[2], Nhom: item[3],
     TyLeMacDinh: item[4], KieuGioiHan: item[5], ThuTu: item[6], TrangThai: 'ACTIVE',
@@ -2786,7 +2806,7 @@ function ensureQuanLyTaiChinhSheets_() {
 function ensureThuChiSheets_(maKyHoc) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const props = PropertiesService.getScriptProperties();
-  const schemaVersion = '8';
+  const schemaVersion = '9';
   const schemaKey = 'THUCHI_SCHEMA_VERSION';
   const sourceKey = maKyHoc
     ? 'THUCHI_NGUON_INIT_' + String(maKyHoc || '').trim()
@@ -2799,7 +2819,8 @@ function ensureThuChiSheets_(maKyHoc) {
     ss.getSheetByName(SHEET_NGUONTIEN) &&
     ss.getSheetByName(SHEET_DOITUONG_THUCHI) &&
     ss.getSheetByName(SHEET_KEHOACH_CHI_THANG) &&
-    ss.getSheetByName(SHEET_CAUHINH_TAICHINH_THANG);
+    ss.getSheetByName(SHEET_CAUHINH_TAICHINH_THANG) &&
+    ss.getSheetByName(SHEET_DANHMUC_HU_TAICHINH);
 
   const sourceReady = !maKyHoc || props.getProperty(sourceKey) === '1';
 
@@ -3606,6 +3627,73 @@ function getDefaultHuTaiChinh_() {
   ];
 }
 
+function getDanhMucHuTaiChinhList_(includeDeleted) {
+  return readObjectsNoCache_(SHEET_DANHMUC_HU_TAICHINH).map(row => ({
+    code: normalizeMaHuTaiChinh_(row.MaHu),
+    name: String(row.TenHu || '').trim(),
+    ratio: Math.max(0, Math.min(100, number_(row.TyLeMacDinh))),
+    order: Math.max(1, number_(row.ThuTu) || 999),
+    status: String(row.TrangThai || 'ACTIVE').trim().toUpperCase(),
+    note: String(row.GhiChu || '').trim()
+  })).filter(item => item.code && item.name && (includeDeleted || item.status === 'ACTIVE'))
+    .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'vi'));
+}
+
+function saveDanhMucHuTaiChinh(token, data) {
+  const session = requireSession_(token, 'finance.write');
+  ensureQuanLyTaiChinhSheets_();
+  data = data || {};
+  const inputCode = normalizeMaHuTaiChinh_(data.maHu || data.code);
+  const name = String(data.tenHu || data.name || '').trim();
+  const ratio = number_(data.tyLeMacDinh === undefined ? data.ratio : data.tyLeMacDinh);
+  const order = number_(data.thuTu === undefined ? data.order : data.thuTu);
+  if (!name) throw new Error('Vui lòng nhập tên hũ tài chính.');
+  if (ratio < 0 || ratio > 100) throw new Error('Tỷ lệ mặc định phải từ 0% đến 100%.');
+  if (order < 1 || Math.floor(order) !== order) throw new Error('Thứ tự hũ phải là số nguyên lớn hơn hoặc bằng 1.');
+  const code = inputCode || ('HU_' + Utilities.getUuid().slice(0, 10).toUpperCase());
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('Hệ thống đang cập nhật danh mục hũ tài chính.');
+  try {
+    const currentRows = readObjectsNoCache_(SHEET_DANHMUC_HU_TAICHINH);
+    const current = inputCode ? currentRows.find(row => normalizeMaHuTaiChinh_(row.MaHu) === inputCode && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED') : null;
+    if (inputCode && !current) throw new Error('Không tìm thấy hũ tài chính cần sửa.');
+    const duplicated = currentRows.some(row => normalizeMaHuTaiChinh_(row.MaHu) !== inputCode && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED' && normalizeText_(row.TenHu) === normalizeText_(name));
+    if (duplicated) throw new Error('Tên hũ tài chính đã tồn tại.');
+    upsertFinanceObject_(SHEET_DANHMUC_HU_TAICHINH, getDanhMucHuTaiChinhHeaders_(), 'MaHu', code, {
+      TenHu: name, TyLeMacDinh: ratio, ThuTu: order, TrangThai: 'ACTIVE',
+      GhiChu: String(data.ghiChu || data.note || '').trim()
+    });
+  } finally { lock.releaseLock(); }
+  bumpDataVersion_();
+  safeWriteAuditLog_(session, inputCode ? 'UPDATE' : 'CREATE', 'DANH_MUC_HU_TAI_CHINH', code, null, { tenHu: name, tyLeMacDinh: ratio, thuTu: order });
+  return jsonResponse_({ success: true, maHu: code, message: inputCode ? 'Đã cập nhật hũ tài chính.' : 'Đã thêm hũ tài chính.' });
+}
+
+function deleteDanhMucHuTaiChinh(token, codeInput) {
+  const session = requireSession_(token, 'finance.write');
+  ensureQuanLyTaiChinhSheets_();
+  const code = normalizeMaHuTaiChinh_(codeInput);
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('Hệ thống đang cập nhật danh mục hũ tài chính.');
+  let current;
+  try {
+    const rows = readObjectsNoCache_(SHEET_DANHMUC_HU_TAICHINH);
+    current = rows.find(row => normalizeMaHuTaiChinh_(row.MaHu) === code && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED');
+    if (!current) throw new Error('Không tìm thấy hũ tài chính cần xoá.');
+    const activeCount = rows.filter(row => normalizeMaHuTaiChinh_(row.MaHu) && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() === 'ACTIVE').length;
+    if (activeCount <= 1) throw new Error('Phải giữ lại ít nhất một hũ tài chính đang hoạt động.');
+    const usedByCategory = readObjectsNoCache_(SHEET_DANHMUC_THUCHI).some(row => normalizeMaHuTaiChinh_(row.MaHuMacDinh) === code && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED');
+    const usedByTransaction = readObjectsNoCache_(SHEET_SOTHUCHI).some(row => normalizeMaHuTaiChinh_(row.MaHuTaiChinh) === code);
+    const usedByConfig = readObjectsNoCache_(SHEET_HU_TAICHINH_THANG).some(row => normalizeMaHuTaiChinh_(row.MaHu) === code);
+    if (usedByCategory || usedByTransaction || usedByConfig) throw new Error('Hũ đã được danh mục, phiếu chi hoặc cấu hình tháng sử dụng nên không thể xoá. Hãy chuyển các liên kết sang hũ khác trước để bảo toàn lịch sử tài chính.');
+    current.TrangThai = 'DELETED';
+    upsertFinanceObject_(SHEET_DANHMUC_HU_TAICHINH, getDanhMucHuTaiChinhHeaders_(), 'MaHu', code, current);
+  } finally { lock.releaseLock(); }
+  bumpDataVersion_();
+  safeWriteAuditLog_(session, 'DELETE', 'DANH_MUC_HU_TAI_CHINH', code, current, null);
+  return jsonResponse_({ success: true, message: 'Đã xoá hũ tài chính chưa phát sinh dữ liệu.' });
+}
+
 function getHuTaiChinhThang_(maKyHoc, month) {
   const saved = readObjectsNoCache_(SHEET_HU_TAICHINH_THANG).filter(row =>
     String(row.MaKyHoc || '').trim() === String(maKyHoc || '').trim() &&
@@ -3615,14 +3703,14 @@ function getHuTaiChinhThang_(maKyHoc, month) {
     map[String(row.MaHu || '').trim().toUpperCase()] = row;
     return map;
   }, {});
-  return getDefaultHuTaiChinh_().map(item => {
+  return getDanhMucHuTaiChinhList_(false).map(item => {
     const row = savedMap[item.code] || {};
     return {
       code: item.code,
-      name: String(row.TenHu || item.name).trim(),
+      name: item.name,
       ratio: row.TyLePhanBo === '' || row.TyLePhanBo === undefined ? item.ratio : Math.max(0, Math.min(100, number_(row.TyLePhanBo))),
       order: number_(row.ThuTu) || item.order,
-      note: String(row.GhiChu || item.note).trim()
+      note: item.note
     };
   }).sort((a, b) => a.order - b.order);
 }
@@ -3634,10 +3722,10 @@ function saveHuTaiChinhThang(token, data) {
   const month = String(data.thang || '').trim();
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('Tháng cấu hình hũ tài chính không hợp lệ.');
   assertFinancePeriodOpen_(session, month);
-  const definitions = getDefaultHuTaiChinh_();
+  const definitions = getDanhMucHuTaiChinhList_(false);
   const allowed = definitions.reduce((map, item) => { map[item.code] = item; return map; }, {});
   const incoming = Array.isArray(data.jars) ? data.jars : [];
-  if (incoming.length !== definitions.length) throw new Error('Cần cấu hình đầy đủ 6 hũ tài chính.');
+  if (!definitions.length || incoming.length !== definitions.length) throw new Error('Cần cấu hình đầy đủ tất cả hũ tài chính đang hoạt động.');
   const inputMap = {};
   incoming.forEach(item => {
     const code = String(item && (item.code || item.maHu) || '').trim().toUpperCase();
@@ -3688,7 +3776,7 @@ function saveHuTaiChinhThang(token, data) {
   } finally { lock.releaseLock(); }
   bumpDataVersion_();
   safeWriteAuditLog_(session, 'UPSERT', 'HU_TAI_CHINH', month, null, { tongTyLe: ratioTotal, soHu: definitions.length });
-  return jsonResponse_({ success: true, message: 'Đã lưu tỷ lệ phân bổ 6 hũ tài chính tháng.' });
+  return jsonResponse_({ success: true, message: 'Đã lưu tỷ lệ phân bổ các hũ tài chính trong tháng.' });
 }
 
 function getHuTaiChinhCodeForTransaction_(transaction, planGroupMap, categoryJarMap) {
@@ -3709,16 +3797,6 @@ function getHuTaiChinhCodeForTransaction_(transaction, planGroupMap, categoryJar
 
 function buildHuTaiChinhData_(maKyHoc, month, feeSummary, allTransactions, planData) {
   const jars = getHuTaiChinhThang_(maKyHoc, month);
-  const defaultJarMap = getDefaultHuTaiChinh_().reduce((map, item) => { map[item.code] = item; return map; }, {});
-  const savedConfigs = readObjectsNoCache_(SHEET_HU_TAICHINH_THANG).filter(row => String(row.MaKyHoc || '').trim() === maKyHoc);
-  const ratioByMonth = savedConfigs.reduce((map, row) => {
-    const configMonth = String(row.Thang || '').trim();
-    const code = normalizeMaHuTaiChinh_(row.MaHu);
-    if (!configMonth || !code) return map;
-    if (!map[configMonth]) map[configMonth] = {};
-    map[configMonth][code] = Math.max(0, Math.min(100, number_(row.TyLePhanBo)));
-    return map;
-  }, {});
   const categoryJarMap = readObjectsNoCache_(SHEET_DANHMUC_THUCHI).reduce((map, row) => {
     map[String(row.MaDanhMuc || '').trim()] = normalizeMaHuTaiChinh_(row.MaHuMacDinh);
     return map;
@@ -3727,42 +3805,36 @@ function buildHuTaiChinhData_(maKyHoc, month, feeSummary, allTransactions, planD
     map[item.maKeHoachChi] = item.nhomChi;
     return map;
   }, {});
-  const openingByJar = {};
   const actualByJar = {};
   let currentTuitionRevenue = 0;
   (allTransactions || []).forEach(transaction => {
     if (transaction.nguonDuLieu === 'CHUYEN_NOI_BO' || !transaction.ngayGiaoDich) return;
     const transactionMonth = transaction.ngayGiaoDich.slice(0, 7);
-    if (transactionMonth > month) return;
-    const isCurrent = transactionMonth === month;
+    if (transactionMonth !== month) return;
     const isTuition = transaction.loai === 'THU' && transaction.maDanhMuc === 'THU_HOC_PHI';
     if (isTuition) {
-      if (isCurrent) {
-        currentTuitionRevenue += number_(transaction.soTien);
-      } else {
-        Object.keys(defaultJarMap).forEach(code => {
-          const ratio = ratioByMonth[transactionMonth] && ratioByMonth[transactionMonth][code] !== undefined
-            ? ratioByMonth[transactionMonth][code]
-            : defaultJarMap[code].ratio;
-          openingByJar[code] = (openingByJar[code] || 0) + number_(transaction.soTien) * ratio / 100;
-        });
-      }
+      currentTuitionRevenue += number_(transaction.soTien);
       return;
     }
     if (transaction.loai !== 'CHI') return;
     const code = getHuTaiChinhCodeForTransaction_(transaction, planGroupMap, categoryJarMap);
-    if (isCurrent) actualByJar[code] = (actualByJar[code] || 0) + number_(transaction.soTien);
-    else openingByJar[code] = (openingByJar[code] || 0) - number_(transaction.soTien);
+    actualByJar[code] = (actualByJar[code] || 0) + number_(transaction.soTien);
   });
-  const result = FinanceDomain.calculateJars({ revenue: currentTuitionRevenue, jars: jars, openingByJar: openingByJar, actualByJar: actualByJar });
+  const plannedTuitionRevenue = number_(feeSummary.expected);
+  const result = FinanceDomain.calculateJars({ revenue: plannedTuitionRevenue, jars: jars, actualByJar: actualByJar });
   const warnings = [];
   if (Math.abs(result.summary.ratioTotal - 100) > 0.01) warnings.push({ level: 'danger', message: 'Tổng tỷ lệ các hũ đang là ' + result.summary.ratioTotal.toFixed(1) + '%, cần điều chỉnh về 100%.' });
-  if (!result.summary.revenue) warnings.push({ level: 'warning', message: 'Tháng này chưa có học phí thực thu nên chưa có số tiền để phân bổ vào các hũ.' });
+  if (!plannedTuitionRevenue) warnings.push({ level: 'warning', message: 'Tháng này chưa có dữ liệu học phí phải thu nên chưa thể lập ngân sách cho các hũ.' });
   if (Math.abs(number_(feeSummary.collected) - currentTuitionRevenue) > 1) warnings.push({ level: 'warning', message: 'Học phí đã thu trên danh sách (' + formatMoneyText_(feeSummary.collected) + ') chưa khớp Sổ thu chi (' + formatMoneyText_(currentTuitionRevenue) + '). Hãy đồng bộ học phí trước khi sử dụng báo cáo hũ.' });
+  if (result.summary.actualTotal > currentTuitionRevenue && result.summary.actualTotal > 0) warnings.push({ level: 'warning', message: 'Tổng chi theo hũ đang lớn hơn học phí đã ghi sổ trong tháng. Đây là cảnh báo dòng tiền, không làm thay đổi ngân sách kế hoạch.' });
   result.items.forEach(item => {
-    if (item.closing < 0) warnings.push({ level: 'danger', message: item.name + ' đang âm ' + formatMoneyText_(Math.abs(item.closing)) + ' sau khi tính số đầu kỳ, phân bổ và phát sinh sử dụng.' });
+    if (item.remaining < 0) warnings.push({ level: 'danger', message: item.name + ' đã vượt ngân sách kế hoạch ' + formatMoneyText_(Math.abs(item.remaining)) + '.' });
+    else if (item.usedPercent >= 90) warnings.push({ level: 'warning', message: item.name + ' đã sử dụng ' + item.usedPercent.toFixed(1) + '% ngân sách tháng.' });
   });
-  result.expectedRevenue = number_(feeSummary.expected);
+  result.expectedRevenue = plannedTuitionRevenue;
+  result.actualCollected = currentTuitionRevenue;
+  result.collectionRate = plannedTuitionRevenue > 0 ? currentTuitionRevenue * 100 / plannedTuitionRevenue : 0;
+  result.catalog = getDanhMucHuTaiChinhList_(false);
   result.warnings = warnings;
   return result;
 }
@@ -4160,7 +4232,7 @@ function getQuanLyThuChiData(token, filters) {
       unassignedCount: unassignedTransactions.length
     },
     categories: categories,
-    financialJars: getDefaultHuTaiChinh_().map(item => ({ code: item.code, name: item.name })),
+    financialJars: getDanhMucHuTaiChinhList_(false),
     people: people,
     sources: sources,
     sourceSummaries: sourceSummaries,
@@ -4267,7 +4339,8 @@ function saveThuChiGiaoDich(token, data) {
   if (!category) {
     throw new Error('Danh mục không tồn tại, đã ngừng sử dụng hoặc không đúng loại giao dịch.');
   }
-  if (loai === 'CHI' && requestedJar && !normalizeMaHuTaiChinh_(requestedJar)) {
+  const activeJarCodes = getDanhMucHuTaiChinhList_(false).reduce((map, item) => { map[item.code] = true; return map; }, {});
+  if (loai === 'CHI' && requestedJar && !activeJarCodes[normalizeMaHuTaiChinh_(requestedJar)]) {
     throw new Error('Hũ tài chính của phiếu chi không hợp lệ.');
   }
   const maHuTaiChinh = loai === 'CHI'
@@ -4764,7 +4837,7 @@ function saveDanhMucThuChi(token, data) {
 
   if (loai !== 'THU' && loai !== 'CHI') throw new Error('Loại danh mục không hợp lệ.');
   if (!tenDanhMuc) throw new Error('Vui lòng nhập tên danh mục.');
-  if (loai === 'CHI' && !maHuMacDinh) throw new Error('Vui lòng chọn hũ tài chính mặc định cho danh mục chi.');
+  if (loai === 'CHI' && !getDanhMucHuTaiChinhList_(false).some(item => item.code === maHuMacDinh)) throw new Error('Vui lòng chọn hũ tài chính mặc định đang hoạt động cho danh mục chi.');
 
   const lock = LockService.getScriptLock();
 
