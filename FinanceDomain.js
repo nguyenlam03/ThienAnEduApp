@@ -115,10 +115,35 @@ var FinanceDomain = (function () {
     };
   }
 
+  function calculateFamilySource(input) {
+    input = input || {};
+    var plannedOwnerIncome = Math.max(0, number(input.plannedOwnerIncome));
+    var ownerReceived = Math.max(0, number(input.ownerReceived));
+    var otherIncome = Math.max(0, number(input.otherIncome));
+    var plannedOtherIncome = Math.max(0, number(input.plannedOtherIncome));
+    var totalExpense = Math.max(0, number(input.totalExpense));
+    var totalSaving = Math.max(0, number(input.totalSaving));
+    var totalIncome = ownerReceived + otherIncome;
+    return {
+      plannedOwnerIncome: plannedOwnerIncome,
+      ownerDraw: ownerReceived,
+      remainingOwnerAllowance: Math.max(plannedOwnerIncome - ownerReceived, 0),
+      otherIncome: otherIncome,
+      plannedOtherIncome: plannedOtherIncome,
+      totalIncome: totalIncome,
+      totalExpense: totalExpense,
+      totalSaving: totalSaving,
+      remaining: totalIncome - totalExpense - totalSaving,
+      savingRate: totalIncome > 0 ? totalSaving * 100 / totalIncome : 0,
+      budgetIncome: plannedOwnerIncome + (plannedOtherIncome || otherIncome)
+    };
+  }
+
   return {
     calculatePricing: calculatePricing,
     calculatePerformance: calculatePerformance,
-    calculateJars: calculateJars
+    calculateJars: calculateJars,
+    calculateFamilySource: calculateFamilySource
   };
 })();
 

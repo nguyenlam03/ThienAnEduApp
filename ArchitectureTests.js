@@ -81,6 +81,15 @@ function runArchitectureUnitTests() {
   test('Mã hũ UUID cũ có dấu gạch ngang vẫn được nhận diện', function () {
     equal(normalizeMaHuTaiChinh_('HU_2D4703A1-9'), 'HU_2D4703A1-9', 'Hũ cũ bị lọc khỏi danh sách');
   });
+  test('Tài chính gia đình tách hạn mức kế hoạch khỏi tiền đã thực nhận', function () {
+    var result = FinanceDomain.calculateFamilySource({
+      plannedOwnerIncome: 25822500, ownerReceived: 6000000, otherIncome: 1000000,
+      totalExpense: 2500000, totalSaving: 500000
+    });
+    equal(result.remainingOwnerAllowance, 19822500, 'Sai hạn mức chủ cơ sở còn được rút');
+    equal(result.totalIncome, 7000000, 'Đã cộng tiền kế hoạch vào tiền thực nhận');
+    equal(result.remaining, 4000000, 'Sai số tiền gia đình thực còn lại');
+  });
 
   var failed = results.filter(function (item) { return !item.passed; }).length;
   return jsonResponse_({ passed: results.length - failed, failed: failed, total: results.length, results: results });

@@ -14,6 +14,7 @@ const SHEET_NHANSU_TAICHINH = 'NhanSuTaiChinh';
 const SHEET_KHOANCHI_DINHKY = 'KhoanChiDinhKy';
 const SHEET_DANHMUC_HU_TAICHINH = 'DanhMucHuTaiChinh';
 const SHEET_HU_TAICHINH_THANG = 'HuTaiChinhThang';
+const SHEET_CHOT_PHANBO_HU = 'ChotPhanBoHu';
 const SHEET_DANHMUC_GIADINH = 'DanhMucTaiChinhGiaDinh';
 const SHEET_GIAODICH_GIADINH = 'GiaoDichTaiChinhGiaDinh';
 const SHEET_CAUHINH_GIADINH_THANG = 'CauHinhGiaDinhThang';
@@ -2568,14 +2569,21 @@ function getKhoanChiDinhKyHeaders_() {
 function getHuTaiChinhThangHeaders_() {
   return [
     'MaKyHoc', 'Thang', 'MaHu', 'TenHu', 'TyLePhanBo', 'ThuTu',
-    'GhiChu', 'CreatedAt', 'UpdatedAt'
+    'GhiChu', 'CreatedAt', 'UpdatedAt', 'VaiTroHeThong'
   ];
 }
 
 function getDanhMucHuTaiChinhHeaders_() {
   return [
     'MaHu', 'TenHu', 'TyLeMacDinh', 'ThuTu', 'TrangThai', 'GhiChu',
-    'CreatedAt', 'UpdatedAt'
+    'CreatedAt', 'UpdatedAt', 'VaiTroHeThong'
+  ];
+}
+
+function getChotPhanBoHuHeaders_() {
+  return [
+    'MaChot', 'MaKyHoc', 'Thang', 'TrangThai', 'HocPhiCoSo', 'NgayChot', 'NguoiChot',
+    'NgayMoKhoa', 'NguoiMoKhoa', 'LyDoMoKhoa', 'PhienBan', 'CreatedAt', 'UpdatedAt'
   ];
 }
 
@@ -2596,7 +2604,8 @@ function getGiaoDichGiaDinhHeaders_() {
 
 function getCauHinhGiaDinhThangHeaders_() {
   return [
-    'Thang', 'ThuNhapDuKien', 'QuyKhanCapMucTieu', 'GhiChu', 'CreatedAt', 'UpdatedAt'
+    'Thang', 'ThuNhapDuKien', 'QuyKhanCapMucTieu', 'GhiChu', 'CreatedAt', 'UpdatedAt',
+    'ThuNhapKhacDuKien'
   ];
 }
 
@@ -2776,6 +2785,7 @@ function ensureQuanLyTaiChinhSheets_() {
   ensureSheet_(ss, SHEET_KHOANCHI_DINHKY, getKhoanChiDinhKyHeaders_());
   const jarCategorySheet = ensureSheet_(ss, SHEET_DANHMUC_HU_TAICHINH, getDanhMucHuTaiChinhHeaders_());
   ensureSheet_(ss, SHEET_HU_TAICHINH_THANG, getHuTaiChinhThangHeaders_());
+  ensureSheet_(ss, SHEET_CHOT_PHANBO_HU, getChotPhanBoHuHeaders_());
   const familyCategorySheet = ensureSheet_(ss, SHEET_DANHMUC_GIADINH, getDanhMucGiaDinhHeaders_());
   ensureSheet_(ss, SHEET_GIAODICH_GIADINH, getGiaoDichGiaDinhHeaders_());
   ensureSheet_(ss, SHEET_CAUHINH_GIADINH_THANG, getCauHinhGiaDinhThangHeaders_());
@@ -2797,6 +2807,28 @@ function ensureQuanLyTaiChinhSheets_() {
     TrangThai: 'ACTIVE', GhiChu: item.note, CreatedAt: now, UpdatedAt: now
   }));
   if (missingJars.length) appendObjectsToSheet_(jarCategorySheet, missingJars, getDanhMucHuTaiChinhHeaders_());
+  const ownerJarMigrationKey = 'OWNER_JAR_ROLE_MIGRATION_V1';
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty(ownerJarMigrationKey) !== '1') {
+    const refreshedJarRows = readObjectsNoCache_(SHEET_DANHMUC_HU_TAICHINH);
+    const hasOwnerCompensationJar = refreshedJarRows.some(row =>
+      String(row.TrangThai || 'ACTIVE').trim().toUpperCase() === 'ACTIVE' &&
+      String(row.VaiTroHeThong || '').trim().toUpperCase() === 'OWNER_COMPENSATION'
+    );
+    if (!hasOwnerCompensationJar) {
+      const inferredOwnerJar = refreshedJarRows.find(row => {
+        if (String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'ACTIVE') return false;
+        const name = normalizeText_(row.TenHu);
+        return name.indexOf('luong chu trung tam') !== -1 || name.indexOf('thu lao chu') !== -1;
+      });
+      if (inferredOwnerJar) {
+        upsertFinanceObject_(SHEET_DANHMUC_HU_TAICHINH, getDanhMucHuTaiChinhHeaders_(), 'MaHu', String(inferredOwnerJar.MaHu || '').trim(), {
+          VaiTroHeThong: 'OWNER_COMPENSATION'
+        });
+      }
+    }
+    props.setProperty(ownerJarMigrationKey, '1');
+  }
   const missing = getDefaultDanhMucGiaDinh_().filter(item => !existing[item[0]]).map(item => ({
     MaDanhMucGiaDinh: item[0], TenDanhMuc: item[1], Loai: item[2], Nhom: item[3],
     TyLeMacDinh: item[4], KieuGioiHan: item[5], ThuTu: item[6], TrangThai: 'ACTIVE',
@@ -2808,7 +2840,7 @@ function ensureQuanLyTaiChinhSheets_() {
 function ensureThuChiSheets_(maKyHoc) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const props = PropertiesService.getScriptProperties();
-  const schemaVersion = '10';
+  const schemaVersion = '11';
   const schemaKey = 'THUCHI_SCHEMA_VERSION';
   const sourceKey = maKyHoc
     ? 'THUCHI_NGUON_INIT_' + String(maKyHoc || '').trim()
@@ -2823,6 +2855,7 @@ function ensureThuChiSheets_(maKyHoc) {
     ss.getSheetByName(SHEET_KEHOACH_CHI_THANG) &&
     ss.getSheetByName(SHEET_CAUHINH_TAICHINH_THANG) &&
     ss.getSheetByName(SHEET_DANHMUC_HU_TAICHINH) &&
+    ss.getSheetByName(SHEET_CHOT_PHANBO_HU) &&
     props.getProperty('THUCHI_JAR_MIGRATION_V1') === '1';
 
   const sourceReady = !maKyHoc || props.getProperty(sourceKey) === '1';
@@ -3626,7 +3659,7 @@ function saveCauHinhGiaDinhThang(token, data) {
   assertFinancePeriodOpen_(session, month);
   const lock = LockService.getScriptLock(); if (!lock.tryLock(30000)) throw new Error('Hệ thống đang cập nhật ngân sách gia đình.');
   try { upsertFinanceObject_(SHEET_CAUHINH_GIADINH_THANG, getCauHinhGiaDinhThangHeaders_(), 'Thang', month, {
-    ThuNhapDuKien: Math.max(0, moneyNumber_(data.thuNhapDuKien)), QuyKhanCapMucTieu: Math.max(0, moneyNumber_(data.quyKhanCapMucTieu)), GhiChu: String(data.ghiChu || '').trim()
+    ThuNhapKhacDuKien: Math.max(0, moneyNumber_(data.thuNhapDuKien)), QuyKhanCapMucTieu: Math.max(0, moneyNumber_(data.quyKhanCapMucTieu)), GhiChu: String(data.ghiChu || '').trim()
   }); } finally { lock.releaseLock(); }
   bumpDataVersion_(); safeWriteAuditLog_(session, 'UPSERT', 'CAU_HINH_GIA_DINH', month, null, { thuNhapDuKien: Math.max(0, moneyNumber_(data.thuNhapDuKien)), quyKhanCapMucTieu: Math.max(0, moneyNumber_(data.quyKhanCapMucTieu)) }); return jsonResponse_({ success: true, message: 'Đã lưu cấu hình ngân sách gia đình.' });
 }
@@ -3649,7 +3682,8 @@ function getDanhMucHuTaiChinhList_(includeDeleted) {
     ratio: Math.max(0, Math.min(100, number_(row.TyLeMacDinh))),
     order: Math.max(1, number_(row.ThuTu) || 999),
     status: String(row.TrangThai || 'ACTIVE').trim().toUpperCase(),
-    note: String(row.GhiChu || '').trim()
+    note: String(row.GhiChu || '').trim(),
+    systemRole: String(row.VaiTroHeThong || '').trim().toUpperCase()
   })).filter(item => item.code && item.name && (includeDeleted || item.status === 'ACTIVE'))
     .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'vi'));
 }
@@ -3662,6 +3696,7 @@ function saveDanhMucHuTaiChinh(token, data) {
   const name = String(data.tenHu || data.name || '').trim();
   const ratio = number_(data.tyLeMacDinh === undefined ? data.ratio : data.tyLeMacDinh);
   const order = number_(data.thuTu === undefined ? data.order : data.thuTu);
+  const systemRole = String(data.vaiTroHeThong || data.systemRole || '').trim().toUpperCase() === 'OWNER_COMPENSATION' ? 'OWNER_COMPENSATION' : '';
   if (!name) throw new Error('Vui lòng nhập tên hũ tài chính.');
   if (ratio < 0 || ratio > 100) throw new Error('Tỷ lệ mặc định phải từ 0% đến 100%.');
   if (order < 1 || Math.floor(order) !== order) throw new Error('Thứ tự hũ phải là số nguyên lớn hơn hoặc bằng 1.');
@@ -3674,9 +3709,12 @@ function saveDanhMucHuTaiChinh(token, data) {
     if (inputCode && !current) throw new Error('Không tìm thấy hũ tài chính cần sửa.');
     const duplicated = currentRows.some(row => normalizeMaHuTaiChinh_(row.MaHu) !== inputCode && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED' && normalizeText_(row.TenHu) === normalizeText_(name));
     if (duplicated) throw new Error('Tên hũ tài chính đã tồn tại.');
+    if (systemRole && currentRows.some(row => normalizeMaHuTaiChinh_(row.MaHu) !== inputCode && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() === 'ACTIVE' && String(row.VaiTroHeThong || '').trim().toUpperCase() === systemRole)) {
+      throw new Error('Chỉ được có một Hũ lương chủ trung tâm đang hoạt động.');
+    }
     upsertFinanceObject_(SHEET_DANHMUC_HU_TAICHINH, getDanhMucHuTaiChinhHeaders_(), 'MaHu', code, {
       TenHu: name, TyLeMacDinh: ratio, ThuTu: order, TrangThai: 'ACTIVE',
-      GhiChu: String(data.ghiChu || data.note || '').trim()
+      GhiChu: String(data.ghiChu || data.note || '').trim(), VaiTroHeThong: systemRole
     });
   } finally { lock.releaseLock(); }
   bumpDataVersion_();
@@ -3709,6 +3747,104 @@ function deleteDanhMucHuTaiChinh(token, codeInput) {
   return jsonResponse_({ success: true, message: 'Đã xoá hũ tài chính chưa phát sinh dữ liệu.' });
 }
 
+function getChotPhanBoHu_(maKyHoc, month) {
+  const row = readObjectsNoCache_(SHEET_CHOT_PHANBO_HU).find(item =>
+    String(item.MaKyHoc || '').trim() === String(maKyHoc || '').trim() &&
+    String(item.Thang || '').trim() === String(month || '').trim()
+  ) || {};
+  const locked = String(row.TrangThai || 'DRAFT').trim().toUpperCase() === 'LOCKED';
+  const today = new Date();
+  const isCurrentMonth = formatDateForInput_(today).slice(0, 7) === month;
+  return {
+    month: month,
+    locked: locked,
+    status: locked ? 'LOCKED' : 'DRAFT',
+    baseTuition: number_(row.HocPhiCoSo),
+    lockedAt: formatDateDisplay_(row.NgayChot),
+    lockedBy: String(row.NguoiChot || '').trim(),
+    unlockedAt: formatDateDisplay_(row.NgayMoKhoa),
+    unlockedBy: String(row.NguoiMoKhoa || '').trim(),
+    unlockReason: String(row.LyDoMoKhoa || '').trim(),
+    version: Math.max(0, number_(row.PhienBan)),
+    overdue: !locked && isCurrentMonth && today.getDate() > 5
+  };
+}
+
+function assertPhanBoHuChuaChot_(session, month) {
+  if (getChotPhanBoHu_(session.maKyHoc, month).locked) {
+    throw new Error('Phương án phân bổ hũ tháng này đã chốt. Chỉ Chủ sở hữu mới có thể mở chốt và điều chỉnh lại.');
+  }
+}
+
+function getHocPhiPhaiThuThang_(maKyHoc, month) {
+  const parts = String(month || '').split('-');
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(getThuPhiMonthSheetName_(Number(parts[0]), Number(parts[1])));
+  if (!sheet) return 0;
+  return readObjectsNoCache_(sheet.getName()).filter(row =>
+    String(row.MaKyHoc || '').trim() === String(maKyHoc || '').trim() &&
+    String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED' &&
+    !toBoolean_(row.TamNghi)
+  ).reduce((sum, row) => sum + Math.max(0, number_(row.HocPhi)), 0);
+}
+
+function lockPhanBoHuTaiChinh(token, month) {
+  const session = requireSession_(token, 'finance.close');
+  ensureThuChiSheets_(session.maKyHoc);
+  month = GovernanceService.validateMonth(month);
+  assertFinancePeriodOpen_(session, month);
+  if (session.vaiTro !== 'OWNER') throw new Error('Chỉ Chủ sở hữu được chốt phương án phân bổ hũ tài chính.');
+  const current = getChotPhanBoHu_(session.maKyHoc, month);
+  if (current.locked) return jsonResponse_({ success: true, status: current, message: 'Phương án phân bổ đã được chốt trước đó.' });
+  const jars = getHuTaiChinhThang_(session.maKyHoc, month);
+  const ratioTotal = jars.reduce((sum, item) => sum + number_(item.ratio), 0);
+  if (Math.abs(ratioTotal - 100) > 0.01) throw new Error('Tổng tỷ lệ các hũ phải bằng đúng 100% trước khi chốt.');
+  const ownerJars = getDanhMucHuTaiChinhList_(false).filter(item => item.systemRole === 'OWNER_COMPENSATION');
+  if (ownerJars.length !== 1) throw new Error('Cần đánh dấu đúng một hũ là “Hũ lương chủ trung tâm” trước khi chốt.');
+  const baseTuition = getHocPhiPhaiThuThang_(session.maKyHoc, month);
+  if (baseTuition <= 0) throw new Error('Chưa có học phí phải thu của tháng nên chưa thể chốt phương án phân bổ.');
+  saveHuTaiChinhThang(token, { thang: month, jars: jars.map(item => ({ code: item.code, ratio: item.ratio, note: item.note })) });
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('Hệ thống đang chốt phương án phân bổ hũ.');
+  try {
+    const lockId = session.maKyHoc + '|' + month;
+    upsertFinanceObject_(SHEET_CHOT_PHANBO_HU, getChotPhanBoHuHeaders_(), 'MaChot', lockId, {
+      MaKyHoc: session.maKyHoc, TrangThai: 'LOCKED', HocPhiCoSo: baseTuition,
+      NgayChot: new Date(), NguoiChot: session.tenDangNhap || session.hoTen || session.maNguoiDung,
+      NgayMoKhoa: '', NguoiMoKhoa: '', LyDoMoKhoa: '', PhienBan: current.version + 1
+    });
+  } finally { lock.releaseLock(); }
+  bumpDataVersion_();
+  const status = getChotPhanBoHu_(session.maKyHoc, month);
+  safeWriteAuditLog_(session, 'LOCK', 'PHAN_BO_HU', month, current, status, { hocPhiCoSo: baseTuition, tongTyLe: ratioTotal });
+  return jsonResponse_({ success: true, status: status, message: 'Đã chốt phương án phân bổ hũ theo học phí phải thu tại thời điểm chốt.' });
+}
+
+function unlockPhanBoHuTaiChinh(token, month, reason) {
+  const session = requireSession_(token, 'finance.close');
+  ensureThuChiSheets_(session.maKyHoc);
+  month = GovernanceService.validateMonth(month);
+  assertFinancePeriodOpen_(session, month);
+  if (session.vaiTro !== 'OWNER') throw new Error('Chỉ Chủ sở hữu được mở chốt phương án phân bổ hũ tài chính.');
+  reason = String(reason || '').trim();
+  if (!reason) throw new Error('Vui lòng nhập lý do mở chốt để lưu nhật ký kiểm soát.');
+  const current = getChotPhanBoHu_(session.maKyHoc, month);
+  if (!current.locked) return jsonResponse_({ success: true, status: current, message: 'Phương án phân bổ đang ở trạng thái bản nháp.' });
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('Hệ thống đang mở chốt phương án phân bổ hũ.');
+  try {
+    const lockId = session.maKyHoc + '|' + month;
+    upsertFinanceObject_(SHEET_CHOT_PHANBO_HU, getChotPhanBoHuHeaders_(), 'MaChot', lockId, {
+      MaKyHoc: session.maKyHoc, TrangThai: 'DRAFT', HocPhiCoSo: current.baseTuition,
+      NgayMoKhoa: new Date(), NguoiMoKhoa: session.tenDangNhap || session.hoTen || session.maNguoiDung,
+      LyDoMoKhoa: reason, PhienBan: current.version
+    });
+  } finally { lock.releaseLock(); }
+  bumpDataVersion_();
+  const status = getChotPhanBoHu_(session.maKyHoc, month);
+  safeWriteAuditLog_(session, 'UNLOCK', 'PHAN_BO_HU', month, current, status, { lyDo: reason });
+  return jsonResponse_({ success: true, status: status, message: 'Đã mở chốt. Mọi thay đổi tiếp theo sẽ được ghi nhận ở phiên bản phân bổ mới.' });
+}
+
 function getHuTaiChinhThang_(maKyHoc, month) {
   const saved = readObjectsNoCache_(SHEET_HU_TAICHINH_THANG).filter(row =>
     String(row.MaKyHoc || '').trim() === String(maKyHoc || '').trim() &&
@@ -3718,14 +3854,31 @@ function getHuTaiChinhThang_(maKyHoc, month) {
     map[String(row.MaHu || '').trim().toUpperCase()] = row;
     return map;
   }, {});
-  return getDanhMucHuTaiChinhList_(false).map(item => {
+  const catalog = getDanhMucHuTaiChinhList_(false);
+  const catalogMap = catalog.reduce((map, item) => { map[item.code] = item; return map; }, {});
+  if (getChotPhanBoHu_(maKyHoc, month).locked && saved.length) {
+    return saved.map(row => {
+      const code = normalizeMaHuTaiChinh_(row.MaHu);
+      const definition = catalogMap[code] || {};
+      return {
+        code: code,
+        name: String(row.TenHu || definition.name || code).trim(),
+        ratio: Math.max(0, Math.min(100, number_(row.TyLePhanBo))),
+        order: number_(row.ThuTu) || number_(definition.order) || 999,
+        note: String(row.GhiChu || definition.note || '').trim(),
+        systemRole: String(row.VaiTroHeThong || definition.systemRole || '').trim().toUpperCase()
+      };
+    }).filter(item => item.code).sort((a, b) => a.order - b.order);
+  }
+  return catalog.map(item => {
     const row = savedMap[item.code] || {};
     return {
       code: item.code,
       name: item.name,
       ratio: row.TyLePhanBo === '' || row.TyLePhanBo === undefined ? item.ratio : Math.max(0, Math.min(100, number_(row.TyLePhanBo))),
       order: number_(row.ThuTu) || item.order,
-      note: item.note
+      note: item.note,
+      systemRole: item.systemRole
     };
   }).sort((a, b) => a.order - b.order);
 }
@@ -3737,6 +3890,7 @@ function saveHuTaiChinhThang(token, data) {
   const month = String(data.thang || '').trim();
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('Tháng cấu hình hũ tài chính không hợp lệ.');
   assertFinancePeriodOpen_(session, month);
+  assertPhanBoHuChuaChot_(session, month);
   const definitions = getDanhMucHuTaiChinhList_(false);
   const allowed = definitions.reduce((map, item) => { map[item.code] = item; return map; }, {});
   const incoming = Array.isArray(data.jars) ? data.jars : [];
@@ -3778,6 +3932,7 @@ function saveHuTaiChinhThang(token, data) {
       row[index.TyLePhanBo] = inputMap[definition.code].ratio;
       row[index.ThuTu] = definition.order;
       row[index.GhiChu] = inputMap[definition.code].note || definition.note;
+      row[index.VaiTroHeThong] = definition.systemRole || '';
       row[index.CreatedAt] = target >= 0 ? (row[index.CreatedAt] || now) : now;
       row[index.UpdatedAt] = now;
       if (target >= 0) {
@@ -3812,6 +3967,7 @@ function getHuTaiChinhCodeForTransaction_(transaction, planGroupMap, categoryJar
 
 function buildHuTaiChinhData_(maKyHoc, month, feeSummary, allTransactions, planData) {
   const jars = getHuTaiChinhThang_(maKyHoc, month);
+  const allocationStatus = getChotPhanBoHu_(maKyHoc, month);
   const categoryJarMap = readObjectsNoCache_(SHEET_DANHMUC_THUCHI).reduce((map, row) => {
     map[String(row.MaDanhMuc || '').trim()] = normalizeMaHuTaiChinh_(row.MaHuMacDinh);
     return map;
@@ -3835,23 +3991,91 @@ function buildHuTaiChinhData_(maKyHoc, month, feeSummary, allTransactions, planD
     const code = getHuTaiChinhCodeForTransaction_(transaction, planGroupMap, categoryJarMap);
     actualByJar[code] = (actualByJar[code] || 0) + number_(transaction.soTien);
   });
-  const plannedTuitionRevenue = number_(feeSummary.expected);
+  const currentExpectedRevenue = number_(feeSummary.expected);
+  const plannedTuitionRevenue = allocationStatus.locked ? number_(allocationStatus.baseTuition) : currentExpectedRevenue;
   const result = FinanceDomain.calculateJars({ revenue: plannedTuitionRevenue, jars: jars, actualByJar: actualByJar });
   const warnings = [];
+  if (allocationStatus.overdue) warnings.push({ level: 'warning', message: 'Đã qua ngày 05 nhưng phương án phân bổ hũ tháng này chưa được chốt.' });
+  if (allocationStatus.locked && currentExpectedRevenue > plannedTuitionRevenue) warnings.push({ level: 'info', message: 'Có ' + formatMoneyText_(currentExpectedRevenue - plannedTuitionRevenue) + ' học phí phát sinh sau chốt. Khoản này đang để ở trạng thái chưa phân bổ, không tự động chuyển sang tài chính gia đình.' });
+  if (allocationStatus.locked && currentExpectedRevenue < plannedTuitionRevenue) warnings.push({ level: 'warning', message: 'Học phí phải thu hiện thấp hơn số đã chốt ' + formatMoneyText_(plannedTuitionRevenue - currentExpectedRevenue) + '. Hãy kiểm tra học sinh nghỉ hoặc điều chỉnh học phí.' });
   if (Math.abs(result.summary.ratioTotal - 100) > 0.01) warnings.push({ level: 'danger', message: 'Tổng tỷ lệ các hũ đang là ' + result.summary.ratioTotal.toFixed(1) + '%, cần điều chỉnh về 100%.' });
   if (!plannedTuitionRevenue) warnings.push({ level: 'warning', message: 'Tháng này chưa có dữ liệu học phí phải thu nên chưa thể lập ngân sách cho các hũ.' });
   if (Math.abs(number_(feeSummary.collected) - currentTuitionRevenue) > 1) warnings.push({ level: 'warning', message: 'Học phí đã thu trên danh sách (' + formatMoneyText_(feeSummary.collected) + ') chưa khớp Sổ thu chi (' + formatMoneyText_(currentTuitionRevenue) + '). Hãy đồng bộ học phí trước khi sử dụng báo cáo hũ.' });
   if (result.summary.actualTotal > currentTuitionRevenue && result.summary.actualTotal > 0) warnings.push({ level: 'warning', message: 'Tổng chi theo hũ đang lớn hơn học phí đã ghi sổ trong tháng. Đây là cảnh báo dòng tiền, không làm thay đổi ngân sách kế hoạch.' });
   result.items.forEach(item => {
+    const definition = jars.find(jar => jar.code === item.code) || {};
+    item.systemRole = definition.systemRole || '';
     if (item.remaining < 0) warnings.push({ level: 'danger', message: item.name + ' đã vượt ngân sách kế hoạch ' + formatMoneyText_(Math.abs(item.remaining)) + '.' });
     else if (item.usedPercent >= 90) warnings.push({ level: 'warning', message: item.name + ' đã sử dụng ' + item.usedPercent.toFixed(1) + '% ngân sách tháng.' });
   });
   result.expectedRevenue = plannedTuitionRevenue;
+  result.currentExpectedRevenue = currentExpectedRevenue;
+  result.postLockRevenue = allocationStatus.locked ? Math.max(currentExpectedRevenue - plannedTuitionRevenue, 0) : 0;
+  result.revenueReductionAfterLock = allocationStatus.locked ? Math.max(plannedTuitionRevenue - currentExpectedRevenue, 0) : 0;
   result.actualCollected = currentTuitionRevenue;
   result.collectionRate = plannedTuitionRevenue > 0 ? currentTuitionRevenue * 100 / plannedTuitionRevenue : 0;
   result.catalog = getDanhMucHuTaiChinhList_(false);
+  result.allocationStatus = allocationStatus;
   result.warnings = warnings;
   return result;
+}
+
+function saveRutTienChuSoHuu(token, data) {
+  const session = requireSession_(token, 'finance.write');
+  if (session.vaiTro !== 'OWNER') throw new Error('Chỉ Chủ sở hữu được xác nhận rút tiền từ trung tâm về gia đình.');
+  ensureThuChiSheets_(session.maKyHoc);
+  data = data || {};
+  const dateText = String(data.ngayGiaoDich || '').trim();
+  if (!toDateOnly_(dateText)) throw new Error('Ngày rút tiền không hợp lệ.');
+  const month = dateText.slice(0, 7);
+  assertFinancePeriodOpen_(session, month);
+  const allocationStatus = getChotPhanBoHu_(session.maKyHoc, month);
+  if (!allocationStatus.locked) throw new Error('Cần chốt phương án phân bổ hũ trước khi rút tiền cho gia đình.');
+  const ownerJar = getHuTaiChinhThang_(session.maKyHoc, month).find(item => item.systemRole === 'OWNER_COMPENSATION');
+  if (!ownerJar) throw new Error('Chưa cấu hình Hũ lương chủ trung tâm.');
+  const amount = moneyNumber_(data.soTien);
+  if (amount <= 0) throw new Error('Số tiền rút phải lớn hơn 0.');
+  const allocated = number_(allocationStatus.baseTuition) * number_(ownerJar.ratio) / 100;
+  const activeTransactions = readObjectsNoCache_(SHEET_SOTHUCHI)
+    .filter(row => String(row.MaKyHoc || '').trim() === session.maKyHoc)
+    .map(mapThuChiTransaction_)
+    .filter(item => item.trangThai === 'HOAT_DONG');
+  const withdrawn = activeTransactions.filter(item =>
+    item.trangThai === 'HOAT_DONG' && item.loai === 'CHI' && item.ngayGiaoDich.slice(0, 7) === month &&
+    item.maDanhMuc === 'CHI_GIA_DINH' && item.maHuTaiChinh === ownerJar.code
+  ).reduce((sum, item) => sum + number_(item.soTien), 0);
+  if (withdrawn + amount > allocated + 1) {
+    throw new Error('Số tiền rút vượt hạn mức Hũ lương chủ trung tâm còn lại ' + formatMoneyText_(Math.max(allocated - withdrawn, 0)) + '.');
+  }
+  const sourceCode = String(data.maNguonTien || '').trim().toUpperCase();
+  const source = getNguonTienList_(session.maKyHoc).find(item => item.maNguonTien === sourceCode && item.trangThai === 'ACTIVE');
+  if (!source) throw new Error('Nguồn tiền trung tâm không hợp lệ hoặc đã ngừng sử dụng.');
+  const sourceBalance = number_(source.soDuBanDau) + activeTransactions.filter(item =>
+    item.maNguonTien === sourceCode && item.ngayGiaoDich && item.ngayGiaoDich <= dateText
+  ).reduce((sum, item) => sum + (item.loai === 'THU' ? number_(item.soTien) : -number_(item.soTien)), 0);
+  if (amount > sourceBalance + 1) throw new Error('Nguồn ' + source.tenNguonTien + ' chỉ còn ' + formatMoneyText_(Math.max(sourceBalance, 0)) + ', không đủ để thực hiện đợt rút này.');
+  return saveThuChiGiaoDich(token, {
+    loai: 'CHI', ngayGiaoDich: dateText, maNguonTien: sourceCode,
+    maDanhMuc: 'CHI_GIA_DINH', maHuTaiChinh: ownerJar.code, soTien: amount,
+    noiDung: String(data.noiDung || 'Rút tiền chủ sở hữu về tài chính gia đình').trim(),
+    nguoiNopNhan: String(data.nguoiNhan || session.hoTen || 'Chủ cơ sở').trim(),
+    soChungTu: String(data.soChungTu || '').trim(),
+    ghiChu: String(data.ghiChu || '').trim()
+  });
+}
+
+function cancelRutTienChuSoHuu(token, transactionId) {
+  const session = requireSession_(token, 'finance.write');
+  if (session.vaiTro !== 'OWNER') throw new Error('Chỉ Chủ sở hữu được hủy đợt rút tiền về gia đình.');
+  const row = readObjectsNoCache_(SHEET_SOTHUCHI).find(item =>
+    String(item.MaGiaoDich || '').trim() === String(transactionId || '').trim() &&
+    String(item.MaKyHoc || '').trim() === session.maKyHoc
+  );
+  if (!row || String(row.MaDanhMuc || '').trim() !== 'CHI_GIA_DINH') throw new Error('Không tìm thấy đợt rút tiền cần hủy.');
+  const transactionMonth = formatDateForInput_(toDateOnly_(row.NgayGiaoDich)).slice(0, 7);
+  const ownerJar = getHuTaiChinhThang_(session.maKyHoc, transactionMonth).find(item => item.systemRole === 'OWNER_COMPENSATION');
+  if (!ownerJar || normalizeMaHuTaiChinh_(row.MaHuTaiChinh) !== ownerJar.code) throw new Error('Giao dịch không thuộc Hũ lương chủ trung tâm.');
+  return cancelThuChiGiaoDich(token, transactionId);
 }
 
 function getQuanLyTaiChinhData(token, yearMonth) {
@@ -3909,6 +4133,18 @@ function getQuanLyTaiChinhData(token, yearMonth) {
     ownerDraw: ownerDraw
   });
   const jars = buildHuTaiChinhData_(session.maKyHoc, month, feeSummary, allTransactions, planData);
+  jars.canManageAllocation = session.vaiTro === 'OWNER';
+  const ownerJar = (jars.items || []).find(item => item.systemRole === 'OWNER_COMPENSATION') || null;
+  const ownerWithdrawals = ownerJar ? monthTransactions.filter(item =>
+    item.loai === 'CHI' && item.maDanhMuc === 'CHI_GIA_DINH' && item.maHuTaiChinh === ownerJar.code
+  ).map(item => ({
+    maGiaoDich: item.maGiaoDich, ngayGiaoDich: item.ngayGiaoDich, ngayDisplay: item.ngayDisplay,
+    soTien: item.soTien, maNguonTien: item.maNguonTien, tenNguonTien: item.tenNguonTien,
+    nguoiNhan: item.nguoiNopNhan, soPhieu: item.soPhieu, noiDung: item.noiDung, ghiChu: item.ghiChu
+  })).sort((a, b) => String(b.ngayGiaoDich).localeCompare(String(a.ngayGiaoDich))) : [];
+  const linkedOwnerDraw = ownerWithdrawals.reduce((sum, item) => sum + number_(item.soTien), 0);
+  const unlinkedOwnerDraw = Math.max(ownerDraw - linkedOwnerDraw, 0);
+  const plannedOwnerIncome = ownerJar ? number_(ownerJar.allocated) : 0;
 
   const familyCategories = getDanhMucGiaDinhList_();
   const familyRows = readObjectsNoCache_(SHEET_GIAODICH_GIADINH).filter(row => String(row.Thang || '').trim() === month && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() === 'ACTIVE').map(row => ({
@@ -3920,9 +4156,19 @@ function getQuanLyTaiChinhData(token, yearMonth) {
   const manualFamilyIncome = familyRows.reduce((sum, item) => sum + (item.loai === 'THU' ? item.soTien : 0), 0);
   const familyExpense = familyRows.reduce((sum, item) => sum + (item.loai === 'CHI' ? item.soTien : 0), 0);
   const familySaving = familyRows.reduce((sum, item) => sum + (item.loai === 'TIET_KIEM' ? item.soTien : 0), 0);
-  const familyIncome = ownerDraw + manualFamilyIncome; const budgetIncome = number_(familyConfigRow.ThuNhapDuKien) || familyIncome;
+  const plannedOtherIncome = Math.max(0, number_(familyConfigRow.ThuNhapKhacDuKien));
+  const familySource = FinanceDomain.calculateFamilySource({
+    plannedOwnerIncome: plannedOwnerIncome, ownerReceived: linkedOwnerDraw,
+    otherIncome: manualFamilyIncome, plannedOtherIncome: plannedOtherIncome,
+    totalExpense: familyExpense, totalSaving: familySaving
+  });
+  const familyIncome = familySource.totalIncome;
+  const budgetIncome = familySource.budgetIncome;
   const familyActualMap = familyRows.reduce((map, item) => { map[item.maDanhMucGiaDinh] = (map[item.maDanhMucGiaDinh] || 0) + item.soTien; return map; }, {});
   const familyWarnings = []; const activeBudgetCategories = familyCategories.filter(item => item.trangThai === 'ACTIVE' && item.loai !== 'THU');
+  if (!ownerJar) familyWarnings.push({ level: 'danger', message: 'Chưa xác định Hũ lương chủ trung tâm nên chưa thể lập nguồn thu gia đình tự động.' });
+  if (jars.allocationStatus && !jars.allocationStatus.locked) familyWarnings.push({ level: 'warning', message: 'Phương án phân bổ hũ chưa chốt; nguồn thu gia đình theo kế hoạch vẫn có thể thay đổi.' });
+  if (unlinkedOwnerDraw > 0) familyWarnings.push({ level: 'warning', message: 'Có ' + formatMoneyText_(unlinkedOwnerDraw) + ' khoản chi gia đình chưa liên kết đúng Hũ lương chủ trung tâm nên không được tính vào tiền gia đình thực nhận.' });
   const ratioTotal = activeBudgetCategories.reduce((sum, item) => sum + item.tyLeMacDinh, 0);
   if (Math.abs(ratioTotal - 100) > 0.01) familyWarnings.push({ level: 'warning', message: 'Tổng tỷ lệ phân bổ gia đình hiện là ' + ratioTotal.toFixed(1) + '%, cần điều chỉnh về 100%.' });
   const familyBudget = activeBudgetCategories.map(item => {
@@ -3955,10 +4201,10 @@ function getQuanLyTaiChinhData(token, yearMonth) {
     periodLock: GovernanceService.periodStatus(session, month),
     performance: performance,
     pricing: pricing,
-    family: { categories: familyCategories, transactions: familyRows, budget: familyBudget, warnings: familyWarnings,
-      config: { thang: month, thuNhapDuKien: number_(familyConfigRow.ThuNhapDuKien), quyKhanCapMucTieu: number_(familyConfigRow.QuyKhanCapMucTieu), ghiChu: String(familyConfigRow.GhiChu || '').trim() },
-      summary: { ownerDraw: ownerDraw, otherIncome: manualFamilyIncome, totalIncome: familyIncome, totalExpense: familyExpense, totalSaving: familySaving,
-        remaining: familyIncome - familyExpense - familySaving, savingRate: familyIncome > 0 ? familySaving * 100 / familyIncome : 0, budgetIncome: budgetIncome } }
+    family: { categories: familyCategories, transactions: familyRows, withdrawals: ownerWithdrawals, budget: familyBudget, warnings: familyWarnings,
+      sources: getNguonTienList_(session.maKyHoc).filter(item => item.trangThai === 'ACTIVE'), ownerJar: ownerJar,
+      config: { thang: month, thuNhapDuKien: number_(familyConfigRow.ThuNhapKhacDuKien), quyKhanCapMucTieu: number_(familyConfigRow.QuyKhanCapMucTieu), ghiChu: String(familyConfigRow.GhiChu || '').trim() },
+      summary: Object.assign({}, familySource, { unlinkedOwnerDraw: unlinkedOwnerDraw }) }
   });
 }
 

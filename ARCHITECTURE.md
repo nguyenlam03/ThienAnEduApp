@@ -34,6 +34,7 @@
 - `KhoaSoTaiChinh`: trạng thái mở/khóa theo kỳ học và tháng.
 - `DanhMucHuTaiChinh`: danh mục hũ dùng chung, cho phép thêm và sửa; chỉ hũ chưa từng được tham chiếu mới được xoá.
 - `HuTaiChinhThang`: tỷ lệ phân bổ các hũ tài chính theo kỳ học và tháng; số thực chi được tổng hợp từ sổ thu chi.
+- `ChotPhanBoHu`: snapshot học phí nền và trạng thái chốt phương án phân bổ của từng kỳ học/tháng.
 
 ## Nguồn dữ liệu tài chính duy nhất
 
@@ -44,10 +45,16 @@
 - Không tạo sổ giao dịch hũ riêng. Báo cáo hũ đọc trực tiếp các phiếu đang hoạt động trong `SoThuChi`, nên sửa hoặc huỷ phiếu không tạo dữ liệu trùng.
 - Ngân sách hũ của tháng được phân bổ từ tổng học phí phải thu trong sheet tháng. Học phí `THU_HOC_PHI` đã ghi vào `SoThuChi` chỉ dùng để hiển thị tỷ lệ thu và cảnh báo dòng tiền.
 - Mỗi tháng là một kế hoạch ngân sách độc lập, không mang số dư hũ từ tháng trước. Hạn mức còn lại bằng ngân sách kế hoạch trừ các phiếu chi đang hoạt động của chính tháng đó.
+- Trước khi chốt, ngân sách dùng học phí phải thu hiện tại. Sau khi chốt, học phí nền và tỷ lệ hũ được giữ nguyên; phần tăng sau chốt chỉ hiển thị là doanh thu chưa phân bổ.
+- `DanhMucHuTaiChinh.VaiTroHeThong = OWNER_COMPENSATION` xác định duy nhất Hũ lương chủ trung tâm. Không nhận diện hũ bằng tên hiển thị.
+- Mỗi đợt rút tiền về gia đình là một phiếu `CHI_GIA_DINH` trong `SoThuChi` gắn với Hũ lương chủ trung tâm. Tài chính gia đình chỉ tổng hợp lại phiếu này, không tạo giao dịch thu trùng lặp.
+- Thu nhập kế hoạch gia đình, tiền đã thực nhận và hạn mức còn được rút là ba số riêng biệt. Tiền thực còn lại của gia đình chỉ dùng các đợt rút đã phát sinh và thu nhập khác thực nhận.
 
 ## Quy tắc khóa sổ
 
 Khi một tháng đã khóa, máy chủ từ chối thay đổi học phí, sổ thu chi, chuyển nguồn, kế hoạch chi, ngân sách và giao dịch gia đình. Kiểm tra nằm ở máy chủ nên không thể bỏ qua bằng cách thao tác trực tiếp từ trình duyệt.
+
+Chốt phân bổ hũ khác với khóa sổ: chốt phân bổ chỉ khóa học phí nền và tỷ lệ hũ, nhưng vẫn cho phép thu, chi và rút tiền trong tháng. Chỉ `OWNER` được chốt hoặc mở chốt; mở chốt bắt buộc nhập lý do và ghi nhật ký.
 
 ## Hướng di chuyển tiếp theo
 
