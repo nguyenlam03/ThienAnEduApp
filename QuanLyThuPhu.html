@@ -430,7 +430,7 @@
               <input id="filterKeyword" type="text" placeholder="Nhập tên học sinh hoặc số điện thoại...">
             </div>
 
-            <button class="secondary-button" onclick="loadThuPhiData()">
+            <button id="btnLoadFeeData" class="secondary-button" type="button" onclick="loadThuPhiData()">
               Lọc dữ liệu
             </button>
           </div>
@@ -672,16 +672,16 @@
   </div>
 
   <?!= include('AppGridConfig'); ?>
-  <script>window.APP_NOTIFICATION_DURATION_MS = <?!= JSON.stringify(notificationDurationMs) ?>;</script>
+  <script>window.APP_NOTIFICATION_DURATION_MS = <?!= inlineScriptJson_(notificationDurationMs) ?>;</script>
   <?!= include('AppNotification'); ?>
   <?!= include('AppBusy'); ?>
 
   <script>
-    const APP_TOKEN = <?!= JSON.stringify(token) ?>;
-    const APP_URL = <?!= JSON.stringify(appUrl) ?>;
-    const APP_CACHE_ENABLED = <?!= JSON.stringify(cacheEnabled) ?>;
-    const APP_BRAND_NAME = <?!= JSON.stringify(brandName) ?>;
-    const APP_BRAND_TAGLINE = <?!= JSON.stringify(brandTagline) ?>;
+    const APP_TOKEN = <?!= inlineScriptJson_(token) ?>;
+    const APP_URL = <?!= inlineScriptJson_(appUrl) ?>;
+    const APP_CACHE_ENABLED = <?!= inlineScriptJson_(cacheEnabled) ?>;
+    const APP_BRAND_NAME = <?!= inlineScriptJson_(brandName) ?>;
+    const APP_BRAND_TAGLINE = <?!= inlineScriptJson_(brandTagline) ?>;
 
     let feeStudents = [];
     let currentMonthText = '';
@@ -695,6 +695,9 @@
     let currentFeeStudent = null;
     let currentFeeCardDataUrl = '';
     let currentFeeCardFileName = '';
+    let feeLoadRequestId = 0;
+    let feeLoadTimeoutId = null;
+    const FEE_LOAD_TIMEOUT_MS = 30000;
 
     document.addEventListener('DOMContentLoaded', function () {
       GridColumnConfig.register({
@@ -810,35 +813,91 @@
 
     function loadThuPhiData() {
       const yearMonth = document.getElementById('filterMonth').value;
+      const requestId = ++feeLoadRequestId;
 
-      showBusy('Đang tải dữ liệu thu phí...');
+      clearTimeout(feeLoadTimeoutId);
+      setFeeLoadingState(true);
+      feeLoadTimeoutId = setTimeout(function () {
+        if (requestId !== feeLoadRequestId) return;
+        setFeeLoadingState(false);
+        renderFeeLoadError(
+          'Google Sheet phản hồi quá lâu. Anh/chị có thể thử tải lại; các menu khác vẫn sử dụng bình thường.'
+        );
+      }, FEE_LOAD_TIMEOUT_MS);
 
       google.script.run
         .withSuccessHandler(function (res) {
-          const data = parseServerJson(res);
+          if (requestId !== feeLoadRequestId) return;
+          clearTimeout(feeLoadTimeoutId);
+          feeLoadTimeoutId = null;
 
-          hideBusy();
+          try {
+            const data = parseServerJson(res);
+            if (!data || !Array.isArray(data.students)) {
+              throw new Error('Dữ liệu thu phí trả về không đúng định dạng.');
+            }
 
-          feeStudents = data.students || [];
-          moneySources = data.sources || [];
-          feeCategories = data.feeCategories || [];
-          renderMoneySourceSelect();
-          renderFeeFilterOptions();
-          currentMonthText = data.monthText || '';
-          currentSheetName = data.sheetName || '';
+            feeStudents = data.students;
+            moneySources = Array.isArray(data.sources) ? data.sources : [];
+            feeCategories = Array.isArray(data.feeCategories) ? data.feeCategories : [];
+            renderMoneySourceSelect();
+            renderFeeFilterOptions();
+            currentMonthText = data.monthText || '';
+            currentSheetName = data.sheetName || '';
 
-          document.getElementById('sheetNameNote').textContent = currentSheetName
-            ? 'Danh sách tháng đã chốt và đang lưu tại sheet: ' + currentSheetName
-            : '';
+            document.getElementById('sheetNameNote').textContent = currentSheetName
+              ? 'Danh sách tháng đã chốt và đang lưu tại sheet: ' + currentSheetName
+              : '';
 
-          renderSummary(data.summary || {});
-          renderTable();
+            renderSummary(data.summary || {});
+            renderTable();
+            setFeeLoadingState(false);
+          } catch (error) {
+            setFeeLoadingState(false);
+            renderFeeLoadError(getErrorMessage(error));
+          }
         })
         .withFailureHandler(function (error) {
-          hideBusy();
-          showMessage(getErrorMessage(error), 'error');
+          if (requestId !== feeLoadRequestId) return;
+          clearTimeout(feeLoadTimeoutId);
+          feeLoadTimeoutId = null;
+          setFeeLoadingState(false);
+          renderFeeLoadError(getErrorMessage(error));
         })
         .getQuanLyThuPhiData(APP_TOKEN, yearMonth);
+    }
+
+    function setFeeLoadingState(isLoading) {
+      const button = document.getElementById('btnLoadFeeData');
+      if (button) {
+        button.disabled = !!isLoading;
+        button.textContent = isLoading ? 'Đang tải...' : 'Lọc dữ liệu';
+      }
+
+      if (isLoading) {
+        document.getElementById('feeTableBody').innerHTML = `
+          <tr>
+            <td data-grid-empty="true" colspan="15">
+              <div class="empty-box">Đang tải dữ liệu thu phí...</div>
+            </td>
+          </tr>
+        `;
+      }
+    }
+
+    function renderFeeLoadError(message) {
+      const safeMessage = message || 'Không tải được dữ liệu thu phí.';
+      document.getElementById('feeTableBody').innerHTML = `
+        <tr>
+          <td data-grid-empty="true" colspan="15">
+            <div class="empty-box">
+              <div style="color:#b91c1c;font-weight:800;margin-bottom:12px;">${escapeHtml(safeMessage)}</div>
+              <button class="secondary-button" type="button" onclick="loadThuPhiData()">Thử tải lại</button>
+            </div>
+          </td>
+        </tr>
+      `;
+      showMessage(safeMessage, 'error');
     }
 
     function renderMoneySourceSelect() {
@@ -2042,7 +2101,24 @@
     function copyFeeCardFallback(message){if(navigator.clipboard)navigator.clipboard.writeText(message).catch(function(){});downloadFeeCard();showNotification('Trình duyệt chỉ hỗ trợ sao chép nội dung; ảnh đã được tải xuống để gửi kèm.','info');}
     function shareFeeCard() { if(!currentFeeCardDataUrl)return;const message=document.getElementById('feeShareMessage').value.trim()||('Thông tin học phí từ '+APP_BRAND_NAME+'.');const file=new File([feeCardBlob()],currentFeeCardFileName,{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({title:APP_BRAND_NAME,text:message,files:[file]}).catch(function(){});}else{if(navigator.clipboard)navigator.clipboard.writeText(message).catch(function(){});downloadFeeCard();window.open('https://zalo.me/','_blank');showNotification('Ảnh đã được tải và lời nhắn đã được sao chép. Hãy chọn phụ huynh trên Zalo để gửi.','info');} }
     function printFeeCard() { if(!currentFeeCardDataUrl)return;const win=window.open('','_blank','width=850,height=1000');if(!win){showNotification('Vui lòng cho phép cửa sổ bật lên để in.','warning');return}printFeeCardToWindow(win); }
-    function printFeeCardToWindow(win){win.document.open();win.document.write('<html><head><meta charset="UTF-8"><title>Biên lai học phí</title><style>@page{size:A5 portrait;margin:5mm}body{margin:0;text-align:center;background:#fff}img{display:block;max-width:100%;max-height:98vh;margin:auto}</style></head><body><img src="'+currentFeeCardDataUrl+'"><script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>');win.document.close();}
+    function printFeeCardToWindow(win) {
+      win.document.open();
+      win.document.write(
+        '<!doctype html><html><head><meta charset="UTF-8"><title>Biên lai học phí</title>' +
+        '<style>@page{size:A5 portrait;margin:5mm}body{margin:0;text-align:center;background:#fff}' +
+        'img{display:block;max-width:100%;max-height:98vh;margin:auto}</style></head>' +
+        '<body><img id="printFeeCardImage" src="' + currentFeeCardDataUrl + '"></body></html>'
+      );
+      win.document.close();
+
+      const image = win.document.getElementById('printFeeCardImage');
+      const startPrint = function () {
+        win.setTimeout(function () { win.print(); }, 250);
+      };
+      if (image && image.complete) startPrint();
+      else if (image) image.onload = startPrint;
+      else startPrint();
+    }
 
     function printTuitionReceiptDocument(item, existingWindow) {
       showBusy('Đang tạo biên lai theo mẫu mới...');

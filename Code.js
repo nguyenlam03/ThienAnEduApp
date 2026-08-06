@@ -42,6 +42,21 @@ function include(filename) {
 }
 
 /**
+ * Mã hóa dữ liệu trước khi chèn vào một thẻ script của HTML template.
+ * JSON.stringify đơn thuần vẫn có thể chứa chuỗi đóng thẻ hoặc ký tự phân
+ * cách dòng khiến trình duyệt dừng phân tích toàn bộ JavaScript của trang.
+ */
+function inlineScriptJson_(value) {
+  const json = JSON.stringify(value);
+  return String(json === undefined ? 'null' : json)
+    .replace(/&/g, '\\u0026')
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
+/**
  * Điều hướng trang.
  */
 function doGet(e) {
@@ -1524,14 +1539,14 @@ function getQuanLyThuPhiData(token, yearMonth) {
   const session = requireSession_(token, 'tuition.read');
   const ym = parseYearMonth_(yearMonth);
 
-  ensureThuChiSheets_(session.maKyHoc);
-
   const cacheKey = buildCacheKey_(
     'thuphi_snapshot_v4_' + session.maKyHoc + '_' + ym.year + '_' + ym.month
   );
 
   const cached = cacheGetString_(cacheKey);
   if (cached) return cached;
+
+  ensureThuChiSheets_(session.maKyHoc);
 
   const snapshot = ensureThuPhiMonthSnapshot_(
     session.maKyHoc,
