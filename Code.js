@@ -2785,7 +2785,7 @@ function ensureQuanLyTaiChinhSheets_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const props = PropertiesService.getScriptProperties();
   const schemaKey = 'QUANLY_TAICHINH_SCHEMA_VERSION';
-  const schemaVersion = '3';
+  const schemaVersion = '4';
   const requiredSheets = [
     SHEET_NHANSU_TAICHINH, SHEET_KHOANCHI_DINHKY, SHEET_DANHMUC_HU_TAICHINH,
     SHEET_HU_TAICHINH_THANG, SHEET_CHOT_PHANBO_HU, SHEET_DANHMUC_GIADINH,
@@ -2796,7 +2796,7 @@ function ensureQuanLyTaiChinhSheets_() {
   ensureSheet_(ss, SHEET_KHOANCHI_DINHKY, getKhoanChiDinhKyHeaders_());
   const jarCategorySheet = ensureSheet_(ss, SHEET_DANHMUC_HU_TAICHINH, getDanhMucHuTaiChinhHeaders_());
   ensureSheet_(ss, SHEET_HU_TAICHINH_THANG, getHuTaiChinhThangHeaders_());
-  ensureSheet_(ss, SHEET_CHOT_PHANBO_HU, getChotPhanBoHuHeaders_());
+  const allocationLockSheet = ensureSheet_(ss, SHEET_CHOT_PHANBO_HU, getChotPhanBoHuHeaders_());
   const familyCategorySheet = ensureSheet_(ss, SHEET_DANHMUC_GIADINH, getDanhMucGiaDinhHeaders_());
   ensureSheet_(ss, SHEET_GIAODICH_GIADINH, getGiaoDichGiaDinhHeaders_());
   ensureSheet_(ss, SHEET_CAUHINH_GIADINH_THANG, getCauHinhGiaDinhThangHeaders_());
@@ -2845,6 +2845,23 @@ function ensureQuanLyTaiChinhSheets_() {
     GhiChu: 'Danh mục gợi ý, có thể chỉnh sửa', CreatedAt: now, UpdatedAt: now
   }));
   if (missing.length) appendObjectsToSheet_(familyCategorySheet, missing, getDanhMucGiaDinhHeaders_());
+  const allocationRows = allocationLockSheet.getDataRange().getValues();
+  if (allocationRows.length > 1) {
+    const allocationIndex = buildHeaderIndex_(allocationRows[0].map(item => String(item || '').trim()));
+    let repaired = false;
+    for (let i = 1; i < allocationRows.length; i++) {
+      const currentMonth = String(allocationRows[i][allocationIndex.Thang] || '').trim();
+      const lockId = String(allocationRows[i][allocationIndex.MaChot] || '').trim();
+      if (currentMonth || !lockId) continue;
+      const separator = lockId.lastIndexOf('|');
+      const inferredMonth = separator >= 0 ? lockId.slice(separator + 1) : '';
+      if (/^\d{4}-(0[1-9]|1[0-2])$/.test(inferredMonth)) {
+        allocationRows[i][allocationIndex.Thang] = inferredMonth;
+        repaired = true;
+      }
+    }
+    if (repaired) allocationLockSheet.getRange(1, 1, allocationRows.length, allocationRows[0].length).setValues(allocationRows);
+  }
   props.setProperty(schemaKey, schemaVersion);
 }
 
@@ -3759,10 +3776,12 @@ function deleteDanhMucHuTaiChinh(token, codeInput) {
 }
 
 function getChotPhanBoHu_(maKyHoc, month) {
-  const row = readObjectsNoCache_(SHEET_CHOT_PHANBO_HU).find(item =>
+  const rows = readObjectsNoCache_(SHEET_CHOT_PHANBO_HU);
+  const lockId = String(maKyHoc || '').trim() + '|' + String(month || '').trim();
+  const row = rows.find(item =>
     String(item.MaKyHoc || '').trim() === String(maKyHoc || '').trim() &&
     String(item.Thang || '').trim() === String(month || '').trim()
-  ) || {};
+  ) || rows.find(item => String(item.MaChot || '').trim() === lockId) || {};
   const locked = String(row.TrangThai || 'DRAFT').trim().toUpperCase() === 'LOCKED';
   const today = new Date();
   const isCurrentMonth = formatDateForInput_(today).slice(0, 7) === month;
@@ -3819,7 +3838,7 @@ function lockPhanBoHuTaiChinh(token, month) {
   try {
     const lockId = session.maKyHoc + '|' + month;
     upsertFinanceObject_(SHEET_CHOT_PHANBO_HU, getChotPhanBoHuHeaders_(), 'MaChot', lockId, {
-      MaKyHoc: session.maKyHoc, TrangThai: 'LOCKED', HocPhiCoSo: baseTuition,
+      MaKyHoc: session.maKyHoc, Thang: month, TrangThai: 'LOCKED', HocPhiCoSo: baseTuition,
       NgayChot: new Date(), NguoiChot: session.tenDangNhap || session.hoTen || session.maNguoiDung,
       NgayMoKhoa: '', NguoiMoKhoa: '', LyDoMoKhoa: '', PhienBan: current.version + 1
     });
@@ -3845,7 +3864,7 @@ function unlockPhanBoHuTaiChinh(token, month, reason) {
   try {
     const lockId = session.maKyHoc + '|' + month;
     upsertFinanceObject_(SHEET_CHOT_PHANBO_HU, getChotPhanBoHuHeaders_(), 'MaChot', lockId, {
-      MaKyHoc: session.maKyHoc, TrangThai: 'DRAFT', HocPhiCoSo: current.baseTuition,
+      MaKyHoc: session.maKyHoc, Thang: month, TrangThai: 'DRAFT', HocPhiCoSo: current.baseTuition,
       NgayMoKhoa: new Date(), NguoiMoKhoa: session.tenDangNhap || session.hoTen || session.maNguoiDung,
       LyDoMoKhoa: reason, PhienBan: current.version
     });
