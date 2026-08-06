@@ -63,3 +63,11 @@ Chốt phân bổ hũ khác với khóa sổ: chốt phân bổ chỉ khóa họ
 3. Thay các sheet học phí theo tháng bằng một bảng giao dịch duy nhất có chỉ mục tháng.
 4. Thêm adapter lưu trữ để có thể chuyển từ Google Sheet sang PostgreSQL/Cloud SQL mà không đổi Domain.
 5. Đưa kiểm thử vào quy trình kiểm tra tự động trước khi triển khai.
+
+## Phân tách giao diện tài chính
+
+- `QuanLyTaiChinh.html`: tổng quan hiệu quả trung tâm và mô phỏng học phí; chỉ gọi `getTongQuanTaiChinhData`.
+- `KeHoachTaiChinh.html`: hũ tài chính, nhân sự, khoản chi định kỳ và kế hoạch tháng. Mỗi tab được tải theo nhu cầu bằng `getKeHoachTaiChinhData`, không tải các tab chưa mở.
+- `TaiChinhGiaDinh.html`: hạn mức Hũ lương chủ trung tâm, các đợt rút tiền và ngân sách gia đình; chỉ gọi `getTaiChinhGiaDinhData`.
+- Ba màn hình dùng chung các Sheet, khóa sổ, nhật ký và hàm ghi nghiệp vụ hiện có. Không tạo bản sao giao dịch hoặc nguồn dữ liệu tài chính mới.
+- Sau thao tác ghi, giao diện chỉ tải lại module đang sử dụng; dữ liệu danh mục ít thay đổi dùng cache theo phiên bản và bị vô hiệu hóa khi `bumpDataVersion_` được gọi.
