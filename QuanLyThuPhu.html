@@ -72,6 +72,20 @@
     .fee-assessment-card { margin-top:16px; border-left:6px solid #0284c7; }
     .fee-assessment-heading { color:#075985; font-size:16px; font-weight:900; }
     .fee-assessment-text { margin-top:8px; color:#334155; line-height:1.65; font-weight:600; }
+    .fee-source-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:18px; }
+    .fee-source-kpi { padding:16px; border:1px solid #dbeafe; border-radius:16px; background:linear-gradient(180deg,#fff,#f8fafc); }
+    .fee-source-kpi-label { color:#64748b; font-size:12px; font-weight:800; }
+    .fee-source-kpi-value { margin-top:7px; color:#0f172a; font-size:22px; font-weight:900; }
+    .fee-source-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; margin-top:18px; }
+    .fee-source-card { padding:17px; border:1px solid #dbeafe; border-radius:18px; background:#fff; box-shadow:0 8px 22px rgba(15,23,42,.05); }
+    .fee-source-card-head { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+    .fee-source-name { color:#0f172a; font-size:16px; font-weight:900; }
+    .fee-source-count { margin-top:4px; color:#64748b; font-size:12px; font-weight:700; }
+    .fee-source-rate { padding:6px 9px; border-radius:999px; background:#eff6ff; color:#1d4ed8; font-size:13px; font-weight:900; }
+    .fee-source-amount { margin-top:15px; color:#0f172a; font-size:24px; font-weight:900; }
+    .fee-source-track { height:10px; margin-top:12px; overflow:hidden; border-radius:999px; background:#e2e8f0; }
+    .fee-source-track span { display:block; height:100%; border-radius:999px; background:var(--source-color,#0284c7); transition:width .3s ease; }
+    .fee-source-card.unassigned { background:#fff7ed; border-color:#fed7aa; }
 
     .status-pill {
       display: inline-flex;
@@ -306,6 +320,7 @@
       .fee-analysis-grid {
         grid-template-columns: 1fr 1fr;
       }
+      .fee-source-summary { grid-template-columns:1fr; }
       .extra-fee-item,.fee-category-form,.fee-category-row { grid-template-columns:1fr; }
     }
   </style>
@@ -443,6 +458,7 @@
           <div class="fee-view-tabs" role="tablist" aria-label="Chế độ xem thu phí">
             <button id="feeListTabButton" class="fee-view-tab active" type="button" onclick="switchFeeTab('LIST')">Danh sách thu phí</button>
             <button id="feeChartTabButton" class="fee-view-tab" type="button" onclick="switchFeeTab('CHART')">Biểu đồ &amp; đánh giá</button>
+            <button id="feeSourceTabButton" class="fee-view-tab" type="button" onclick="switchFeeTab('SOURCE')">Thống kê nguồn thu</button>
           </div>
 
           <div id="feeListTabPanel" class="fee-tab-panel">
@@ -513,6 +529,14 @@
               <div id="feeAnalysisGrid" class="fee-analysis-grid"></div>
             </div>
             <div id="feeAssessmentCard" class="fee-assessment-card"></div>
+          </div>
+          <div id="feeSourceTabPanel" class="fee-tab-panel" hidden>
+            <div class="fee-chart-card">
+              <div class="fee-chart-title">Cơ cấu nguồn nhận học phí trong tháng</div>
+              <div class="fee-chart-subtitle">Thể hiện số tiền và tỷ trọng qua Tiền mặt, BIDV, Vietcombank, VietinBank và các nguồn phát sinh khác. Số liệu thay đổi theo bộ lọc hiện tại.</div>
+              <div id="feeSourceSummary" class="fee-source-summary"></div>
+              <div id="feeSourceGrid" class="fee-source-grid"></div>
+            </div>
           </div>
         </div>
       </section>
@@ -881,11 +905,14 @@
 
     function switchFeeTab(tab) {
       const showChart = tab === 'CHART';
-      document.getElementById('feeListTabPanel').hidden = showChart;
+      const showSource = tab === 'SOURCE';
+      document.getElementById('feeListTabPanel').hidden = showChart || showSource;
       document.getElementById('feeChartTabPanel').hidden = !showChart;
-      document.getElementById('feeListTabButton').classList.toggle('active', !showChart);
+      document.getElementById('feeSourceTabPanel').hidden = !showSource;
+      document.getElementById('feeListTabButton').classList.toggle('active', !showChart && !showSource);
       document.getElementById('feeChartTabButton').classList.toggle('active', showChart);
-      if (showChart) renderTable();
+      document.getElementById('feeSourceTabButton').classList.toggle('active', showSource);
+      if (showChart || showSource) renderTable();
     }
 
     function renderSummary(summary) {
@@ -968,6 +995,7 @@
       }
 
       renderFeeDashboard(list);
+      renderFeeSourceStatistics(list);
       document.getElementById('countText').textContent = list.length + ' học sinh';
 
       if (list.length === 0) {
@@ -1118,6 +1146,85 @@
 
     function formatPercent(value) {
       return Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 1 }) + '%';
+    }
+
+    function renderFeeSourceStatistics(list) {
+      const preferredSources = [
+        { code: 'TIEN_MAT', name: 'Tiền mặt', color: '#16a34a' },
+        { code: 'BIDV', name: 'BIDV', color: '#0b3b77' },
+        { code: 'VIETCOMBANK', name: 'Vietcombank', color: '#047857' },
+        { code: 'VIETINBANK', name: 'VietinBank', color: '#dc2626' }
+      ];
+      const palette = ['#7c3aed', '#0891b2', '#d97706', '#475569'];
+      const sourceMap = {};
+      const sourceOrder = [];
+
+      function ensureSource(code, name, color) {
+        code = String(code || '').trim().toUpperCase() || 'UNASSIGNED';
+        if (!sourceMap[code]) {
+          sourceMap[code] = {
+            code: code,
+            name: name || (code === 'UNASSIGNED' ? 'Chưa phân loại' : code),
+            color: color || palette[sourceOrder.length % palette.length],
+            amount: 0,
+            count: 0,
+            preferred: false
+          };
+          sourceOrder.push(code);
+        }
+        return sourceMap[code];
+      }
+
+      preferredSources.forEach(function (source) {
+        ensureSource(source.code, source.name, source.color).preferred = true;
+      });
+      moneySources.forEach(function (source) {
+        ensureSource(source.maNguonTien, source.tenNguonTien);
+      });
+
+      (list || []).forEach(function (item) {
+        if (item.tamNghi) return;
+        const amount = Number(item.soTienDaThu || 0);
+        if (amount <= 0) return;
+        const code = String(item.maNguonTien || '').trim().toUpperCase() || 'UNASSIGNED';
+        const source = ensureSource(
+          code,
+          item.tenNguonTien || (code === 'UNASSIGNED' ? 'Chưa phân loại' : code),
+          code === 'UNASSIGNED' ? '#f97316' : ''
+        );
+        source.amount += amount;
+        source.count++;
+      });
+
+      const totalCollected = sourceOrder.reduce(function (sum, code) {
+        return sum + Number(sourceMap[code].amount || 0);
+      }, 0);
+      const unassigned = sourceMap.UNASSIGNED ? Number(sourceMap.UNASSIGNED.amount || 0) : 0;
+      const assigned = Math.max(totalCollected - unassigned, 0);
+      const assignedRate = totalCollected > 0 ? assigned * 100 / totalCollected : 0;
+
+      document.getElementById('feeSourceSummary').innerHTML = [
+        ['Tổng học phí đã thu', formatMoney(totalCollected)],
+        ['Đã xác định nguồn', formatMoney(assigned) + ' · ' + formatPercent(assignedRate)],
+        ['Chưa phân loại', formatMoney(unassigned)]
+      ].map(function (item) {
+        return `<div class="fee-source-kpi"><div class="fee-source-kpi-label">${item[0]}</div><div class="fee-source-kpi-value">${item[1]}</div></div>`;
+      }).join('');
+
+      const visibleSources = sourceOrder.map(function (code) { return sourceMap[code]; })
+        .filter(function (source) { return source.preferred || source.amount > 0; });
+      document.getElementById('feeSourceGrid').innerHTML = visibleSources.map(function (source) {
+        const rate = totalCollected > 0 ? source.amount * 100 / totalCollected : 0;
+        return `
+          <div class="fee-source-card ${source.code === 'UNASSIGNED' ? 'unassigned' : ''}" style="--source-color:${escapeAttribute(source.color)}">
+            <div class="fee-source-card-head">
+              <div><div class="fee-source-name">${escapeHtml(source.name)}</div><div class="fee-source-count">${source.count} học sinh đã ghi nhận</div></div>
+              <div class="fee-source-rate">${formatPercent(rate)}</div>
+            </div>
+            <div class="fee-source-amount">${formatMoney(source.amount)}</div>
+            <div class="fee-source-track"><span style="width:${Math.min(100, Math.max(0, rate))}%"></span></div>
+          </div>`;
+      }).join('') || '<div class="empty-box">Chưa có học phí đã thu trong tháng.</div>';
     }
 
     function renderGroupedFeeRows(list, renderRow) {
