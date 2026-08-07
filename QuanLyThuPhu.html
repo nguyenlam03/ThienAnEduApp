@@ -697,6 +697,7 @@
     let currentFeeCardFileName = '';
     let feeLoadRequestId = 0;
     let feeLoadTimeoutId = null;
+    let currentFeeTab = 'LIST';
     const FEE_LOAD_TIMEOUT_MS = 30000;
 
     document.addEventListener('DOMContentLoaded', function () {
@@ -963,6 +964,7 @@
     }
 
     function switchFeeTab(tab) {
+      currentFeeTab = ['LIST', 'CHART', 'SOURCE'].indexOf(tab) !== -1 ? tab : 'LIST';
       const showChart = tab === 'CHART';
       const showSource = tab === 'SOURCE';
       document.getElementById('feeListTabPanel').hidden = showChart || showSource;
@@ -971,7 +973,7 @@
       document.getElementById('feeListTabButton').classList.toggle('active', !showChart && !showSource);
       document.getElementById('feeChartTabButton').classList.toggle('active', showChart);
       document.getElementById('feeSourceTabButton').classList.toggle('active', showSource);
-      if (showChart || showSource) renderTable();
+      renderTable();
     }
 
     function renderSummary(summary) {
@@ -1053,8 +1055,10 @@
         });
       }
 
-      renderFeeDashboard(list);
-      renderFeeSourceStatistics(list);
+      // Các tab thống kê chỉ được dựng khi người dùng mở tab tương ứng.
+      // Nhờ đó lỗi hoặc phép tính ở tab phụ không thể chặn danh sách chính.
+      if (currentFeeTab === 'CHART') renderFeeDashboard(list);
+      if (currentFeeTab === 'SOURCE') renderFeeSourceStatistics(list);
       document.getElementById('countText').textContent = list.length + ' học sinh';
 
       if (list.length === 0) {

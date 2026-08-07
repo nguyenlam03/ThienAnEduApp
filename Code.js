@@ -1540,13 +1540,11 @@ function getQuanLyThuPhiData(token, yearMonth) {
   const ym = parseYearMonth_(yearMonth);
 
   const cacheKey = buildCacheKey_(
-    'thuphi_snapshot_v4_' + session.maKyHoc + '_' + ym.year + '_' + ym.month
+    'thuphi_snapshot_v5_' + session.maKyHoc + '_' + ym.year + '_' + ym.month
   );
 
   const cached = cacheGetString_(cacheKey);
   if (cached) return cached;
-
-  ensureThuChiSheets_(session.maKyHoc);
 
   const snapshot = ensureThuPhiMonthSnapshot_(
     session.maKyHoc,
