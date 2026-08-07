@@ -471,7 +471,7 @@
 
           <div class="grid-toolbar">
             <div class="grid-toolbar-left">
-              <button id="feeColumnButton" class="column-config-button" type="button" onclick="GridColumnConfig.open('fee-list')">
+              <button id="feeColumnButton" class="column-config-button" type="button" onclick="openFeeColumnConfig()">
                 <span aria-hidden="true">⚙</span>
                 <span>Cấu hình cột</span>
               </button>
@@ -698,30 +698,68 @@
     let feeLoadRequestId = 0;
     let feeLoadTimeoutId = null;
     let currentFeeTab = 'LIST';
+    let feePageInitialized = false;
     const FEE_LOAD_TIMEOUT_MS = 30000;
 
-    document.addEventListener('DOMContentLoaded', function () {
-      GridColumnConfig.register({
-        gridId: 'fee-list',
-        tableId: 'feeDataGrid',
-        buttonId: 'feeColumnButton',
-        title: 'Danh sách thu phí theo tháng'
-      });
-      document.getElementById('filterMonth').value = getCurrentYearMonth();
-      applyGridRowsLimit('feeTableWrap', 'feeRowsLimit');
+    function initializeFeePage() {
+      if (feePageInitialized) return;
+      feePageInitialized = true;
 
-      document.getElementById('filterKeyword').addEventListener('keydown', function (event) {
-        if (event.key === 'Enter') {
-          renderTable();
+      const monthInput = document.getElementById('filterMonth');
+      if (monthInput && !monthInput.value) monthInput.value = getCurrentYearMonth();
+
+      try {
+        if (window.GridColumnConfig && typeof window.GridColumnConfig.register === 'function') {
+          window.GridColumnConfig.register({
+            gridId: 'fee-list',
+            tableId: 'feeDataGrid',
+            buttonId: 'feeColumnButton',
+            title: 'Danh sách thu phí theo tháng'
+          });
         }
-      });
+      } catch (error) {
+        console.error('Không khởi tạo được cấu hình cột:', error);
+      }
 
-      document.getElementById('filterKeyword').addEventListener('input', function () {
-        renderTable();
-      });
+      try {
+        applyGridRowsLimit('feeTableWrap', 'feeRowsLimit');
+      } catch (error) {
+        console.error('Không thiết lập được giới hạn dòng:', error);
+      }
 
-      loadThuPhiData();
-    });
+      const keywordInput = document.getElementById('filterKeyword');
+      if (keywordInput) {
+        keywordInput.addEventListener('keydown', function (event) {
+          if (event.key === 'Enter') renderTable();
+        });
+
+        keywordInput.addEventListener('input', function () {
+          renderTable();
+        });
+      }
+
+      window.setTimeout(loadThuPhiData, 0);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initializeFeePage, { once: true });
+    } else {
+      initializeFeePage();
+    }
+
+    function openFeeColumnConfig() {
+      if (window.GridColumnConfig && typeof window.GridColumnConfig.open === 'function') {
+        window.GridColumnConfig.open('fee-list');
+      } else {
+        showNotification('Cấu hình cột chưa sẵn sàng. Vui lòng tải lại trang.', 'warning');
+      }
+    }
+
+    function applyFeeGridConfig() {
+      if (window.GridColumnConfig && typeof window.GridColumnConfig.apply === 'function') {
+        window.GridColumnConfig.apply('fee-list');
+      }
+    }
 
     function goPage(page) {
       window.top.location.href = APP_URL
@@ -1069,7 +1107,7 @@
             </td>
           </tr>
         `;
-        GridColumnConfig.apply('fee-list');
+        applyFeeGridConfig();
         return;
       }
 
@@ -1122,7 +1160,7 @@
           </tr>
         `;
       });
-      GridColumnConfig.apply('fee-list');
+      applyFeeGridConfig();
     }
 
     function renderFeeDashboard(list) {
