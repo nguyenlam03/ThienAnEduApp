@@ -2771,6 +2771,45 @@ function inferFamilySourceFromLegacy_(value) {
   return 'GD_TIEN_MAT';
 }
 
+function isLegacyOwnerWithdrawalMatch_(legacy, center) {
+  if (!legacy || !center) return false;
+  const legacyContent = normalizeText_(legacy.noiDung || '');
+  const looksLikeOwnerWithdrawal = legacyContent.indexOf('rut tien') !== -1 && (
+    legacyContent.indexOf('luong') !== -1 ||
+    legacyContent.indexOf('chu so huu') !== -1 ||
+    legacyContent.indexOf('trung tam') !== -1
+  );
+  return String(legacy.loai || '').trim().toUpperCase() === 'CHI' &&
+    looksLikeOwnerWithdrawal &&
+    String(center.loai || '').trim().toUpperCase() === 'CHI' &&
+    String(center.maDanhMuc || '').trim().toUpperCase() === 'CHI_GIA_DINH' &&
+    normalizeFinanceScope_(center.phamVi) === 'TRUNG_TAM' &&
+    String(center.trangThai || 'HOAT_DONG').trim().toUpperCase() === 'HOAT_DONG' &&
+    String(legacy.ngayGiaoDich || '').trim() === String(center.ngayGiaoDich || '').trim() &&
+    Math.abs(number_(legacy.soTien) - number_(center.soTien)) < 1;
+}
+
+function findMatchingCenterOwnerWithdrawal_(ledgerValues, ledgerIndex, maKyHoc, legacy, excludedRowIndex) {
+  for (let i = 1; i < ledgerValues.length; i++) {
+    if (i === excludedRowIndex) continue;
+    const row = ledgerValues[i];
+    if (String(row[ledgerIndex.MaKyHoc] || '').trim() !== String(maKyHoc || '').trim()) continue;
+    const sourceType = String(row[ledgerIndex.NguonDuLieu] || '').trim().toUpperCase();
+    const center = {
+      maGiaoDich: String(row[ledgerIndex.MaGiaoDich] || '').trim(),
+      ngayGiaoDich: formatDateForInput_(toDateOnly_(row[ledgerIndex.NgayGiaoDich])),
+      loai: String(row[ledgerIndex.LoaiGiaoDich] || '').trim().toUpperCase(),
+      maDanhMuc: String(row[ledgerIndex.MaDanhMuc] || '').trim().toUpperCase(),
+      soTien: number_(row[ledgerIndex.SoTien]),
+      phamVi: normalizeFinanceScope_(row[ledgerIndex.PhamVi] || (sourceType.indexOf('GIA_DINH') === 0 ? 'GIA_DINH' : 'TRUNG_TAM')),
+      trangThai: String(row[ledgerIndex.TrangThai] || 'HOAT_DONG').trim().toUpperCase(),
+      soPhieu: String(row[ledgerIndex.SoPhieu] || '').trim()
+    };
+    if (center.maGiaoDich && isLegacyOwnerWithdrawalMatch_(legacy, center)) return center;
+  }
+  return null;
+}
+
 function migrateLegacyFamilyTransactionsNoLock_(maKyHoc, ledgerSheet) {
   if (!maKyHoc) return 0;
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -2783,6 +2822,7 @@ function migrateLegacyFamilyTransactionsNoLock_(maKyHoc, ledgerSheet) {
   const ledgerHeaders = ledgerValues[0].map(header => String(header || '').trim());
   const ledgerIndex = buildHeaderIndex_(ledgerHeaders);
   const newRows = [];
+  let familyChanged = false;
   const now = new Date();
   for (let i = 1; i < familyValues.length; i++) {
     const legacyId = String(familyValues[i][familyIndex.MaGiaoDichGiaDinh] || '').trim();
@@ -2791,7 +2831,27 @@ function migrateLegacyFamilyTransactionsNoLock_(maKyHoc, ledgerSheet) {
     if (!legacyId || linkedId || (rowKyHoc && rowKyHoc !== maKyHoc)) continue;
     const date = toDateOnly_(familyValues[i][familyIndex.NgayGiaoDich]);
     if (!date) continue;
-    const familyType = String(familyValues[i][familyIndex.Loai] || 'CHI').trim().toUpperCase();
+    const originalFamilyType = String(familyValues[i][familyIndex.Loai] || 'CHI').trim().toUpperCase();
+    const legacy = {
+      ngayGiaoDich: formatDateForInput_(date),
+      loai: originalFamilyType,
+      noiDung: String(familyValues[i][familyIndex.NoiDung] || '').trim(),
+      soTien: number_(familyValues[i][familyIndex.SoTien])
+    };
+    const centerWithdrawal = findMatchingCenterOwnerWithdrawal_(ledgerValues, ledgerIndex, maKyHoc, legacy, -1);
+    const existingLinkedFamily = centerWithdrawal ? ledgerValues.slice(1).find(row =>
+      String(row[ledgerIndex.MaKyHoc] || '').trim() === String(maKyHoc || '').trim() &&
+      String(row[ledgerIndex.NguonDuLieu] || '').trim().toUpperCase() === 'GIA_DINH_RUT_CHU' &&
+      String(row[ledgerIndex.MaGiaoDichLienKet] || '').trim() === centerWithdrawal.maGiaoDich
+    ) : null;
+    if (existingLinkedFamily) {
+      familyValues[i][familyIndex.MaKyHoc] = maKyHoc;
+      familyValues[i][familyIndex.MaGiaoDichSoThuChi] = String(existingLinkedFamily[ledgerIndex.MaGiaoDich] || '').trim();
+      familyValues[i][familyIndex.UpdatedAt] = now;
+      familyChanged = true;
+      continue;
+    }
+    const familyType = centerWithdrawal ? 'THU' : originalFamilyType;
     const ledgerType = familyType === 'THU' ? 'THU' : 'CHI';
     const sourceCode = inferFamilySourceFromLegacy_(familyValues[i][familyIndex.NguonTien]);
     const source = getNguonTienDefinition_(sourceCode);
@@ -2803,21 +2863,22 @@ function migrateLegacyFamilyTransactionsNoLock_(maKyHoc, ledgerSheet) {
     row[ledgerIndex.NgayGiaoDich] = date;
     row[ledgerIndex.MaKyHoc] = maKyHoc;
     row[ledgerIndex.LoaiGiaoDich] = ledgerType;
-    row[ledgerIndex.MaDanhMuc] = String(familyValues[i][familyIndex.MaDanhMucGiaDinh] || '').trim();
-    row[ledgerIndex.TenDanhMuc] = String(familyValues[i][familyIndex.TenDanhMuc] || '').trim();
-    row[ledgerIndex.NoiDung] = String(familyValues[i][familyIndex.NoiDung] || '').trim();
+    row[ledgerIndex.MaDanhMuc] = centerWithdrawal ? 'GD_THU_CHU_SO_HUU' : String(familyValues[i][familyIndex.MaDanhMucGiaDinh] || '').trim();
+    row[ledgerIndex.TenDanhMuc] = centerWithdrawal ? 'Nhận tiền từ trung tâm' : String(familyValues[i][familyIndex.TenDanhMuc] || '').trim();
+    row[ledgerIndex.NoiDung] = centerWithdrawal ? ('Nhận tiền từ trung tâm - ' + legacy.noiDung) : legacy.noiDung;
     row[ledgerIndex.SoTien] = number_(familyValues[i][familyIndex.SoTien]);
     row[ledgerIndex.HinhThuc] = getHinhThucByNguon_(sourceCode);
     row[ledgerIndex.MaNguonTien] = sourceCode;
     row[ledgerIndex.TenNguonTien] = source ? source.tenNguonTien : '';
     row[ledgerIndex.SoPhieu] = receipt;
+    row[ledgerIndex.SoChungTu] = centerWithdrawal ? centerWithdrawal.soPhieu : '';
     row[ledgerIndex.GhiChu] = String(familyValues[i][familyIndex.GhiChu] || '').trim();
-    row[ledgerIndex.NguonDuLieu] = 'GIA_DINH_CU';
-    row[ledgerIndex.MaThamChieu] = 'LEGACY_GD|' + legacyId;
+    row[ledgerIndex.NguonDuLieu] = centerWithdrawal ? 'GIA_DINH_RUT_CHU' : 'GIA_DINH_CU';
+    row[ledgerIndex.MaThamChieu] = centerWithdrawal ? ('OWNER_DRAW|' + centerWithdrawal.maGiaoDich) : ('LEGACY_GD|' + legacyId);
     row[ledgerIndex.PhamVi] = 'GIA_DINH';
-    row[ledgerIndex.MaDanhMucGiaDinh] = String(familyValues[i][familyIndex.MaDanhMucGiaDinh] || '').trim();
+    row[ledgerIndex.MaDanhMucGiaDinh] = centerWithdrawal ? 'GD_THU_CHU_SO_HUU' : String(familyValues[i][familyIndex.MaDanhMucGiaDinh] || '').trim();
     row[ledgerIndex.LoaiGiaDinh] = familyType;
-    row[ledgerIndex.MaGiaoDichLienKet] = legacyId;
+    row[ledgerIndex.MaGiaoDichLienKet] = centerWithdrawal ? centerWithdrawal.maGiaoDich : legacyId;
     row[ledgerIndex.TrangThai] = String(familyValues[i][familyIndex.TrangThai] || 'ACTIVE').trim().toUpperCase() === 'ACTIVE' ? 'HOAT_DONG' : 'DA_HUY';
     row[ledgerIndex.NguoiTao] = 'Migration';
     row[ledgerIndex.CreatedAt] = familyValues[i][familyIndex.CreatedAt] || now;
@@ -2826,12 +2887,68 @@ function migrateLegacyFamilyTransactionsNoLock_(maKyHoc, ledgerSheet) {
     familyValues[i][familyIndex.MaKyHoc] = maKyHoc;
     familyValues[i][familyIndex.MaGiaoDichSoThuChi] = id;
     familyValues[i][familyIndex.UpdatedAt] = now;
+    familyChanged = true;
   }
   if (newRows.length) {
     ledgerSheet.getRange(ledgerSheet.getLastRow() + 1, 1, newRows.length, ledgerHeaders.length).setValues(newRows);
+  }
+  if (familyChanged) {
     familySheet.getRange(2, 1, familyValues.length - 1, familyHeaders.length).setValues(familyValues.slice(1));
   }
   return newRows.length;
+}
+
+function reconcileMigratedOwnerWithdrawalsNoLock_(maKyHoc, ledgerSheet) {
+  if (!maKyHoc) return 0;
+  const values = ledgerSheet.getDataRange().getValues();
+  if (values.length <= 1) return 0;
+  const headers = values[0].map(header => String(header || '').trim());
+  const index = buildHeaderIndex_(headers);
+  let changed = 0;
+  const now = new Date();
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    if (String(row[index.MaKyHoc] || '').trim() !== String(maKyHoc || '').trim()) continue;
+    if (String(row[index.NguonDuLieu] || '').trim().toUpperCase() !== 'GIA_DINH_CU') continue;
+    if (normalizeFinanceScope_(row[index.PhamVi]) !== 'GIA_DINH') continue;
+    const legacy = {
+      ngayGiaoDich: formatDateForInput_(toDateOnly_(row[index.NgayGiaoDich])),
+      loai: String(row[index.LoaiGiaoDich] || '').trim().toUpperCase(),
+      noiDung: String(row[index.NoiDung] || '').trim(),
+      soTien: number_(row[index.SoTien])
+    };
+    const centerWithdrawal = findMatchingCenterOwnerWithdrawal_(values, index, maKyHoc, legacy, i);
+    if (!centerWithdrawal) continue;
+    const alreadyLinked = values.some((candidate, candidateIndex) => candidateIndex !== i &&
+      String(candidate[index.MaKyHoc] || '').trim() === String(maKyHoc || '').trim() &&
+      String(candidate[index.NguonDuLieu] || '').trim().toUpperCase() === 'GIA_DINH_RUT_CHU' &&
+      String(candidate[index.MaGiaoDichLienKet] || '').trim() === centerWithdrawal.maGiaoDich &&
+      String(candidate[index.TrangThai] || 'HOAT_DONG').trim().toUpperCase() === 'HOAT_DONG'
+    );
+    if (alreadyLinked) {
+      row[index.NguonDuLieu] = 'GIA_DINH_CU_DOI_SOAT';
+      row[index.TrangThai] = 'DA_HUY';
+      row[index.GhiChu] = [String(row[index.GhiChu] || '').trim(), 'Đã loại khỏi giao dịch gia đình do trùng đợt rút tiền trung tâm.'].filter(Boolean).join(' | ');
+    } else {
+      row[index.LoaiGiaoDich] = 'THU';
+      row[index.MaDanhMuc] = 'GD_THU_CHU_SO_HUU';
+      row[index.TenDanhMuc] = 'Nhận tiền từ trung tâm';
+      row[index.NoiDung] = 'Nhận tiền từ trung tâm - ' + legacy.noiDung;
+      row[index.SoPhieu] = generateNextSoPhieuFromRows_('THU_GIA_DINH', legacy.ngayGiaoDich, values.slice(1), index);
+      row[index.SoChungTu] = centerWithdrawal.soPhieu;
+      row[index.NguoiNopNhan] = 'Trung tâm';
+      row[index.NguonDuLieu] = 'GIA_DINH_RUT_CHU';
+      row[index.MaThamChieu] = 'OWNER_DRAW|' + centerWithdrawal.maGiaoDich;
+      row[index.MaDanhMucGiaDinh] = 'GD_THU_CHU_SO_HUU';
+      row[index.LoaiGiaDinh] = 'THU';
+      row[index.MaGiaoDichLienKet] = centerWithdrawal.maGiaoDich;
+      row[index.GhiChu] = [String(row[index.GhiChu] || '').trim(), 'Đã đối soát từ phiếu rút tiền trung tâm cũ.'].filter(Boolean).join(' | ');
+    }
+    row[index.UpdatedAt] = now;
+    changed++;
+  }
+  if (changed) ledgerSheet.getRange(2, 1, values.length - 1, headers.length).setValues(values.slice(1));
+  return changed;
 }
 
 
@@ -2979,7 +3096,7 @@ function ensureQuanLyTaiChinhSheets_() {
 function ensureThuChiSheets_(maKyHoc) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const props = PropertiesService.getScriptProperties();
-  const schemaVersion = '12';
+  const schemaVersion = '13';
   const schemaKey = 'THUCHI_SCHEMA_VERSION';
   const sourceKey = maKyHoc
     ? 'THUCHI_NGUON_INIT_' + String(maKyHoc || '').trim()
@@ -3274,7 +3391,10 @@ function ensureThuChiSheets_(maKyHoc) {
       }
       if (ledgerScopeChanged) ledgerSheet.getRange(2, 1, scopeValues.length - 1, scopeHeaders.length).setValues(scopeValues.slice(1));
     }
-    if (maKyHoc) migrateLegacyFamilyTransactionsNoLock_(String(maKyHoc || '').trim(), ledgerSheet);
+    if (maKyHoc) {
+      migrateLegacyFamilyTransactionsNoLock_(String(maKyHoc || '').trim(), ledgerSheet);
+      reconcileMigratedOwnerWithdrawalsNoLock_(String(maKyHoc || '').trim(), ledgerSheet);
+    }
     props.setProperty(schemaKey, schemaVersion);
   } finally {
     lock.releaseLock();

@@ -84,6 +84,19 @@ function runArchitectureUnitTests() {
     equal(normalizeFinanceScope_('gia_dinh'), 'GIA_DINH', 'Không chuẩn hóa phạm vi gia đình');
   });
 
+  test('Phiếu rút lương chủ sở hữu cũ được đối soát với phiếu chi trung tâm', function () {
+    var matched = isLegacyOwnerWithdrawalMatch_(
+      { loai: 'CHI', ngayGiaoDich: '2026-08-01', soTien: 6000000, noiDung: 'Rút tiền lương thầy Lãm đợt 1' },
+      { loai: 'CHI', maDanhMuc: 'CHI_GIA_DINH', phamVi: 'TRUNG_TAM', trangThai: 'HOAT_DONG', ngayGiaoDich: '2026-08-01', soTien: 6000000 }
+    );
+    equal(matched, true, 'Không nhận diện phiếu rút lương trung tâm');
+    var familyExpense = isLegacyOwnerWithdrawalMatch_(
+      { loai: 'CHI', ngayGiaoDich: '2026-08-01', soTien: 6000000, noiDung: 'Đóng tiền học cho Pin' },
+      { loai: 'CHI', maDanhMuc: 'CHI_GIA_DINH', phamVi: 'TRUNG_TAM', trangThai: 'HOAT_DONG', ngayGiaoDich: '2026-08-01', soTien: 6000000 }
+    );
+    equal(familyExpense, false, 'Nhầm khoản chi gia đình thực tế với phiếu rút lương');
+  });
+
   test('Mã hũ UUID cũ có dấu gạch ngang vẫn được nhận diện', function () {
     equal(normalizeMaHuTaiChinh_('HU_2D4703A1-9'), 'HU_2D4703A1-9', 'Hũ cũ bị lọc khỏi danh sách');
   });
