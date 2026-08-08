@@ -2535,6 +2535,10 @@ function getSoThuChiHeaders_() {
     'GhiChu',
     'NguonDuLieu',
     'MaThamChieu',
+    'PhamVi',
+    'MaDanhMucGiaDinh',
+    'LoaiGiaDinh',
+    'MaGiaoDichLienKet',
     'TrangThai',
     'NguoiTao',
     'CreatedAt',
@@ -2613,7 +2617,7 @@ function getGiaoDichGiaDinhHeaders_() {
   return [
     'MaGiaoDichGiaDinh', 'NgayGiaoDich', 'Thang', 'Loai', 'MaDanhMucGiaDinh',
     'TenDanhMuc', 'NoiDung', 'SoTien', 'NguonTien', 'GhiChu', 'TrangThai',
-    'CreatedAt', 'UpdatedAt'
+    'CreatedAt', 'UpdatedAt', 'MaKyHoc', 'MaGiaoDichSoThuChi'
   ];
 }
 
@@ -2629,6 +2633,7 @@ function getNguonTienHeaders_() {
     'MaKyHoc',
     'MaNguonTien',
     'TenNguonTien',
+    'PhamVi',
     'ThuTu',
     'SoDuBanDau',
     'TrangThai',
@@ -2637,14 +2642,26 @@ function getNguonTienHeaders_() {
   ];
 }
 
-function getDefaultNguonTien_() {
-  return [
-    ['VIETCOMBANK', 'Vietcombank', 1],
-    ['VIETINBANK', 'VietinBank', 2],
-    ['BIDV', 'BIDV', 3],
-    ['TIEN_MAT', 'Tiền mặt', 4],
-    ['KET', 'Két', 5]
+function normalizeFinanceScope_(value, fallback) {
+  const scope = String(value || fallback || 'TRUNG_TAM').trim().toUpperCase();
+  return scope === 'GIA_DINH' ? 'GIA_DINH' : (scope === 'ALL' ? 'ALL' : 'TRUNG_TAM');
+}
+
+function getDefaultNguonTien_(scope) {
+  const items = [
+    ['VIETCOMBANK', 'Vietcombank', 1, 'TRUNG_TAM'],
+    ['VIETINBANK', 'VietinBank', 2, 'TRUNG_TAM'],
+    ['BIDV', 'BIDV', 3, 'TRUNG_TAM'],
+    ['TIEN_MAT', 'Tiền mặt', 4, 'TRUNG_TAM'],
+    ['KET', 'Két', 5, 'TRUNG_TAM'],
+    ['GD_TIEN_MAT', 'Tiền mặt gia đình', 101, 'GIA_DINH'],
+    ['GD_BIDV', 'BIDV cá nhân', 102, 'GIA_DINH'],
+    ['GD_VIETCOMBANK', 'Vietcombank cá nhân', 103, 'GIA_DINH'],
+    ['GD_VIETINBANK', 'VietinBank cá nhân', 104, 'GIA_DINH'],
+    ['GD_TIET_KIEM', 'Tài khoản tiết kiệm gia đình', 105, 'GIA_DINH']
   ];
+  const normalizedScope = normalizeFinanceScope_(scope || 'ALL', 'ALL');
+  return normalizedScope === 'ALL' ? items : items.filter(item => item[3] === normalizedScope);
 }
 
 function getNguonTienDefinition_(maNguonTien) {
@@ -2652,7 +2669,7 @@ function getNguonTienDefinition_(maNguonTien) {
   const found = getDefaultNguonTien_().find(item => item[0] === code);
 
   return found
-    ? { maNguonTien: found[0], tenNguonTien: found[1], thuTu: found[2] }
+    ? { maNguonTien: found[0], tenNguonTien: found[1], thuTu: found[2], phamVi: found[3] }
     : null;
 }
 
@@ -2663,9 +2680,10 @@ function getNguonTienName_(maNguonTien) {
 
 function getHinhThucByNguon_(maNguonTien) {
   const code = String(maNguonTien || '').trim().toUpperCase();
-  return code === 'VIETCOMBANK' || code === 'VIETINBANK' || code === 'BIDV'
+  return code === 'VIETCOMBANK' || code === 'VIETINBANK' || code === 'BIDV' ||
+    code === 'GD_VIETCOMBANK' || code === 'GD_VIETINBANK' || code === 'GD_BIDV' || code === 'GD_TIET_KIEM'
     ? 'Chuyển khoản'
-    : (code === 'TIEN_MAT' || code === 'KET' ? 'Tiền mặt' : '');
+    : (code === 'TIEN_MAT' || code === 'KET' || code === 'GD_TIEN_MAT' ? 'Tiền mặt' : '');
 }
 
 
@@ -2681,6 +2699,8 @@ function buildSoPhieuPrefix_(loai, dateValue) {
   const yearMonth = Utilities.formatDate(date, 'Asia/Ho_Chi_Minh', 'yyyyMM');
 
   if (type === 'HOC_PHI') return 'PT-HP-' + yearMonth + '-';
+  if (type === 'THU_GIA_DINH') return 'PT-GD-' + yearMonth + '-';
+  if (type === 'CHI_GIA_DINH') return 'PC-GD-' + yearMonth + '-';
   return (type === 'CHI' ? 'PC-' : 'PT-') + yearMonth + '-';
 }
 
@@ -2720,8 +2740,9 @@ function inferNguonTienFromLegacy_(hinhThuc, tenNguonTien) {
   return '';
 }
 
-function getNguonTienList_(maKyHoc) {
+function getNguonTienList_(maKyHoc, scope) {
   const rows = readObjectsNoCache_(SHEET_NGUONTIEN);
+  const normalizedScope = normalizeFinanceScope_(scope || 'TRUNG_TAM');
 
   return rows
     .filter(row => {
@@ -2731,12 +2752,86 @@ function getNguonTienList_(maKyHoc) {
     .map(row => ({
       maNguonTien: String(row.MaNguonTien || '').trim().toUpperCase(),
       tenNguonTien: String(row.TenNguonTien || '').trim(),
+      phamVi: normalizeFinanceScope_(row.PhamVi || (String(row.MaNguonTien || '').trim().toUpperCase().indexOf('GD_') === 0 ? 'GIA_DINH' : 'TRUNG_TAM')),
       thuTu: number_(row.ThuTu) || 999,
       soDuBanDau: number_(row.SoDuBanDau),
       trangThai: String(row.TrangThai || 'ACTIVE').trim().toUpperCase()
     }))
     .filter(item => !!getNguonTienDefinition_(item.maNguonTien))
+    .filter(item => normalizedScope === 'ALL' || item.phamVi === normalizedScope)
     .sort((a, b) => a.thuTu - b.thuTu);
+}
+
+function inferFamilySourceFromLegacy_(value) {
+  const text = normalizeText_(value || '');
+  if (text.indexOf('vietcombank') !== -1 || text.indexOf('vcb') !== -1) return 'GD_VIETCOMBANK';
+  if (text.indexOf('vietinbank') !== -1 || text.indexOf('ctg') !== -1) return 'GD_VIETINBANK';
+  if (text.indexOf('bidv') !== -1) return 'GD_BIDV';
+  if (text.indexOf('tiet kiem') !== -1) return 'GD_TIET_KIEM';
+  return 'GD_TIEN_MAT';
+}
+
+function migrateLegacyFamilyTransactionsNoLock_(maKyHoc, ledgerSheet) {
+  if (!maKyHoc) return 0;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const familySheet = ensureSheet_(ss, SHEET_GIAODICH_GIADINH, getGiaoDichGiaDinhHeaders_());
+  const familyValues = familySheet.getDataRange().getValues();
+  if (familyValues.length <= 1) return 0;
+  const familyHeaders = familyValues[0].map(header => String(header || '').trim());
+  const familyIndex = buildHeaderIndex_(familyHeaders);
+  const ledgerValues = ledgerSheet.getDataRange().getValues();
+  const ledgerHeaders = ledgerValues[0].map(header => String(header || '').trim());
+  const ledgerIndex = buildHeaderIndex_(ledgerHeaders);
+  const newRows = [];
+  const now = new Date();
+  for (let i = 1; i < familyValues.length; i++) {
+    const legacyId = String(familyValues[i][familyIndex.MaGiaoDichGiaDinh] || '').trim();
+    const linkedId = String(familyValues[i][familyIndex.MaGiaoDichSoThuChi] || '').trim();
+    const rowKyHoc = String(familyValues[i][familyIndex.MaKyHoc] || '').trim();
+    if (!legacyId || linkedId || (rowKyHoc && rowKyHoc !== maKyHoc)) continue;
+    const date = toDateOnly_(familyValues[i][familyIndex.NgayGiaoDich]);
+    if (!date) continue;
+    const familyType = String(familyValues[i][familyIndex.Loai] || 'CHI').trim().toUpperCase();
+    const ledgerType = familyType === 'THU' ? 'THU' : 'CHI';
+    const sourceCode = inferFamilySourceFromLegacy_(familyValues[i][familyIndex.NguonTien]);
+    const source = getNguonTienDefinition_(sourceCode);
+    const id = 'TC_GD_' + Utilities.getUuid().slice(0, 10).toUpperCase();
+    const allReceiptRows = ledgerValues.slice(1).concat(newRows);
+    const receipt = generateNextSoPhieuFromRows_(ledgerType === 'THU' ? 'THU_GIA_DINH' : 'CHI_GIA_DINH', date, allReceiptRows, ledgerIndex);
+    const row = new Array(ledgerHeaders.length).fill('');
+    row[ledgerIndex.MaGiaoDich] = id;
+    row[ledgerIndex.NgayGiaoDich] = date;
+    row[ledgerIndex.MaKyHoc] = maKyHoc;
+    row[ledgerIndex.LoaiGiaoDich] = ledgerType;
+    row[ledgerIndex.MaDanhMuc] = String(familyValues[i][familyIndex.MaDanhMucGiaDinh] || '').trim();
+    row[ledgerIndex.TenDanhMuc] = String(familyValues[i][familyIndex.TenDanhMuc] || '').trim();
+    row[ledgerIndex.NoiDung] = String(familyValues[i][familyIndex.NoiDung] || '').trim();
+    row[ledgerIndex.SoTien] = number_(familyValues[i][familyIndex.SoTien]);
+    row[ledgerIndex.HinhThuc] = getHinhThucByNguon_(sourceCode);
+    row[ledgerIndex.MaNguonTien] = sourceCode;
+    row[ledgerIndex.TenNguonTien] = source ? source.tenNguonTien : '';
+    row[ledgerIndex.SoPhieu] = receipt;
+    row[ledgerIndex.GhiChu] = String(familyValues[i][familyIndex.GhiChu] || '').trim();
+    row[ledgerIndex.NguonDuLieu] = 'GIA_DINH_CU';
+    row[ledgerIndex.MaThamChieu] = 'LEGACY_GD|' + legacyId;
+    row[ledgerIndex.PhamVi] = 'GIA_DINH';
+    row[ledgerIndex.MaDanhMucGiaDinh] = String(familyValues[i][familyIndex.MaDanhMucGiaDinh] || '').trim();
+    row[ledgerIndex.LoaiGiaDinh] = familyType;
+    row[ledgerIndex.MaGiaoDichLienKet] = legacyId;
+    row[ledgerIndex.TrangThai] = String(familyValues[i][familyIndex.TrangThai] || 'ACTIVE').trim().toUpperCase() === 'ACTIVE' ? 'HOAT_DONG' : 'DA_HUY';
+    row[ledgerIndex.NguoiTao] = 'Migration';
+    row[ledgerIndex.CreatedAt] = familyValues[i][familyIndex.CreatedAt] || now;
+    row[ledgerIndex.UpdatedAt] = now;
+    newRows.push(row);
+    familyValues[i][familyIndex.MaKyHoc] = maKyHoc;
+    familyValues[i][familyIndex.MaGiaoDichSoThuChi] = id;
+    familyValues[i][familyIndex.UpdatedAt] = now;
+  }
+  if (newRows.length) {
+    ledgerSheet.getRange(ledgerSheet.getLastRow() + 1, 1, newRows.length, ledgerHeaders.length).setValues(newRows);
+    familySheet.getRange(2, 1, familyValues.length - 1, familyHeaders.length).setValues(familyValues.slice(1));
+  }
+  return newRows.length;
 }
 
 
@@ -2783,6 +2878,7 @@ function inferHuTaiChinhForCategory_(maDanhMuc, tenDanhMuc) {
 
 function getDefaultDanhMucGiaDinh_() {
   return [
+    ['GD_THU_CHU_SO_HUU', 'Nhận tiền từ trung tâm', 'THU', 'THU_NHAP', 0, 'NONE', 0],
     ['GD_AN_UONG', 'Ăn uống và sinh hoạt', 'CHI', 'THIET_YEU', 40, 'MAX', 1],
     ['GD_HOC_TAP', 'Học tập của các con', 'CHI', 'GIAO_DUC', 15, 'MAX', 2],
     ['GD_Y_TE', 'Y tế và bảo hiểm', 'CHI', 'Y_TE', 5, 'MAX', 3],
@@ -2790,6 +2886,8 @@ function getDefaultDanhMucGiaDinh_() {
     ['GD_QUY_KHAN_CAP', 'Quỹ khẩn cấp', 'TIET_KIEM', 'TIET_KIEM', 15, 'MIN', 5],
     ['GD_TIET_KIEM', 'Tiết kiệm và đầu tư dài hạn', 'TIET_KIEM', 'TIET_KIEM', 10, 'MIN', 6],
     ['GD_KHAC', 'Hiếu hỉ và khoản khác', 'CHI', 'KHAC', 5, 'MAX', 7],
+    ['GD_THU_LUONG_NGOAI', 'Lương và thu nhập cá nhân bên ngoài', 'THU', 'THU_NHAP', 0, 'NONE', 90],
+    ['GD_THU_LAI_TIET_KIEM', 'Tiền lãi tiết kiệm và đầu tư', 'THU', 'THU_NHAP', 0, 'NONE', 91],
     ['GD_THU_KHAC', 'Thu nhập khác', 'THU', 'THU_NHAP', 0, 'NONE', 99]
   ];
 }
@@ -2798,7 +2896,7 @@ function ensureQuanLyTaiChinhSheets_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const props = PropertiesService.getScriptProperties();
   const schemaKey = 'QUANLY_TAICHINH_SCHEMA_VERSION';
-  const schemaVersion = '4';
+  const schemaVersion = '5';
   const requiredSheets = [
     SHEET_NHANSU_TAICHINH, SHEET_KHOANCHI_DINHKY, SHEET_DANHMUC_HU_TAICHINH,
     SHEET_HU_TAICHINH_THANG, SHEET_CHOT_PHANBO_HU, SHEET_DANHMUC_GIADINH,
@@ -2881,7 +2979,7 @@ function ensureQuanLyTaiChinhSheets_() {
 function ensureThuChiSheets_(maKyHoc) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const props = PropertiesService.getScriptProperties();
-  const schemaVersion = '11';
+  const schemaVersion = '12';
   const schemaKey = 'THUCHI_SCHEMA_VERSION';
   const sourceKey = maKyHoc
     ? 'THUCHI_NGUON_INIT_' + String(maKyHoc || '').trim()
@@ -2978,6 +3076,7 @@ function ensureThuChiSheets_(maKyHoc) {
           MaKyHoc: currentKyHoc,
           MaNguonTien: item[0],
           TenNguonTien: item[1],
+          PhamVi: item[3],
           ThuTu: item[2],
           SoDuBanDau: 0,
           TrangThai: 'ACTIVE',
@@ -2991,6 +3090,22 @@ function ensureThuChiSheets_(maKyHoc) {
           missingSources,
           getNguonTienHeaders_()
         );
+      }
+
+      const sourceValues = sourceSheet.getDataRange().getValues();
+      if (sourceValues.length > 1) {
+        const sourceHeaders = sourceValues[0].map(header => String(header || '').trim());
+        const sourceIndex = buildHeaderIndex_(sourceHeaders);
+        let sourceScopeChanged = false;
+        for (let i = 1; i < sourceValues.length; i++) {
+          if (String(sourceValues[i][sourceIndex.MaKyHoc] || '').trim() !== currentKyHoc) continue;
+          if (String(sourceValues[i][sourceIndex.PhamVi] || '').trim()) continue;
+          const definition = getNguonTienDefinition_(sourceValues[i][sourceIndex.MaNguonTien]);
+          sourceValues[i][sourceIndex.PhamVi] = definition ? definition.phamVi : 'TRUNG_TAM';
+          sourceValues[i][sourceIndex.UpdatedAt] = now;
+          sourceScopeChanged = true;
+        }
+        if (sourceScopeChanged) sourceSheet.getRange(2, 1, sourceValues.length - 1, sourceHeaders.length).setValues(sourceValues.slice(1));
       }
 
       props.setProperty(sourceKey, '1');
@@ -3146,6 +3261,20 @@ function ensureThuChiSheets_(maKyHoc) {
       props.setProperty(jarMigrationKey, '1');
     }
 
+    const scopeValues = ledgerSheet.getDataRange().getValues();
+    if (scopeValues.length > 1) {
+      const scopeHeaders = scopeValues[0].map(header => String(header || '').trim());
+      const scopeIndex = buildHeaderIndex_(scopeHeaders);
+      let ledgerScopeChanged = false;
+      for (let i = 1; i < scopeValues.length; i++) {
+        if (String(scopeValues[i][scopeIndex.PhamVi] || '').trim()) continue;
+        const sourceType = String(scopeValues[i][scopeIndex.NguonDuLieu] || '').trim().toUpperCase();
+        scopeValues[i][scopeIndex.PhamVi] = sourceType.indexOf('GIA_DINH') === 0 ? 'GIA_DINH' : 'TRUNG_TAM';
+        ledgerScopeChanged = true;
+      }
+      if (ledgerScopeChanged) ledgerSheet.getRange(2, 1, scopeValues.length - 1, scopeHeaders.length).setValues(scopeValues.slice(1));
+    }
+    if (maKyHoc) migrateLegacyFamilyTransactionsNoLock_(String(maKyHoc || '').trim(), ledgerSheet);
     props.setProperty(schemaKey, schemaVersion);
   } finally {
     lock.releaseLock();
@@ -3667,25 +3796,108 @@ function saveDanhMucGiaDinh(token, data) {
 }
 
 function saveGiaoDichGiaDinh(token, data) {
-  const session = requireSession_(token, 'finance.write'); ensureQuanLyTaiChinhSheets_(); data = data || {};
-  const id = String(data.maGiaoDichGiaDinh || '').trim() || ('GDGD_' + Utilities.getUuid().slice(0, 10).toUpperCase());
-  const dateText = String(data.ngayGiaoDich || '').trim(); const categoryId = String(data.maDanhMucGiaDinh || '').trim();
-  const amount = moneyNumber_(data.soTien); if (!toDateOnly_(dateText)) throw new Error('Ngày giao dịch gia đình không hợp lệ.');
+  const session = requireSession_(token, 'finance.write');
+  ensureThuChiSheets_(session.maKyHoc);
+  ensureQuanLyTaiChinhSheets_();
+  data = data || {};
+  const requestedId = String(data.maGiaoDichGiaDinh || '').trim();
+  const dateText = String(data.ngayGiaoDich || '').trim();
+  const categoryId = String(data.maDanhMucGiaDinh || '').trim();
+  const sourceCode = String(data.maNguonTien || data.nguonTien || '').trim().toUpperCase();
+  const amount = moneyNumber_(data.soTien);
+  const content = String(data.noiDung || '').trim();
+  if (!toDateOnly_(dateText)) throw new Error('Ngày giao dịch gia đình không hợp lệ.');
   assertFinancePeriodOpen_(session, dateText.slice(0, 7));
   if (amount <= 0) throw new Error('Số tiền phải lớn hơn 0.');
+  if (!content) throw new Error('Vui lòng nhập nội dung giao dịch gia đình.');
   const category = getDanhMucGiaDinhList_().find(item => item.maDanhMucGiaDinh === categoryId && item.trangThai === 'ACTIVE');
   if (!category) throw new Error('Danh mục gia đình không tồn tại hoặc đã ngừng sử dụng.');
-  const lock = LockService.getScriptLock(); if (!lock.tryLock(30000)) throw new Error('Hệ thống đang cập nhật giao dịch gia đình.');
-  try { upsertFinanceObject_(SHEET_GIAODICH_GIADINH, getGiaoDichGiaDinhHeaders_(), 'MaGiaoDichGiaDinh', id, {
-    NgayGiaoDich: parseInputDate_(dateText), Thang: dateText.slice(0, 7), Loai: category.loai, MaDanhMucGiaDinh: categoryId,
-    TenDanhMuc: category.tenDanhMuc, NoiDung: String(data.noiDung || category.tenDanhMuc).trim(), SoTien: amount,
-    NguonTien: String(data.nguonTien || '').trim(), GhiChu: String(data.ghiChu || '').trim(), TrangThai: 'ACTIVE'
-  }); } finally { lock.releaseLock(); }
-  bumpDataVersion_(); safeWriteAuditLog_(session, 'UPSERT', 'GIAO_DICH_GIA_DINH', id, null, { thang: dateText.slice(0, 7), soTien: amount, danhMuc: categoryId }); return jsonResponse_({ success: true, maGiaoDichGiaDinh: id, message: 'Đã lưu giao dịch tài chính gia đình.' });
+  const source = getNguonTienList_(session.maKyHoc, 'GIA_DINH').find(item => item.maNguonTien === sourceCode && item.trangThai === 'ACTIVE');
+  if (!source) throw new Error('Vui lòng chọn đúng nguồn tiền gia đình.');
+  const ledgerType = category.loai === 'THU' ? 'THU' : 'CHI';
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('Hệ thống đang cập nhật giao dịch gia đình.');
+  let savedId = '';
+  let savedReceipt = '';
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ensureSheet_(ss, SHEET_SOTHUCHI, getSoThuChiHeaders_());
+    const values = sheet.getDataRange().getValues();
+    const headers = values[0].map(header => String(header || '').trim());
+    const index = buildHeaderIndex_(headers);
+    let targetIndex = -1;
+    if (requestedId) {
+      for (let i = 1; i < values.length; i++) {
+        if (String(values[i][index.MaGiaoDich] || '').trim() === requestedId && String(values[i][index.MaKyHoc] || '').trim() === session.maKyHoc) {
+          targetIndex = i;
+          break;
+        }
+      }
+      if (targetIndex === -1) throw new Error('Không tìm thấy giao dịch gia đình cần sửa.');
+      if (normalizeFinanceScope_(values[targetIndex][index.PhamVi]) !== 'GIA_DINH') throw new Error('Giao dịch không thuộc phạm vi gia đình.');
+      const existingSourceType = String(values[targetIndex][index.NguonDuLieu] || '').trim().toUpperCase();
+      if (existingSourceType === 'GIA_DINH_RUT_CHU' || existingSourceType === 'GIA_DINH_CHUYEN') throw new Error('Giao dịch liên kết hoặc chuyển nguồn phải điều chỉnh từ nghiệp vụ gốc.');
+      if (String(values[targetIndex][index.TrangThai] || 'HOAT_DONG').trim().toUpperCase() !== 'HOAT_DONG') throw new Error('Phiếu đã hủy không thể sửa.');
+    }
+    const now = new Date();
+    const row = targetIndex >= 0 ? values[targetIndex].slice() : new Array(headers.length).fill('');
+    const id = requestedId || ('TC_GD_' + Utilities.getUuid().slice(0, 10).toUpperCase());
+    const existingReceipt = targetIndex >= 0 ? String(row[index.SoPhieu] || '').trim() : '';
+    const receipt = existingReceipt || generateNextSoPhieuFromRows_(ledgerType === 'THU' ? 'THU_GIA_DINH' : 'CHI_GIA_DINH', dateText, values.slice(1), index);
+    row[index.MaGiaoDich] = id;
+    row[index.NgayGiaoDich] = parseInputDate_(dateText);
+    row[index.MaKyHoc] = session.maKyHoc;
+    row[index.LoaiGiaoDich] = ledgerType;
+    row[index.MaDanhMuc] = categoryId;
+    row[index.MaKeHoachChi] = '';
+    row[index.MaHuTaiChinh] = '';
+    row[index.TenDanhMuc] = category.tenDanhMuc;
+    row[index.NoiDung] = content;
+    row[index.SoTien] = amount;
+    row[index.HinhThuc] = getHinhThucByNguon_(sourceCode);
+    row[index.MaNguonTien] = sourceCode;
+    row[index.TenNguonTien] = source.tenNguonTien;
+    row[index.MaNguonDoiUng] = '';
+    row[index.MaNhomChuyen] = '';
+    row[index.NguoiNopNhan] = String(data.nguoiNopNhan || '').trim();
+    row[index.SoPhieu] = receipt;
+    row[index.SoChungTu] = String(data.soChungTu || '').trim();
+    row[index.GhiChu] = String(data.ghiChu || '').trim();
+    row[index.NguonDuLieu] = String(data.nguonDuLieu || 'GIA_DINH').trim().toUpperCase();
+    row[index.MaThamChieu] = 'GD|' + id;
+    row[index.PhamVi] = 'GIA_DINH';
+    row[index.MaDanhMucGiaDinh] = categoryId;
+    row[index.LoaiGiaDinh] = category.loai;
+    row[index.MaGiaoDichLienKet] = String(data.maGiaoDichLienKet || '').trim();
+    row[index.TrangThai] = 'HOAT_DONG';
+    row[index.NguoiTao] = session.tenDangNhap || session.hoTen || session.maNguoiDung;
+    row[index.CreatedAt] = targetIndex >= 0 ? (row[index.CreatedAt] || now) : now;
+    row[index.UpdatedAt] = now;
+    if (targetIndex >= 0) sheet.getRange(targetIndex + 1, 1, 1, headers.length).setValues([row]);
+    else sheet.getRange(sheet.getLastRow() + 1, 1, 1, headers.length).setValues([row]);
+    savedId = id;
+    savedReceipt = receipt;
+  } finally {
+    lock.releaseLock();
+  }
+  bumpDataVersion_();
+  safeWriteAuditLog_(session, requestedId ? 'UPDATE' : 'CREATE', 'GIAO_DICH_GIA_DINH', savedId, null, { thang: dateText.slice(0, 7), soTien: amount, danhMuc: categoryId, maNguonTien: sourceCode });
+  return jsonResponse_({ success: true, maGiaoDichGiaDinh: savedId, maGiaoDich: savedId, soPhieu: savedReceipt, message: 'Đã lưu ' + (ledgerType === 'THU' ? 'phiếu thu ' : 'phiếu chi ') + savedReceipt + ' của gia đình.' });
 }
 
 function deleteGiaoDichGiaDinh(token, id) {
-  const session = requireSession_(token, 'finance.write'); ensureQuanLyTaiChinhSheets_();
+  const session = requireSession_(token, 'finance.write'); ensureThuChiSheets_(session.maKyHoc); ensureQuanLyTaiChinhSheets_();
+  const ledgerRow = readObjectsNoCache_(SHEET_SOTHUCHI).find(row =>
+    String(row.MaGiaoDich || '').trim() === String(id || '').trim() &&
+    String(row.MaKyHoc || '').trim() === session.maKyHoc &&
+    normalizeFinanceScope_(row.PhamVi || (String(row.NguonDuLieu || '').trim().toUpperCase().indexOf('GIA_DINH') === 0 ? 'GIA_DINH' : 'TRUNG_TAM')) === 'GIA_DINH'
+  );
+  if (ledgerRow) {
+    const sourceType = String(ledgerRow.NguonDuLieu || '').trim().toUpperCase();
+    if (sourceType === 'GIA_DINH_RUT_CHU') throw new Error('Khoản nhận từ trung tâm phải hủy tại danh sách rút tiền chủ sở hữu.');
+    if (sourceType === 'GIA_DINH_CHUYEN') throw new Error('Khoản chuyển nguồn phải hủy theo cả nhóm chuyển tiền.');
+    return cancelThuChiGiaoDich(token, id);
+  }
   const rows = readObjectsNoCache_(SHEET_GIAODICH_GIADINH); const current = rows.find(row => String(row.MaGiaoDichGiaDinh || '').trim() === String(id || '').trim());
   if (!current) throw new Error('Không tìm thấy giao dịch gia đình.'); current.TrangThai = 'DELETED';
   assertFinancePeriodOpen_(session, String(current.Thang || formatDateForInput_(current.NgayGiaoDich).slice(0, 7)).trim());
@@ -4082,7 +4294,7 @@ function saveRutTienChuSoHuu(token, data) {
   const activeTransactions = readObjectsNoCache_(SHEET_SOTHUCHI)
     .filter(row => String(row.MaKyHoc || '').trim() === session.maKyHoc)
     .map(mapThuChiTransaction_)
-    .filter(item => item.trangThai === 'HOAT_DONG');
+    .filter(item => item.trangThai === 'HOAT_DONG' && item.phamVi === 'TRUNG_TAM');
   const withdrawn = activeTransactions.filter(item =>
     item.trangThai === 'HOAT_DONG' && item.loai === 'CHI' && item.ngayGiaoDich.slice(0, 7) === month &&
     item.maDanhMuc === 'CHI_GIA_DINH' && item.maHuTaiChinh === ownerJar.code
@@ -4093,18 +4305,45 @@ function saveRutTienChuSoHuu(token, data) {
   const sourceCode = String(data.maNguonTien || '').trim().toUpperCase();
   const source = getNguonTienList_(session.maKyHoc).find(item => item.maNguonTien === sourceCode && item.trangThai === 'ACTIVE');
   if (!source) throw new Error('Nguồn tiền trung tâm không hợp lệ hoặc đã ngừng sử dụng.');
+  const familySourceCode = String(data.maNguonTienGiaDinh || '').trim().toUpperCase();
+  const familySource = getNguonTienList_(session.maKyHoc, 'GIA_DINH').find(item => item.maNguonTien === familySourceCode && item.trangThai === 'ACTIVE');
+  if (!familySource) throw new Error('Vui lòng chọn nguồn tiền gia đình sẽ nhận khoản rút này.');
   const sourceBalance = number_(source.soDuBanDau) + activeTransactions.filter(item =>
     item.maNguonTien === sourceCode && item.ngayGiaoDich && item.ngayGiaoDich <= dateText
   ).reduce((sum, item) => sum + (item.loai === 'THU' ? number_(item.soTien) : -number_(item.soTien)), 0);
   if (amount > sourceBalance + 1) throw new Error('Nguồn ' + source.tenNguonTien + ' chỉ còn ' + formatMoneyText_(Math.max(sourceBalance, 0)) + ', không đủ để thực hiện đợt rút này.');
-  return saveThuChiGiaoDich(token, {
+  const centerResult = JSON.parse(saveThuChiGiaoDich(token, {
     loai: 'CHI', ngayGiaoDich: dateText, maNguonTien: sourceCode,
     maDanhMuc: 'CHI_GIA_DINH', maHuTaiChinh: ownerJar.code, soTien: amount,
     noiDung: String(data.noiDung || 'Rút tiền chủ sở hữu về tài chính gia đình').trim(),
     nguoiNopNhan: String(data.nguoiNhan || session.hoTen || 'Chủ cơ sở').trim(),
     soChungTu: String(data.soChungTu || '').trim(),
     ghiChu: String(data.ghiChu || '').trim()
-  });
+  }));
+  try {
+    const familyResult = JSON.parse(saveGiaoDichGiaDinh(token, {
+      ngayGiaoDich: dateText,
+      maDanhMucGiaDinh: 'GD_THU_CHU_SO_HUU',
+      maNguonTien: familySourceCode,
+      soTien: amount,
+      noiDung: String(data.noiDung || 'Nhận tiền từ trung tâm').trim(),
+      nguoiNopNhan: 'Trung tâm',
+      soChungTu: centerResult.soPhieu || '',
+      ghiChu: String(data.ghiChu || '').trim(),
+      nguonDuLieu: 'GIA_DINH_RUT_CHU',
+      maGiaoDichLienKet: centerResult.maGiaoDich
+    }));
+    return jsonResponse_({
+      success: true,
+      maGiaoDich: centerResult.maGiaoDich,
+      soPhieu: centerResult.soPhieu,
+      maGiaoDichGiaDinh: familyResult.maGiaoDichGiaDinh,
+      message: 'Đã ghi nhận rút tiền từ trung tâm và thu tiền vào nguồn ' + familySource.tenNguonTien + '.'
+    });
+  } catch (error) {
+    try { cancelThuChiGiaoDich(token, centerResult.maGiaoDich); } catch (rollbackError) { /* Giữ audit để quản trị viên đối chiếu. */ }
+    throw error;
+  }
 }
 
 function cancelRutTienChuSoHuu(token, transactionId) {
@@ -4118,6 +4357,13 @@ function cancelRutTienChuSoHuu(token, transactionId) {
   const transactionMonth = formatDateForInput_(toDateOnly_(row.NgayGiaoDich)).slice(0, 7);
   const ownerJar = getHuTaiChinhThang_(session.maKyHoc, transactionMonth).find(item => item.systemRole === 'OWNER_COMPENSATION');
   if (!ownerJar || normalizeMaHuTaiChinh_(row.MaHuTaiChinh) !== ownerJar.code) throw new Error('Giao dịch không thuộc Hũ lương chủ trung tâm.');
+  const linkedFamily = readObjectsNoCache_(SHEET_SOTHUCHI).find(item =>
+    String(item.MaKyHoc || '').trim() === session.maKyHoc &&
+    String(item.MaGiaoDichLienKet || '').trim() === String(transactionId || '').trim() &&
+    normalizeFinanceScope_(item.PhamVi || (String(item.NguonDuLieu || '').trim().toUpperCase().indexOf('GIA_DINH') === 0 ? 'GIA_DINH' : 'TRUNG_TAM')) === 'GIA_DINH' &&
+    String(item.TrangThai || 'HOAT_DONG').trim().toUpperCase() === 'HOAT_DONG'
+  );
+  if (linkedFamily) cancelThuChiGiaoDich(token, String(linkedFamily.MaGiaoDich || '').trim());
   return cancelThuChiGiaoDich(token, transactionId);
 }
 
@@ -4152,7 +4398,7 @@ function getActiveFinanceTransactions_(maKyHoc) {
   return readObjectsNoCache_(SHEET_SOTHUCHI)
     .filter(row => String(row.MaKyHoc || '').trim() === String(maKyHoc || '').trim())
     .map(mapThuChiTransaction_)
-    .filter(item => item.maGiaoDich && item.ngayDate && item.trangThai === 'HOAT_DONG');
+    .filter(item => item.maGiaoDich && item.ngayDate && item.trangThai === 'HOAT_DONG' && item.phamVi === 'TRUNG_TAM');
 }
 
 function getFinanceMonthContext_(session, yearMonth, options) {
@@ -4274,6 +4520,89 @@ function getKeHoachTaiChinhData(token, yearMonth, section) {
   return jsonResponse_(base);
 }
 
+function getFamilyTransactions_(maKyHoc, month) {
+  const ledgerItems = readObjectsNoCache_(SHEET_SOTHUCHI)
+    .filter(row => String(row.MaKyHoc || '').trim() === String(maKyHoc || '').trim())
+    .map(mapThuChiTransaction_)
+    .filter(item => item.maGiaoDich && item.ngayDate && item.phamVi === 'GIA_DINH' && String(item.ngayGiaoDich || '').slice(0, 7) === month)
+    .map(item => ({
+      maGiaoDichGiaDinh: item.maGiaoDich,
+      maGiaoDich: item.maGiaoDich,
+      ledgerType: item.loai,
+      maNhomChuyen: item.maNhomChuyen,
+      ngayGiaoDich: item.ngayGiaoDich,
+      loai: item.loaiGiaDinh || item.loai,
+      maDanhMucGiaDinh: item.maDanhMucGiaDinh || item.maDanhMuc,
+      tenDanhMuc: item.tenDanhMuc,
+      noiDung: item.noiDung,
+      soTien: item.soTien,
+      maNguonTien: item.maNguonTien,
+      tenNguonTien: item.tenNguonTien,
+      nguoiNopNhan: item.nguoiNopNhan,
+      soPhieu: item.soPhieu,
+      soChungTu: item.soChungTu,
+      ghiChu: item.ghiChu,
+      trangThai: item.trangThai,
+      nguonDuLieu: item.nguonDuLieu,
+      maGiaoDichLienKet: item.maGiaoDichLienKet
+    }));
+  const ledgerReferences = ledgerItems.reduce((map, item) => { map[item.maGiaoDichGiaDinh] = true; return map; }, {});
+  const legacyItems = readObjectsNoCache_(SHEET_GIAODICH_GIADINH).filter(row =>
+    String(row.Thang || '').trim() === month &&
+    String(row.TrangThai || 'ACTIVE').trim().toUpperCase() === 'ACTIVE' &&
+    !String(row.MaGiaoDichSoThuChi || '').trim() &&
+    !ledgerReferences[String(row.MaGiaoDichGiaDinh || '').trim()]
+  ).map(row => ({
+    maGiaoDichGiaDinh: String(row.MaGiaoDichGiaDinh || '').trim(),
+    maGiaoDich: '',
+    ledgerType: String(row.Loai || '').trim().toUpperCase() === 'THU' ? 'THU' : 'CHI',
+    maNhomChuyen: '',
+    ngayGiaoDich: formatDateForInput_(toDateOnly_(row.NgayGiaoDich)),
+    loai: String(row.Loai || '').trim().toUpperCase(),
+    maDanhMucGiaDinh: String(row.MaDanhMucGiaDinh || '').trim(),
+    tenDanhMuc: String(row.TenDanhMuc || '').trim(),
+    noiDung: String(row.NoiDung || '').trim(),
+    soTien: number_(row.SoTien),
+    maNguonTien: '',
+    tenNguonTien: String(row.NguonTien || '').trim() || 'Chưa phân loại (dữ liệu cũ)',
+    nguoiNopNhan: '',
+    soPhieu: '',
+    soChungTu: '',
+    ghiChu: String(row.GhiChu || '').trim(),
+    trangThai: 'HOAT_DONG',
+    nguonDuLieu: 'GIA_DINH_CU',
+    maGiaoDichLienKet: ''
+  }));
+  return ledgerItems.concat(legacyItems).sort((a, b) => String(b.ngayGiaoDich).localeCompare(String(a.ngayGiaoDich)) || String(b.soPhieu || '').localeCompare(String(a.soPhieu || '')));
+}
+
+function buildFamilySourceSummaries_(maKyHoc, month) {
+  const ym = parseYearMonth_(month);
+  const monthStart = parseInputDate_(month + '-01');
+  const monthEnd = new Date(ym.year, ym.month, 0, 23, 59, 59, 999);
+  const transactions = readObjectsNoCache_(SHEET_SOTHUCHI)
+    .filter(row => String(row.MaKyHoc || '').trim() === String(maKyHoc || '').trim())
+    .map(mapThuChiTransaction_)
+    .filter(item => item.maGiaoDich && item.ngayDate && item.trangThai === 'HOAT_DONG' && item.phamVi === 'GIA_DINH' && item.ngayDate.getTime() <= monthEnd.getTime());
+  return getNguonTienList_(maKyHoc, 'GIA_DINH').map(source => {
+    const sourceTransactions = transactions.filter(item => item.maNguonTien === source.maNguonTien);
+    const openingBalance = number_(source.soDuBanDau) + sourceTransactions.filter(item => item.ngayDate.getTime() < monthStart.getTime()).reduce((sum, item) => sum + (item.loai === 'THU' ? item.soTien : -item.soTien), 0);
+    const inMonth = sourceTransactions.filter(item => item.ngayDate.getTime() >= monthStart.getTime());
+    const transferIn = inMonth.reduce((sum, item) => sum + (item.nguonDuLieu === 'GIA_DINH_CHUYEN' && item.loai === 'THU' ? item.soTien : 0), 0);
+    const transferOut = inMonth.reduce((sum, item) => sum + (item.nguonDuLieu === 'GIA_DINH_CHUYEN' && item.loai === 'CHI' ? item.soTien : 0), 0);
+    const income = inMonth.reduce((sum, item) => sum + (item.nguonDuLieu !== 'GIA_DINH_CHUYEN' && item.loai === 'THU' ? item.soTien : 0), 0);
+    const expense = inMonth.reduce((sum, item) => sum + (item.nguonDuLieu !== 'GIA_DINH_CHUYEN' && item.loai === 'CHI' ? item.soTien : 0), 0);
+    return Object.assign({}, source, {
+      openingBalance: openingBalance,
+      totalThu: income,
+      totalChi: expense,
+      chuyenVao: transferIn,
+      chuyenRa: transferOut,
+      closingBalance: openingBalance + income - expense + transferIn - transferOut
+    });
+  });
+}
+
 function getTaiChinhGiaDinhData(token, yearMonth) {
   const session = requireSession_(token, 'finance.read');
   ensureThuChiSheets_(session.maKyHoc);
@@ -4292,23 +4621,23 @@ function getTaiChinhGiaDinhData(token, yearMonth) {
   const totalOwnerDraw = context.monthTransactions.reduce((sum, item) => sum + (item.loai === 'CHI' && item.maDanhMuc === 'CHI_GIA_DINH' ? item.soTien : 0), 0);
   const unlinkedOwnerDraw = Math.max(totalOwnerDraw - linkedOwnerDraw, 0);
   const familyCategories = getDanhMucGiaDinhList_();
-  const familyRows = readObjectsNoCache_(SHEET_GIAODICH_GIADINH).filter(row =>
-    String(row.Thang || '').trim() === context.month && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() === 'ACTIVE'
-  ).map(row => ({
-    maGiaoDichGiaDinh: String(row.MaGiaoDichGiaDinh || '').trim(), ngayGiaoDich: formatDateForInput_(toDateOnly_(row.NgayGiaoDich)),
-    loai: String(row.Loai || '').trim().toUpperCase(), maDanhMucGiaDinh: String(row.MaDanhMucGiaDinh || '').trim(), tenDanhMuc: String(row.TenDanhMuc || '').trim(),
-    noiDung: String(row.NoiDung || '').trim(), soTien: number_(row.SoTien), nguonTien: String(row.NguonTien || '').trim(), ghiChu: String(row.GhiChu || '').trim()
-  })).sort((a, b) => String(b.ngayGiaoDich).localeCompare(String(a.ngayGiaoDich)));
+  const familyRows = getFamilyTransactions_(session.maKyHoc, context.month);
+  const activeFamilyRows = familyRows.filter(item => item.trangThai === 'HOAT_DONG');
+  const familySourceSummaries = buildFamilySourceSummaries_(session.maKyHoc, context.month);
   const configRow = readObjectsNoCache_(SHEET_CAUHINH_GIADINH_THANG).find(row => String(row.Thang || '').trim() === context.month) || {};
-  const manualIncome = familyRows.reduce((sum, item) => sum + (item.loai === 'THU' ? item.soTien : 0), 0);
-  const familyExpense = familyRows.reduce((sum, item) => sum + (item.loai === 'CHI' ? item.soTien : 0), 0);
-  const familySaving = familyRows.reduce((sum, item) => sum + (item.loai === 'TIET_KIEM' ? item.soTien : 0), 0);
+  const manualIncome = activeFamilyRows.reduce((sum, item) => sum + (item.loai === 'THU' && item.nguonDuLieu !== 'GIA_DINH_RUT_CHU' ? item.soTien : 0), 0);
+  const familyExpense = activeFamilyRows.reduce((sum, item) => sum + (item.loai === 'CHI' ? item.soTien : 0), 0);
+  const familySaving = Math.max(0, activeFamilyRows.reduce((sum, item) => {
+    if (item.loai === 'TIET_KIEM') return sum + item.soTien;
+    if (item.nguonDuLieu === 'GIA_DINH_CHUYEN' && item.maNguonTien === 'GD_TIET_KIEM') return sum + (item.ledgerType === 'THU' ? item.soTien : -item.soTien);
+    return sum;
+  }, 0));
   const familySource = FinanceDomain.calculateFamilySource({
     plannedOwnerIncome: ownerJar ? number_(ownerJar.allocated) : 0, ownerReceived: linkedOwnerDraw,
     otherIncome: manualIncome, plannedOtherIncome: Math.max(0, number_(configRow.ThuNhapKhacDuKien)),
     totalExpense: familyExpense, totalSaving: familySaving
   });
-  const actualMap = familyRows.reduce((map, item) => { map[item.maDanhMucGiaDinh] = (map[item.maDanhMucGiaDinh] || 0) + item.soTien; return map; }, {});
+  const actualMap = activeFamilyRows.reduce((map, item) => { map[item.maDanhMucGiaDinh] = (map[item.maDanhMucGiaDinh] || 0) + item.soTien; return map; }, {});
   const warnings = [];
   const activeBudgetCategories = familyCategories.filter(item => item.trangThai === 'ACTIVE' && item.loai !== 'THU');
   if (!ownerJar) warnings.push({ level: 'danger', message: 'Chưa xác định Hũ lương chủ trung tâm nên chưa thể lập nguồn thu gia đình tự động.' });
@@ -4329,7 +4658,10 @@ function getTaiChinhGiaDinhData(token, yearMonth) {
     periodLock: GovernanceService.periodStatus(session, context.month),
     family: {
       categories: familyCategories, transactions: familyRows, withdrawals: ownerWithdrawals, budget: budget, warnings: warnings,
-      sources: getNguonTienList_(session.maKyHoc).filter(item => item.trangThai === 'ACTIVE'), ownerJar: ownerJar,
+      sources: getNguonTienList_(session.maKyHoc, 'TRUNG_TAM').filter(item => item.trangThai === 'ACTIVE'),
+      familySources: getNguonTienList_(session.maKyHoc, 'GIA_DINH').filter(item => item.trangThai === 'ACTIVE'),
+      sourceSummaries: familySourceSummaries,
+      ownerJar: ownerJar,
       config: { thang: context.month, thuNhapDuKien: number_(configRow.ThuNhapKhacDuKien), quyKhanCapMucTieu: number_(configRow.QuyKhanCapMucTieu), ghiChu: String(configRow.GhiChu || '').trim() },
       summary: Object.assign({}, familySource, { unlinkedOwnerDraw: unlinkedOwnerDraw }),
       allocationStatus: jars.allocationStatus,
@@ -4356,7 +4688,7 @@ function getQuanLyTaiChinhData(token, yearMonth) {
   });
   feeSummary.classes = Object.keys(classMap).map(key => classMap[key]).sort((a, b) => String(a.lop).localeCompare(String(b.lop), 'vi', { numeric: true }));
 
-  const allTransactions = readObjectsNoCache_(SHEET_SOTHUCHI).filter(row => String(row.MaKyHoc || '').trim() === session.maKyHoc).map(mapThuChiTransaction_).filter(item => item.maGiaoDich && item.ngayDate && item.trangThai === 'HOAT_DONG');
+  const allTransactions = readObjectsNoCache_(SHEET_SOTHUCHI).filter(row => String(row.MaKyHoc || '').trim() === session.maKyHoc).map(mapThuChiTransaction_).filter(item => item.maGiaoDich && item.ngayDate && item.trangThai === 'HOAT_DONG' && item.phamVi === 'TRUNG_TAM');
   const monthTransactions = allTransactions.filter(item => item.ngayDate.getTime() >= monthStart.getTime() && item.ngayDate.getTime() <= monthEnd.getTime() && item.nguonDuLieu !== 'CHUYEN_NOI_BO');
   const cashIncome = monthTransactions.reduce((sum, item) => sum + (item.loai === 'THU' ? item.soTien : 0), 0);
   const businessCashExpense = monthTransactions.reduce((sum, item) => sum + (item.loai === 'CHI' && item.maDanhMuc !== 'CHI_GIA_DINH' ? item.soTien : 0), 0);
@@ -4407,15 +4739,17 @@ function getQuanLyTaiChinhData(token, yearMonth) {
   const plannedOwnerIncome = ownerJar ? number_(ownerJar.allocated) : 0;
 
   const familyCategories = getDanhMucGiaDinhList_();
-  const familyRows = readObjectsNoCache_(SHEET_GIAODICH_GIADINH).filter(row => String(row.Thang || '').trim() === month && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() === 'ACTIVE').map(row => ({
-    maGiaoDichGiaDinh: String(row.MaGiaoDichGiaDinh || '').trim(), ngayGiaoDich: formatDateForInput_(toDateOnly_(row.NgayGiaoDich)),
-    loai: String(row.Loai || '').trim().toUpperCase(), maDanhMucGiaDinh: String(row.MaDanhMucGiaDinh || '').trim(), tenDanhMuc: String(row.TenDanhMuc || '').trim(),
-    noiDung: String(row.NoiDung || '').trim(), soTien: number_(row.SoTien), nguonTien: String(row.NguonTien || '').trim(), ghiChu: String(row.GhiChu || '').trim()
-  })).sort((a, b) => String(b.ngayGiaoDich).localeCompare(String(a.ngayGiaoDich)));
+  const familyRows = getFamilyTransactions_(session.maKyHoc, month);
+  const activeFamilyRows = familyRows.filter(item => item.trangThai === 'HOAT_DONG');
+  const familySourceSummaries = buildFamilySourceSummaries_(session.maKyHoc, month);
   const familyConfigRow = readObjectsNoCache_(SHEET_CAUHINH_GIADINH_THANG).find(row => String(row.Thang || '').trim() === month) || {};
-  const manualFamilyIncome = familyRows.reduce((sum, item) => sum + (item.loai === 'THU' ? item.soTien : 0), 0);
-  const familyExpense = familyRows.reduce((sum, item) => sum + (item.loai === 'CHI' ? item.soTien : 0), 0);
-  const familySaving = familyRows.reduce((sum, item) => sum + (item.loai === 'TIET_KIEM' ? item.soTien : 0), 0);
+  const manualFamilyIncome = activeFamilyRows.reduce((sum, item) => sum + (item.loai === 'THU' && item.nguonDuLieu !== 'GIA_DINH_RUT_CHU' ? item.soTien : 0), 0);
+  const familyExpense = activeFamilyRows.reduce((sum, item) => sum + (item.loai === 'CHI' ? item.soTien : 0), 0);
+  const familySaving = Math.max(0, activeFamilyRows.reduce((sum, item) => {
+    if (item.loai === 'TIET_KIEM') return sum + item.soTien;
+    if (item.nguonDuLieu === 'GIA_DINH_CHUYEN' && item.maNguonTien === 'GD_TIET_KIEM') return sum + (item.ledgerType === 'THU' ? item.soTien : -item.soTien);
+    return sum;
+  }, 0));
   const plannedOtherIncome = Math.max(0, number_(familyConfigRow.ThuNhapKhacDuKien));
   const familySource = FinanceDomain.calculateFamilySource({
     plannedOwnerIncome: plannedOwnerIncome, ownerReceived: linkedOwnerDraw,
@@ -4424,7 +4758,7 @@ function getQuanLyTaiChinhData(token, yearMonth) {
   });
   const familyIncome = familySource.totalIncome;
   const budgetIncome = familySource.budgetIncome;
-  const familyActualMap = familyRows.reduce((map, item) => { map[item.maDanhMucGiaDinh] = (map[item.maDanhMucGiaDinh] || 0) + item.soTien; return map; }, {});
+  const familyActualMap = activeFamilyRows.reduce((map, item) => { map[item.maDanhMucGiaDinh] = (map[item.maDanhMucGiaDinh] || 0) + item.soTien; return map; }, {});
   const familyWarnings = []; const activeBudgetCategories = familyCategories.filter(item => item.trangThai === 'ACTIVE' && item.loai !== 'THU');
   if (!ownerJar) familyWarnings.push({ level: 'danger', message: 'Chưa xác định Hũ lương chủ trung tâm nên chưa thể lập nguồn thu gia đình tự động.' });
   if (jars.allocationStatus && !jars.allocationStatus.locked) familyWarnings.push({ level: 'warning', message: 'Phương án phân bổ hũ chưa chốt; nguồn thu gia đình theo kế hoạch vẫn có thể thay đổi.' });
@@ -4462,7 +4796,10 @@ function getQuanLyTaiChinhData(token, yearMonth) {
     performance: performance,
     pricing: pricing,
     family: { categories: familyCategories, transactions: familyRows, withdrawals: ownerWithdrawals, budget: familyBudget, warnings: familyWarnings,
-      sources: getNguonTienList_(session.maKyHoc).filter(item => item.trangThai === 'ACTIVE'), ownerJar: ownerJar,
+      sources: getNguonTienList_(session.maKyHoc, 'TRUNG_TAM').filter(item => item.trangThai === 'ACTIVE'),
+      familySources: getNguonTienList_(session.maKyHoc, 'GIA_DINH').filter(item => item.trangThai === 'ACTIVE'),
+      sourceSummaries: familySourceSummaries,
+      ownerJar: ownerJar,
       config: { thang: month, thuNhapDuKien: number_(familyConfigRow.ThuNhapKhacDuKien), quyKhanCapMucTieu: number_(familyConfigRow.QuyKhanCapMucTieu), ghiChu: String(familyConfigRow.GhiChu || '').trim() },
       summary: Object.assign({}, familySource, { unlinkedOwnerDraw: unlinkedOwnerDraw }) }
   });
@@ -4478,15 +4815,16 @@ function getQuanLyThuChiData(token, filters) {
   const loaiFilter = String(filters.loai || 'ALL').trim().toUpperCase();
   const danhMucFilter = String(filters.maDanhMuc || '').trim();
   const sourceFilter = String(filters.maNguonTien || 'ALL').trim().toUpperCase();
+  const scopeFilter = normalizeFinanceScope_(filters.phamVi || 'ALL', 'ALL');
   const trangThaiFilter = String(filters.trangThai || 'HOAT_DONG').trim().toUpperCase();
   const keyword = normalizeText_(filters.keyword || '');
   const planMonth = range.fromText.slice(0, 7);
 
   const cacheKey = buildCacheKey_(
-    'thuchi_v4_' + session.maKyHoc + '_' +
+    'thuchi_v5_' + session.maKyHoc + '_' +
     range.fromText + '_' + range.toText + '_' +
     loaiFilter + '_' + danhMucFilter + '_' +
-    sourceFilter + '_' + trangThaiFilter + '_' + keyword
+    sourceFilter + '_' + scopeFilter + '_' + trangThaiFilter + '_' + keyword
   );
 
   const cached = cacheGetString_(cacheKey);
@@ -4495,7 +4833,7 @@ function getQuanLyThuChiData(token, filters) {
   const categoryRows = readObjects_(SHEET_DANHMUC_THUCHI);
   const transactionRows = readObjects_(SHEET_SOTHUCHI);
   const peopleRows = readObjects_(SHEET_DOITUONG_THUCHI);
-  const sources = getNguonTienList_(session.maKyHoc);
+  const sources = getNguonTienList_(session.maKyHoc, scopeFilter);
 
   const people = peopleRows
     .filter(row => String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED')
@@ -4510,7 +4848,7 @@ function getQuanLyThuChiData(token, filters) {
     .filter(item => item.maDoiTuong && item.tenDoiTuong)
     .sort((a, b) => a.tenDoiTuong.localeCompare(b.tenDoiTuong, 'vi'));
 
-  const categories = categoryRows
+  const centerCategories = categoryRows
     .filter(row => String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED')
     .map(row => ({
       maDanhMuc: String(row.MaDanhMuc || '').trim(),
@@ -4527,12 +4865,29 @@ function getQuanLyThuChiData(token, filters) {
       return a.tenDanhMuc.localeCompare(b.tenDanhMuc, 'vi');
     });
 
+  const familyCategories = getDanhMucGiaDinhList_()
+    .filter(item => item.trangThai !== 'DELETED')
+    .map(item => ({
+      maDanhMuc: item.maDanhMucGiaDinh,
+      loai: item.loai === 'THU' ? 'THU' : 'CHI',
+      loaiGiaDinh: item.loai,
+      tenDanhMuc: item.tenDanhMuc,
+      maHuMacDinh: '',
+      thuTu: 1000 + item.thuTu,
+      trangThai: item.trangThai,
+      phamVi: 'GIA_DINH'
+    }));
+  const categories = centerCategories
+    .map(item => Object.assign({ phamVi: 'TRUNG_TAM' }, item))
+    .concat(familyCategories);
+
   const allSessionTransactions = transactionRows
     .filter(row => String(row.MaKyHoc || '').trim() === session.maKyHoc)
     .map(mapThuChiTransaction_)
     .filter(item => item.maGiaoDich && item.ngayDate);
 
-  const activeAll = allSessionTransactions.filter(item => item.trangThai === 'HOAT_DONG');
+  const scopeTransactions = allSessionTransactions.filter(item => scopeFilter === 'ALL' || item.phamVi === scopeFilter);
+  const activeAll = scopeTransactions.filter(item => item.trangThai === 'HOAT_DONG');
   const sourceMap = sources.reduce((map, item) => {
     map[item.maNguonTien] = item;
     return map;
@@ -4555,8 +4910,8 @@ function getQuanLyThuChiData(token, filters) {
       return time >= range.fromDate.getTime() && time <= range.toDate.getTime();
     });
 
-    const operational = inPeriod.filter(item => item.nguonDuLieu !== 'CHUYEN_NOI_BO');
-    const transfers = inPeriod.filter(item => item.nguonDuLieu === 'CHUYEN_NOI_BO');
+    const operational = inPeriod.filter(item => item.nguonDuLieu !== 'CHUYEN_NOI_BO' && item.nguonDuLieu !== 'GIA_DINH_CHUYEN');
+    const transfers = inPeriod.filter(item => item.nguonDuLieu === 'CHUYEN_NOI_BO' || item.nguonDuLieu === 'GIA_DINH_CHUYEN');
 
     const totalThu = operational.reduce((sum, item) => {
       return sum + (item.loai === 'THU' ? item.soTien : 0);
@@ -4602,7 +4957,7 @@ function getQuanLyThuChiData(token, filters) {
   const hasUnassigned = unassignedTransactions.length > 0;
   const unassignedSummary = summarizeSource(unassignedSource);
 
-  let dateSourceTransactions = allSessionTransactions.filter(item => {
+  let dateSourceTransactions = scopeTransactions.filter(item => {
     const time = item.ngayDate.getTime();
     if (time < range.fromDate.getTime() || time > range.toDate.getTime()) return false;
 
@@ -4642,7 +4997,7 @@ function getQuanLyThuChiData(token, filters) {
   }
 
   const activeFiltered = periodTransactions.filter(item => item.trangThai === 'HOAT_DONG');
-  const activeOperational = activeFiltered.filter(item => item.nguonDuLieu !== 'CHUYEN_NOI_BO');
+  const activeOperational = activeFiltered.filter(item => item.nguonDuLieu !== 'CHUYEN_NOI_BO' && item.nguonDuLieu !== 'GIA_DINH_CHUYEN');
 
   const totalThu = activeOperational.reduce((sum, item) => {
     return sum + (item.loai === 'THU' ? item.soTien : 0);
@@ -4678,9 +5033,14 @@ function getQuanLyThuChiData(token, filters) {
       unassignedSummary.closingBalance;
   }
 
-  const allClosingBalance = sourceSummaries.reduce((sum, item) => sum + item.closingBalance, 0) +
-    unassignedSummary.closingBalance;
-  const monthOperational = activeAll.filter(item => {
+  const centerSources = getNguonTienList_(session.maKyHoc, 'TRUNG_TAM');
+  const centerActiveAll = allSessionTransactions.filter(item => item.trangThai === 'HOAT_DONG' && item.phamVi === 'TRUNG_TAM');
+  const allClosingBalance = centerSources.reduce((sum, source) => {
+    return sum + number_(source.soDuBanDau) + centerActiveAll
+      .filter(item => item.maNguonTien === source.maNguonTien)
+      .reduce((sourceSum, item) => sourceSum + signedAmount(item), 0);
+  }, 0);
+  const monthOperational = centerActiveAll.filter(item => {
     return item.nguonDuLieu !== 'CHUYEN_NOI_BO' &&
       String(item.ngayGiaoDich || '').slice(0, 7) === planMonth;
   });
@@ -4690,7 +5050,7 @@ function getQuanLyThuChiData(token, filters) {
   const monthlyFinance = buildKeHoachChiThangData_(
     session.maKyHoc,
     planMonth,
-    activeAll,
+    centerActiveAll,
     allClosingBalance,
     monthRevenue
   );
@@ -4719,7 +5079,7 @@ function getQuanLyThuChiData(token, filters) {
   });
 
   const reportYear = range.fromDate.getFullYear();
-  const yearTransactions = allSessionTransactions.filter(item => {
+  const yearTransactions = scopeTransactions.filter(item => {
     if (!item.ngayDate || item.ngayDate.getFullYear() !== reportYear) return false;
     if (sourceFilter === 'UNASSIGNED') return !item.maNguonTien;
     if (sourceFilter !== 'ALL') return item.maNguonTien === sourceFilter;
@@ -4727,7 +5087,7 @@ function getQuanLyThuChiData(token, filters) {
   });
 
   const monthly = buildThuChiMonthlyReport_(
-    yearTransactions.filter(item => item.nguonDuLieu !== 'CHUYEN_NOI_BO'),
+    yearTransactions.filter(item => item.nguonDuLieu !== 'CHUYEN_NOI_BO' && item.nguonDuLieu !== 'GIA_DINH_CHUYEN'),
     reportYear
   );
 
@@ -4752,10 +5112,13 @@ function getQuanLyThuChiData(token, filters) {
       transactionCount: activeFiltered.length,
       unassignedCount: unassignedTransactions.length
     },
+    scope: scopeFilter,
     categories: categories,
     financialJars: getDanhMucHuTaiChinhList_(false),
     people: people,
     sources: sources,
+    centerSources: getNguonTienList_(session.maKyHoc, 'TRUNG_TAM'),
+    familySources: getNguonTienList_(session.maKyHoc, 'GIA_DINH'),
     sourceSummaries: sourceSummaries,
     unassignedSummary: hasUnassigned ? unassignedSummary : null,
     transactions: sortedDesc.map(stripThuChiPrivateFields_),
@@ -4993,6 +5356,10 @@ function saveThuChiGiaoDich(token, data) {
     currentRow[index.GhiChu] = ghiChu;
     currentRow[index.NguonDuLieu] = 'NHAP_TAY';
     currentRow[index.MaThamChieu] = '';
+    currentRow[index.PhamVi] = 'TRUNG_TAM';
+    currentRow[index.MaDanhMucGiaDinh] = '';
+    currentRow[index.LoaiGiaDinh] = '';
+    currentRow[index.MaGiaoDichLienKet] = '';
     currentRow[index.TrangThai] = 'HOAT_DONG';
     currentRow[index.NguoiTao] = session.tenDangNhap || session.hoTen || session.maNguoiDung;
     currentRow[index.CreatedAt] = targetIndex >= 0
@@ -5069,10 +5436,15 @@ function saveChuyenNguonTien(token, data) {
   const noiDung = command.noiDung;
   const soChungTu = command.soChungTu;
   const ghiChu = command.ghiChu;
+  const scope = normalizeFinanceScope_(data && data.phamVi || 'TRUNG_TAM');
+  const familyCategoryId = scope === 'GIA_DINH' ? String(data && data.maDanhMucGiaDinh || '').trim() : '';
+  const familySavingCategory = familyCategoryId ? getDanhMucGiaDinhList_().find(item => item.maDanhMucGiaDinh === familyCategoryId && item.loai === 'TIET_KIEM' && item.trangThai === 'ACTIVE') : null;
+  if (familyCategoryId && !familySavingCategory) throw new Error('Mục tiêu tiết kiệm gia đình không hợp lệ.');
+  if (scope === 'GIA_DINH' && maNguonDen === 'GD_TIET_KIEM' && !familySavingCategory) throw new Error('Vui lòng chọn mục tiêu tiết kiệm khi chuyển tiền vào tài khoản tiết kiệm.');
 
   assertFinancePeriodOpen_(session, ngayText.slice(0, 7));
 
-  const sourceList = getNguonTienList_(session.maKyHoc);
+  const sourceList = getNguonTienList_(session.maKyHoc, scope);
   const sourceFrom = sourceList.find(item => item.maNguonTien === maNguonDi);
   const sourceTo = sourceList.find(item => item.maNguonTien === maNguonDen);
 
@@ -5113,8 +5485,11 @@ function saveChuyenNguonTien(token, data) {
     outRow[index.NguoiNopNhan] = sourceTo.tenNguonTien;
     outRow[index.SoChungTu] = soChungTu;
     outRow[index.GhiChu] = ghiChu;
-    outRow[index.NguonDuLieu] = 'CHUYEN_NOI_BO';
+    outRow[index.NguonDuLieu] = scope === 'GIA_DINH' ? 'GIA_DINH_CHUYEN' : 'CHUYEN_NOI_BO';
     outRow[index.MaThamChieu] = groupId;
+    outRow[index.PhamVi] = scope;
+    outRow[index.LoaiGiaDinh] = scope === 'GIA_DINH' ? 'CHUYEN' : '';
+    outRow[index.MaGiaoDichLienKet] = groupId;
     outRow[index.TrangThai] = 'HOAT_DONG';
     outRow[index.NguoiTao] = session.tenDangNhap || session.hoTen || session.maNguoiDung;
     outRow[index.CreatedAt] = now;
@@ -5127,7 +5502,7 @@ function saveChuyenNguonTien(token, data) {
     inRow[index.LoaiGiaoDich] = 'THU';
     inRow[index.MaDanhMuc] = 'THU_CHUYEN_NOI_BO';
     inRow[index.MaHuTaiChinh] = '';
-    inRow[index.TenDanhMuc] = 'Nhận chuyển tiền nội bộ';
+    inRow[index.TenDanhMuc] = familySavingCategory ? familySavingCategory.tenDanhMuc : 'Nhận chuyển tiền nội bộ';
     inRow[index.NoiDung] = noiDung + ' - ' + sourceFrom.tenNguonTien + ' → ' + sourceTo.tenNguonTien;
     inRow[index.SoTien] = soTien;
     inRow[index.HinhThuc] = 'Chuyển nội bộ';
@@ -5138,8 +5513,12 @@ function saveChuyenNguonTien(token, data) {
     inRow[index.NguoiNopNhan] = sourceFrom.tenNguonTien;
     inRow[index.SoChungTu] = soChungTu;
     inRow[index.GhiChu] = ghiChu;
-    inRow[index.NguonDuLieu] = 'CHUYEN_NOI_BO';
+    inRow[index.NguonDuLieu] = scope === 'GIA_DINH' ? 'GIA_DINH_CHUYEN' : 'CHUYEN_NOI_BO';
     inRow[index.MaThamChieu] = groupId;
+    inRow[index.PhamVi] = scope;
+    inRow[index.MaDanhMucGiaDinh] = familySavingCategory ? familySavingCategory.maDanhMucGiaDinh : '';
+    inRow[index.LoaiGiaDinh] = scope === 'GIA_DINH' ? 'CHUYEN' : '';
+    inRow[index.MaGiaoDichLienKet] = groupId;
     inRow[index.TrangThai] = 'HOAT_DONG';
     inRow[index.NguoiTao] = session.tenDangNhap || session.hoTen || session.maNguoiDung;
     inRow[index.CreatedAt] = now;
@@ -5796,6 +6175,10 @@ function fillHocPhiLedgerRow_(row, index, data) {
   row[index.GhiChu] = String(data.ghiChu || '').trim();
   row[index.NguonDuLieu] = 'HOC_PHI';
   row[index.MaThamChieu] = data.reference;
+  row[index.PhamVi] = 'TRUNG_TAM';
+  row[index.MaDanhMucGiaDinh] = '';
+  row[index.LoaiGiaDinh] = '';
+  row[index.MaGiaoDichLienKet] = '';
   row[index.TrangThai] = data.active ? 'HOAT_DONG' : 'DA_HUY';
   row[index.NguoiTao] = 'Hệ thống';
   row[index.CreatedAt] = data.createdAt;
@@ -5818,6 +6201,7 @@ function mapThuChiTransaction_(row) {
   const sourceName = String(row.TenNguonTien || '').trim() ||
     getNguonTienName_(inferredSource) ||
     'Chưa phân loại';
+  const scope = normalizeFinanceScope_(row.PhamVi || (source.indexOf('GIA_DINH') === 0 ? 'GIA_DINH' : 'TRUNG_TAM'));
 
   return {
     maGiaoDich: String(row.MaGiaoDich || '').trim(),
@@ -5844,14 +6228,18 @@ function mapThuChiTransaction_(row) {
     ghiChu: String(row.GhiChu || '').trim(),
     nguonDuLieu: source,
     maThamChieu: String(row.MaThamChieu || '').trim(),
+    phamVi: scope,
+    maDanhMucGiaDinh: String(row.MaDanhMucGiaDinh || '').trim(),
+    loaiGiaDinh: String(row.LoaiGiaDinh || '').trim().toUpperCase(),
+    maGiaoDichLienKet: String(row.MaGiaoDichLienKet || '').trim(),
     trangThai: String(row.TrangThai || 'HOAT_DONG').trim().toUpperCase(),
     nguoiTao: String(row.NguoiTao || '').trim(),
     createdAtRaw: row.CreatedAt || '',
     updatedAtRaw: row.UpdatedAt || '',
-    editable: source === 'NHAP_TAY' &&
+    editable: source === 'NHAP_TAY' && scope === 'TRUNG_TAM' &&
       String(row.TrangThai || 'HOAT_DONG').trim().toUpperCase() === 'HOAT_DONG',
-    transfer: source === 'CHUYEN_NOI_BO',
-    canCancelTransfer: source === 'CHUYEN_NOI_BO' &&
+    transfer: source === 'CHUYEN_NOI_BO' || source === 'GIA_DINH_CHUYEN',
+    canCancelTransfer: (source === 'CHUYEN_NOI_BO' || source === 'GIA_DINH_CHUYEN') &&
       String(row.TrangThai || 'HOAT_DONG').trim().toUpperCase() === 'HOAT_DONG'
   };
 }
@@ -5881,6 +6269,10 @@ function stripThuChiPrivateFields_(item) {
     ghiChu: item.ghiChu,
     nguonDuLieu: item.nguonDuLieu,
     maThamChieu: item.maThamChieu,
+    phamVi: item.phamVi,
+    maDanhMucGiaDinh: item.maDanhMucGiaDinh,
+    loaiGiaDinh: item.loaiGiaDinh,
+    maGiaoDichLienKet: item.maGiaoDichLienKet,
     trangThai: item.trangThai,
     nguoiTao: item.nguoiTao,
     editable: item.editable,
@@ -6067,6 +6459,10 @@ function writeObjectsToSheet_(sheetName, objects, requiredHeaders) {
   if (!currentHeaders.length || headers.length !== currentHeaders.length) {
     formatHeader_(sheet);
   }
+}
+
+function saveChuyenNguonTienGiaDinh(token, data) {
+  return saveChuyenNguonTien(token, Object.assign({}, data || {}, { phamVi: 'GIA_DINH' }));
 }
 
 /**
