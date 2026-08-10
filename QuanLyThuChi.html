@@ -436,9 +436,6 @@ document.addEventListener('DOMContentLoaded',function(){
     clearTimeout(financeSearchTimer);
     financeSearchTimer=setTimeout(()=>loadFinanceData({silent:true}),320);
   });
-  ['transactionModal','quickPersonModal','transferModal','sourceModal','categoryModal','planModal','financeConfigModal'].forEach(id=>{
-    document.getElementById(id).addEventListener('click',e=>{if(e.target.id===id)closeModal(id)});
-  });
   document.getElementById('formTransactionSource').addEventListener('change',updateTransactionMethodNote);
   loadFinanceData();
 });

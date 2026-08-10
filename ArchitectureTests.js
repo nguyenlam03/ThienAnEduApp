@@ -62,6 +62,8 @@ function runArchitectureUnitTests() {
   });
   test('Định dạng tháng tài chính hợp lệ', function () {
     equal(GovernanceService.validateMonth('2026-08'), '2026-08', 'Không nhận tháng hợp lệ');
+    equal(financeYearMonthValue_('2026-08'), '2026-08', 'Không giữ tháng dạng chuỗi');
+    equal(financeYearMonthValue_(new Date(2026, 7, 1)), '2026-08', 'Không chuẩn hóa tháng từ ô ngày Google Sheet');
     var failed = false;
     try { GovernanceService.validateMonth('2026-13'); } catch (error) { failed = true; }
     equal(failed, true, 'Không chặn tháng sai');

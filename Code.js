@@ -3814,6 +3814,15 @@ function setTrangThaiNhanSuTaiChinh(token, id, enabled) {
   bumpDataVersion_(); return jsonResponse_({ success: true, message: toBoolean_(enabled) ? 'Đã kích hoạt nhân sự.' : 'Đã ngừng nhân sự.' });
 }
 
+function financeYearMonthValue_(value) {
+  if (!value) return '';
+  const text = String(value || '').trim();
+  const match = text.match(/^(\d{4})-(0[1-9]|1[0-2])/);
+  if (match) return match[1] + '-' + match[2];
+  const date = toDateOnly_(value);
+  return date ? Utilities.formatDate(date, 'Asia/Ho_Chi_Minh', 'yyyy-MM') : '';
+}
+
 function getKhoanChiDinhKyList_(maKyHoc, yearMonth) {
   const staffMap = getNhanSuTaiChinhList_(maKyHoc).reduce((map, item) => { map[item.maNhanSu] = item; return map; }, {});
   const month = String(yearMonth || '').trim();
@@ -3847,7 +3856,7 @@ function getKhoanChiDinhKyList_(maKyHoc, yearMonth) {
       loaiKhoanNhanSu: String(row.LoaiKhoanNhanSu || '').trim().toUpperCase(),
       phuongPhapTinh: String(row.PhuongPhapTinh || 'FIXED').trim().toUpperCase(), dinhMuc: number_(row.DinhMuc),
       ngayThanhToan: Math.max(1, Math.min(31, number_(row.NgayThanhToan) || 28)), batBuoc: toBoolean_(row.BatBuoc),
-      tuThang: String(row.TuThang || '').trim(), denThang: String(row.DenThang || '').trim(),
+      tuThang: financeYearMonthValue_(row.TuThang), denThang: financeYearMonthValue_(row.DenThang),
       trangThai: String(row.TrangThai || 'ACTIVE').trim().toUpperCase(), ghiChu: String(row.GhiChu || '').trim(),
       maKeHoachChi: plan ? String(plan.MaKeHoachChi || '').trim() : '', soTienPhaiChi: planned, soTienDaChi: paid,
       conPhaiChi: Math.max(planned - paid, 0), vuotKeHoach: Math.max(paid - planned, 0),
@@ -3888,7 +3897,66 @@ function saveKhoanChiDinhKy(token, data) {
       TrangThai: String(data.trangThai || 'ACTIVE').trim().toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE', GhiChu: String(data.ghiChu || '').trim()
     });
   } finally { lock.releaseLock(); }
-  bumpDataVersion_(); return jsonResponse_({ success: true, maKhoanDinhKy: id, message: 'Đã lưu khoản chi định kỳ.' });
+  let syncMessage = '';
+  const syncMonth = String(data.thangKeHoach || '').trim();
+  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(syncMonth)) {
+    try {
+      const synced = syncKhoanChiDinhKyPlan_(session, id, syncMonth);
+      syncMessage = synced.created ? ' Đã tạo kế hoạch chi tháng tương ứng.' : ' Đã cập nhật kế hoạch chi tháng tương ứng.';
+    } catch (error) {
+      syncMessage = ' Khoản định kỳ đã lưu nhưng chưa đồng bộ được kế hoạch tháng: ' + String(error && error.message || error);
+    }
+  }
+  bumpDataVersion_(); return jsonResponse_({ success: true, maKhoanDinhKy: id, message: 'Đã lưu khoản chi định kỳ.' + syncMessage });
+}
+
+function syncKhoanChiDinhKyPlan_(session, id, yearMonth) {
+  yearMonth = String(yearMonth || '').trim();
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(yearMonth)) throw new Error('Tháng kế hoạch không hợp lệ.');
+  assertFinancePeriodOpen_(session, yearMonth);
+  const row = readObjectsNoCache_(SHEET_KHOANCHI_DINHKY).find(item =>
+    String(item.MaKyHoc || '').trim() === session.maKyHoc && String(item.MaKhoanDinhKy || '').trim() === String(id || '').trim()
+  );
+  if (!row || String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'ACTIVE') throw new Error('Khoản chi định kỳ không còn hoạt động.');
+  const fromMonth = financeYearMonthValue_(row.TuThang);
+  const toMonth = financeYearMonthValue_(row.DenThang);
+  if ((fromMonth && fromMonth > yearMonth) || (toMonth && toMonth < yearMonth)) throw new Error('Khoản chi chưa có hiệu lực trong tháng đã chọn.');
+  const config = getCauHinhTaiChinhThang_(session.maKyHoc, yearMonth);
+  const method = String(row.PhuongPhapTinh || 'FIXED').trim().toUpperCase();
+  let amount = number_(row.DinhMuc);
+  if (method === 'PER_STUDENT') amount = number_(row.DinhMuc) * number_(config.soHocSinh);
+  if (method === 'PERCENT_REVENUE') amount = number_(row.DinhMuc) * number_(config.doanhThuDuKien) / 100;
+  const reference = 'DINHKY|' + String(id || '').trim();
+  const existing = readObjectsNoCache_(SHEET_KEHOACH_CHI_THANG).find(item =>
+    String(item.MaKyHoc || '').trim() === session.maKyHoc && String(item.Thang || '').trim() === yearMonth &&
+    String(item.MaThamChieu || '').trim() === reference && String(item.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED'
+  );
+  if (method === 'MANUAL' && existing) amount = number_(existing.SoTienPhaiChi);
+  if (method === 'MANUAL' && !existing) amount = 0;
+  const maNhanSu = String(row.MaNhanSu || '').trim();
+  const staff = maNhanSu ? getNhanSuTaiChinhList_(session.maKyHoc).find(item => item.maNhanSu === maNhanSu) : null;
+  const planId = existing ? String(existing.MaKeHoachChi || '').trim() : ('KHCHI_' + Utilities.getUuid().slice(0, 10).toUpperCase());
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('Hệ thống đang đồng bộ kế hoạch chi tháng.');
+  try {
+    upsertFinanceObject_(SHEET_KEHOACH_CHI_THANG, getKeHoachChiThangHeaders_(), 'MaKeHoachChi', planId, {
+      MaKyHoc: session.maKyHoc, Thang: yearMonth, MaDanhMuc: String(row.MaDanhMuc || '').trim(),
+      TenKhoanChi: String(row.TenKhoanChi || '').trim(), NhomChi: normalizeNhomChiTaiChinh_(row.NhomChi),
+      MaNhanSu: maNhanSu, NguoiNhan: staff ? staff.hoTen : '', SoTienPhaiChi: Math.max(0, amount),
+      HanThanhToan: parseInputDate_(financeDueDate_(yearMonth, row.NgayThanhToan)), BatBuoc: toBoolean_(row.BatBuoc) ? 'Có' : 'Không',
+      NguonKeHoach: 'DINHKY', MaThamChieu: reference, GhiChu: String(row.GhiChu || '').trim(), TrangThai: 'ACTIVE'
+    });
+  } finally { lock.releaseLock(); }
+  return { created: !existing, maKeHoachChi: planId };
+}
+
+function syncKhoanChiDinhKyVaoKeHoach(token, id, yearMonth) {
+  const session = requireSession_(token, 'finance.write');
+  ensureThuChiSheets_(session.maKyHoc);
+  const result = syncKhoanChiDinhKyPlan_(session, String(id || '').trim(), String(yearMonth || '').trim());
+  bumpDataVersion_();
+  safeWriteAuditLog_(session, result.created ? 'CREATE' : 'UPDATE', 'KE_HOACH_CHI_DINH_KY', result.maKeHoachChi, null, { maKhoanDinhKy: id, thang: yearMonth });
+  return jsonResponse_({ success: true, maKeHoachChi: result.maKeHoachChi, message: result.created ? 'Đã tạo kế hoạch tháng từ khoản chi định kỳ.' : 'Đã cập nhật kế hoạch tháng từ khoản chi định kỳ.' });
 }
 
 function setTrangThaiKhoanChiDinhKy(token, id, enabled) {
