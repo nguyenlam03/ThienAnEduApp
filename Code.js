@@ -3079,7 +3079,7 @@ function ensureQuanLyTaiChinhSheets_() {
     const allocationIndex = buildHeaderIndex_(allocationRows[0].map(item => String(item || '').trim()));
     let repaired = false;
     for (let i = 1; i < allocationRows.length; i++) {
-      const currentMonth = String(allocationRows[i][allocationIndex.Thang] || '').trim();
+      const currentMonth = financeYearMonthValue_(allocationRows[i][allocationIndex.Thang]);
       const lockId = String(allocationRows[i][allocationIndex.MaChot] || '').trim();
       if (currentMonth || !lockId) continue;
       const separator = lockId.lastIndexOf('|');
@@ -3413,7 +3413,7 @@ function getCauHinhTaiChinhThang_(maKyHoc, yearMonth) {
   const rows = readObjectsNoCache_(SHEET_CAUHINH_TAICHINH_THANG);
   const row = rows.find(item => {
     return String(item.MaKyHoc || '').trim() === String(maKyHoc || '').trim() &&
-      String(item.Thang || '').trim() === String(yearMonth || '').trim();
+      financeYearMonthValue_(item.Thang) === String(yearMonth || '').trim();
   }) || {};
 
   return {
@@ -3446,7 +3446,7 @@ function buildKeHoachChiThangData_(maKyHoc, yearMonth, activeTransactions, closi
   const plans = rows
     .filter(row => {
       return String(row.MaKyHoc || '').trim() === String(maKyHoc || '').trim() &&
-        String(row.Thang || '').trim() === yearMonth &&
+        financeYearMonthValue_(row.Thang) === yearMonth &&
         String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED';
     })
     .map(row => {
@@ -3590,7 +3590,7 @@ function saveCauHinhTaiChinhThang(token, data) {
     const index = buildHeaderIndex_(headers);
     let target = -1;
     for (let i = 1; i < rows.length; i++) {
-      if (String(rows[i][index.MaKyHoc] || '').trim() === session.maKyHoc && String(rows[i][index.Thang] || '').trim() === yearMonth) { target = i; break; }
+      if (String(rows[i][index.MaKyHoc] || '').trim() === session.maKyHoc && financeYearMonthValue_(rows[i][index.Thang]) === yearMonth) { target = i; break; }
     }
     const now = new Date();
     const row = target >= 0 ? rows[target].slice() : new Array(headers.length).fill('');
@@ -3705,7 +3705,7 @@ function khoiTaoKeHoachChiThangMauLegacy_(token, yearMonth) {
   ensureThuChiSheets_(session.maKyHoc);
   yearMonth = String(yearMonth || '').trim();
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(yearMonth)) throw new Error('Tháng kế hoạch không hợp lệ.');
-  const existing = readObjectsNoCache_(SHEET_KEHOACH_CHI_THANG).some(row => String(row.MaKyHoc || '').trim() === session.maKyHoc && String(row.Thang || '').trim() === yearMonth && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED');
+  const existing = readObjectsNoCache_(SHEET_KEHOACH_CHI_THANG).some(row => String(row.MaKyHoc || '').trim() === session.maKyHoc && financeYearMonthValue_(row.Thang) === yearMonth && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED');
   if (existing) throw new Error('Tháng này đã có kế hoạch chi. Vui lòng chỉnh sửa trực tiếp để tránh trùng dữ liệu.');
   const due = yearMonth + '-28';
   const templates = [
@@ -3830,7 +3830,7 @@ function getKhoanChiDinhKyList_(maKyHoc, yearMonth) {
   let paidMap = {};
   if (/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
     planMap = readObjectsNoCache_(SHEET_KEHOACH_CHI_THANG).filter(row =>
-      String(row.MaKyHoc || '').trim() === maKyHoc && String(row.Thang || '').trim() === month &&
+      String(row.MaKyHoc || '').trim() === maKyHoc && financeYearMonthValue_(row.Thang) === month &&
       String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED' &&
       String(row.MaThamChieu || '').trim().indexOf('DINHKY|') === 0
     ).reduce((map, row) => { map[String(row.MaThamChieu || '').trim().slice(7)] = row; return map; }, {});
@@ -3928,7 +3928,7 @@ function syncKhoanChiDinhKyPlan_(session, id, yearMonth) {
   if (method === 'PERCENT_REVENUE') amount = number_(row.DinhMuc) * number_(config.doanhThuDuKien) / 100;
   const reference = 'DINHKY|' + String(id || '').trim();
   const existing = readObjectsNoCache_(SHEET_KEHOACH_CHI_THANG).find(item =>
-    String(item.MaKyHoc || '').trim() === session.maKyHoc && String(item.Thang || '').trim() === yearMonth &&
+    String(item.MaKyHoc || '').trim() === session.maKyHoc && financeYearMonthValue_(item.Thang) === yearMonth &&
     String(item.MaThamChieu || '').trim() === reference && String(item.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED'
   );
   if (method === 'MANUAL' && existing) amount = number_(existing.SoTienPhaiChi);
@@ -3959,6 +3959,37 @@ function syncKhoanChiDinhKyVaoKeHoach(token, id, yearMonth) {
   return jsonResponse_({ success: true, maKeHoachChi: result.maKeHoachChi, message: result.created ? 'Đã tạo kế hoạch tháng từ khoản chi định kỳ.' : 'Đã cập nhật kế hoạch tháng từ khoản chi định kỳ.' });
 }
 
+function syncKhoanChiDinhKyVaoKeHoachNhieu(token, ids, yearMonth) {
+  const session = requireSession_(token, 'finance.write');
+  ensureThuChiSheets_(session.maKyHoc);
+  yearMonth = String(yearMonth || '').trim();
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(yearMonth)) throw new Error('Tháng kế hoạch không hợp lệ.');
+  assertFinancePeriodOpen_(session, yearMonth);
+  const selected = Array.isArray(ids) ? ids.map(id => String(id || '').trim()).filter(Boolean) : [];
+  const selectedMap = selected.reduce((map, id) => { map[id] = true; return map; }, {});
+  const targets = getKhoanChiDinhKyList_(session.maKyHoc, yearMonth).filter(item =>
+    item.trangThai === 'ACTIVE' && (!selected.length || selectedMap[item.maKhoanDinhKy]) &&
+    (!item.tuThang || item.tuThang <= yearMonth) && (!item.denThang || item.denThang >= yearMonth)
+  );
+  if (!targets.length) throw new Error(selected.length ? 'Các khoản đã chọn chưa có hiệu lực trong tháng này.' : 'Không có khoản chi định kỳ đang hiệu lực để đồng bộ.');
+  let created = 0;
+  let updated = 0;
+  const errors = [];
+  targets.forEach(item => {
+    try {
+      const result = syncKhoanChiDinhKyPlan_(session, item.maKhoanDinhKy, yearMonth);
+      if (result.created) created++; else updated++;
+    } catch (error) {
+      errors.push(item.tenKhoanChi + ': ' + String(error && error.message || error));
+    }
+  });
+  if (!created && !updated) throw new Error(errors[0] || 'Không đồng bộ được kế hoạch tháng.');
+  bumpDataVersion_();
+  safeWriteAuditLog_(session, 'SYNC', 'KE_HOACH_CHI_DINH_KY', yearMonth, null, { ids: targets.map(item => item.maKhoanDinhKy), created: created, updated: updated, errors: errors });
+  const warning = errors.length ? ' Có ' + errors.length + ' khoản chưa đồng bộ được.' : '';
+  return jsonResponse_({ success: true, created: created, updated: updated, failed: errors.length, message: 'Đã tạo ' + created + ' và cập nhật ' + updated + ' khoản trong kế hoạch tháng.' + warning });
+}
+
 function setTrangThaiKhoanChiDinhKy(token, id, enabled) {
   const session = requireSession_(token, 'finance.write'); ensureThuChiSheets_(session.maKyHoc);
   const rows = readObjectsNoCache_(SHEET_KHOANCHI_DINHKY); const current = rows.find(row => String(row.MaKhoanDinhKy || '').trim() === String(id || '').trim() && String(row.MaKyHoc || '').trim() === session.maKyHoc);
@@ -3983,7 +4014,7 @@ function taoKeHoachTaiChinhTuDanhMuc(token, yearMonth) {
   const staff = getNhanSuTaiChinhList_(session.maKyHoc).filter(item => item.trangThai === 'ACTIVE' && (!item.tuNgay || item.tuNgay.slice(0, 7) <= yearMonth) && (!item.denNgay || item.denNgay.slice(0, 7) >= yearMonth));
   const recurring = getKhoanChiDinhKyList_(session.maKyHoc, yearMonth).filter(item => item.trangThai === 'ACTIVE' && (!item.tuThang || item.tuThang <= yearMonth) && (!item.denThang || item.denThang >= yearMonth));
   if (!staff.length && !recurring.length) throw new Error('Chưa có nhân sự hoặc khoản chi định kỳ đang hoạt động để tạo kế hoạch.');
-  const existingRefs = readObjectsNoCache_(SHEET_KEHOACH_CHI_THANG).filter(row => String(row.MaKyHoc || '').trim() === session.maKyHoc && String(row.Thang || '').trim() === yearMonth && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED').reduce((map, row) => { const ref = String(row.MaThamChieu || '').trim(); if (ref) map[ref] = true; return map; }, {});
+  const existingRefs = readObjectsNoCache_(SHEET_KEHOACH_CHI_THANG).filter(row => String(row.MaKyHoc || '').trim() === session.maKyHoc && financeYearMonthValue_(row.Thang) === yearMonth && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED').reduce((map, row) => { const ref = String(row.MaThamChieu || '').trim(); if (ref) map[ref] = true; return map; }, {});
   const now = new Date(); const rows = [];
   staff.forEach(item => {
     const ref = 'NHANSU|' + item.maNhanSu; if (existingRefs[ref]) return;
@@ -4250,7 +4281,7 @@ function getChotPhanBoHu_(maKyHoc, month) {
   const lockId = String(maKyHoc || '').trim() + '|' + String(month || '').trim();
   const row = rows.find(item =>
     String(item.MaKyHoc || '').trim() === String(maKyHoc || '').trim() &&
-    String(item.Thang || '').trim() === String(month || '').trim()
+    financeYearMonthValue_(item.Thang) === String(month || '').trim()
   ) || rows.find(item => String(item.MaChot || '').trim() === lockId) || {};
   const locked = String(row.TrangThai || 'DRAFT').trim().toUpperCase() === 'LOCKED';
   const today = new Date();
@@ -4348,7 +4379,7 @@ function unlockPhanBoHuTaiChinh(token, month, reason) {
 function getHuTaiChinhThang_(maKyHoc, month) {
   const saved = readObjectsNoCache_(SHEET_HU_TAICHINH_THANG).filter(row =>
     String(row.MaKyHoc || '').trim() === String(maKyHoc || '').trim() &&
-    String(row.Thang || '').trim() === month
+    financeYearMonthValue_(row.Thang) === month
   );
   const savedMap = saved.reduce((map, row) => {
     map[String(row.MaHu || '').trim().toUpperCase()] = row;
@@ -4418,7 +4449,7 @@ function saveHuTaiChinhThang(token, data) {
       let target = -1;
       for (let i = 1; i < rows.length; i++) {
         if (String(rows[i][index.MaKyHoc] || '').trim() === session.maKyHoc &&
-            String(rows[i][index.Thang] || '').trim() === month &&
+            financeYearMonthValue_(rows[i][index.Thang]) === month &&
             String(rows[i][index.MaHu] || '').trim().toUpperCase() === definition.code) {
           target = i;
           break;
@@ -4794,7 +4825,7 @@ function getFamilyTransactions_(maKyHoc, month) {
     }));
   const ledgerReferences = ledgerItems.reduce((map, item) => { map[item.maGiaoDichGiaDinh] = true; return map; }, {});
   const legacyItems = readObjectsNoCache_(SHEET_GIAODICH_GIADINH).filter(row =>
-    String(row.Thang || '').trim() === month &&
+    financeYearMonthValue_(row.Thang) === month &&
     String(row.TrangThai || 'ACTIVE').trim().toUpperCase() === 'ACTIVE' &&
     !String(row.MaGiaoDichSoThuChi || '').trim() &&
     !ledgerReferences[String(row.MaGiaoDichGiaDinh || '').trim()]
@@ -4870,7 +4901,7 @@ function getTaiChinhGiaDinhData(token, yearMonth) {
   const familyRows = getFamilyTransactions_(session.maKyHoc, context.month);
   const activeFamilyRows = familyRows.filter(item => item.trangThai === 'HOAT_DONG');
   const familySourceSummaries = buildFamilySourceSummaries_(session.maKyHoc, context.month);
-  const configRow = readObjectsNoCache_(SHEET_CAUHINH_GIADINH_THANG).find(row => String(row.Thang || '').trim() === context.month) || {};
+  const configRow = readObjectsNoCache_(SHEET_CAUHINH_GIADINH_THANG).find(row => financeYearMonthValue_(row.Thang) === context.month) || {};
   const manualIncome = activeFamilyRows.reduce((sum, item) => sum + (item.loai === 'THU' && item.nguonDuLieu !== 'GIA_DINH_RUT_CHU' ? item.soTien : 0), 0);
   const familyExpense = activeFamilyRows.reduce((sum, item) => sum + (item.loai === 'CHI' ? item.soTien : 0), 0);
   const familySaving = Math.max(0, activeFamilyRows.reduce((sum, item) => {
@@ -4988,7 +5019,7 @@ function getQuanLyTaiChinhData(token, yearMonth) {
   const familyRows = getFamilyTransactions_(session.maKyHoc, month);
   const activeFamilyRows = familyRows.filter(item => item.trangThai === 'HOAT_DONG');
   const familySourceSummaries = buildFamilySourceSummaries_(session.maKyHoc, month);
-  const familyConfigRow = readObjectsNoCache_(SHEET_CAUHINH_GIADINH_THANG).find(row => String(row.Thang || '').trim() === month) || {};
+  const familyConfigRow = readObjectsNoCache_(SHEET_CAUHINH_GIADINH_THANG).find(row => financeYearMonthValue_(row.Thang) === month) || {};
   const manualFamilyIncome = activeFamilyRows.reduce((sum, item) => sum + (item.loai === 'THU' && item.nguonDuLieu !== 'GIA_DINH_RUT_CHU' ? item.soTien : 0), 0);
   const familyExpense = activeFamilyRows.reduce((sum, item) => sum + (item.loai === 'CHI' ? item.soTien : 0), 0);
   const familySaving = Math.max(0, activeFamilyRows.reduce((sum, item) => {
@@ -5479,7 +5510,7 @@ function saveThuChiGiaoDich(token, data) {
     if (!maKeHoachChi) {
       const month = ngayText.slice(0, 7);
       const staffPlans = readObjectsNoCache_(SHEET_KEHOACH_CHI_THANG).filter(row =>
-        String(row.MaKyHoc || '').trim() === session.maKyHoc && String(row.Thang || '').trim() === month &&
+        String(row.MaKyHoc || '').trim() === session.maKyHoc && financeYearMonthValue_(row.Thang) === month &&
         String(row.MaDanhMuc || '').trim() === 'CHI_LUONG' && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED' &&
         (String(row.MaNhanSu || '').trim() === maNhanSu || String(row.MaThamChieu || '').trim() === 'NHANSU|' + maNhanSu)
       );
