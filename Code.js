@@ -4205,7 +4205,7 @@ function getDefaultHuTaiChinh_() {
 }
 
 function getDanhMucHuTaiChinhList_(includeDeleted) {
-  return readObjects_(SHEET_DANHMUC_HU_TAICHINH).map(row => ({
+  const items = readObjects_(SHEET_DANHMUC_HU_TAICHINH).map(row => ({
     code: normalizeMaHuTaiChinh_(row.MaHu),
     name: String(row.TenHu || '').trim(),
     ratio: Math.max(0, Math.min(100, number_(row.TyLeMacDinh))),
@@ -4213,7 +4213,12 @@ function getDanhMucHuTaiChinhList_(includeDeleted) {
     status: String(row.TrangThai || 'ACTIVE').trim().toUpperCase(),
     note: String(row.GhiChu || '').trim(),
     systemRole: String(row.VaiTroHeThong || '').trim().toUpperCase()
-  })).filter(item => item.code && item.name && (includeDeleted || item.status === 'ACTIVE'))
+  })).filter(item => item.code && item.name && (includeDeleted || item.status === 'ACTIVE'));
+  const byCode = items.reduce((map, item) => {
+    map[item.code] = item;
+    return map;
+  }, {});
+  return Object.keys(byCode).map(code => byCode[code])
     .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'vi'));
 }
 
@@ -4376,13 +4381,27 @@ function unlockPhanBoHuTaiChinh(token, month, reason) {
   return jsonResponse_({ success: true, status: status, message: 'Đã mở chốt. Mọi thay đổi tiếp theo sẽ được ghi nhận ở phiên bản phân bổ mới.' });
 }
 
+function dedupeHuTaiChinhThangRows_(rows) {
+  const byCode = (rows || []).reduce((map, row) => {
+    const code = normalizeMaHuTaiChinh_(row && row.MaHu);
+    if (code) map[code] = row;
+    return map;
+  }, {});
+  return Object.keys(byCode).map(code => byCode[code]);
+}
+
 function getHuTaiChinhThang_(maKyHoc, month) {
-  const saved = readObjectsNoCache_(SHEET_HU_TAICHINH_THANG).filter(row =>
+  const savedRows = readObjectsNoCache_(SHEET_HU_TAICHINH_THANG).filter(row =>
     String(row.MaKyHoc || '').trim() === String(maKyHoc || '').trim() &&
     financeYearMonthValue_(row.Thang) === month
   );
+  // Older versions could append the same monthly jar more than once because
+  // Google Sheets converted yyyy-MM into a Date. Treat semester + month + jar
+  // as a unique business key and let the newest (last) sheet row win.
+  const saved = dedupeHuTaiChinhThangRows_(savedRows);
   const savedMap = saved.reduce((map, row) => {
-    map[String(row.MaHu || '').trim().toUpperCase()] = row;
+    const code = normalizeMaHuTaiChinh_(row.MaHu);
+    if (code) map[code] = row;
     return map;
   }, {});
   const catalog = getDanhMucHuTaiChinhList_(false);
@@ -4450,9 +4469,8 @@ function saveHuTaiChinhThang(token, data) {
       for (let i = 1; i < rows.length; i++) {
         if (String(rows[i][index.MaKyHoc] || '').trim() === session.maKyHoc &&
             financeYearMonthValue_(rows[i][index.Thang]) === month &&
-            String(rows[i][index.MaHu] || '').trim().toUpperCase() === definition.code) {
+            normalizeMaHuTaiChinh_(rows[i][index.MaHu]) === definition.code) {
           target = i;
-          break;
         }
       }
       const row = target >= 0 ? rows[target].slice() : new Array(headers.length).fill('');
