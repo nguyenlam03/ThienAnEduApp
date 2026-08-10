@@ -1761,8 +1761,11 @@ function saveThuPhiHocSinh(token, data) {
   const khoanThuThemInput = normalizeKhoanThuThemInput_(data.khoanThuThem || []);
   const tongKhoanThuThemInput = khoanThuThemInput.reduce((sum, item) => sum + number_(item.soTien), 0);
   const hocPhiInput = hocPhiCoBanInput + tongKhoanThuThemInput;
-  const soTienDaThuInput = number_(data.soTienDaThu);
   const tamNghi = toBoolean_(data.tamNghi);
+  const soTienDaThuRaw = data.soTienDaThu;
+  const soTienDaThuInput = !chiCapNhatKhoanThu && !tamNghi && String(soTienDaThuRaw === undefined ? '' : soTienDaThuRaw).trim() === ''
+    ? hocPhiInput
+    : number_(soTienDaThuRaw);
   const ngayThuText = String(data.ngayThu || '').trim();
   const maNguonTien = String(data.maNguonTien || '').trim().toUpperCase();
   const ghiChu = String(data.ghiChu || '').trim();

@@ -53,7 +53,7 @@
       align-items: end;
     }
 
-    .fee-view-tabs { display:flex; gap:8px; margin:4px 0 18px; padding-bottom:10px; border-bottom:1px solid #e2e8f0; }
+    .fee-view-tabs { display:flex; flex-wrap:wrap; gap:8px; margin:4px 0 18px; padding-bottom:10px; border-bottom:1px solid #e2e8f0; }
     .fee-view-tab { border:1px solid #bae6fd; background:#f8fafc; color:#475569; border-radius:12px; padding:10px 16px; font-weight:800; cursor:pointer; }
     .fee-view-tab.active { background:#0284c7; border-color:#0284c7; color:#fff; box-shadow:0 8px 20px rgba(2,132,199,.22); }
     .fee-tab-panel[hidden] { display:none !important; }
@@ -86,6 +86,13 @@
     .fee-source-track { height:10px; margin-top:12px; overflow:hidden; border-radius:999px; background:#e2e8f0; }
     .fee-source-track span { display:block; height:100%; border-radius:999px; background:var(--source-color,#0284c7); transition:width .3s ease; }
     .fee-source-card.unassigned { background:#fff7ed; border-color:#fed7aa; }
+    .fee-daily-table-wrap { margin-top:18px; overflow:auto; border:1px solid #dbeafe; border-radius:16px; }
+    .fee-daily-table { width:100%; border-collapse:collapse; min-width:680px; }
+    .fee-daily-table th { padding:13px 16px; background:#eff6ff; color:#1e3a5f; font-size:13px; font-weight:900; text-align:left; }
+    .fee-daily-table td { padding:14px 16px; border-top:1px solid #e2e8f0; color:#334155; font-weight:700; }
+    .fee-daily-table td.amount { color:#0f766e; font-size:17px; font-weight:900; }
+    .fee-daily-progress { width:100%; min-width:140px; height:9px; overflow:hidden; border-radius:999px; background:#e2e8f0; }
+    .fee-daily-progress span { display:block; height:100%; border-radius:999px; background:linear-gradient(90deg,#38bdf8,#0284c7); }
 
     .status-pill {
       display: inline-flex;
@@ -459,6 +466,7 @@
             <button id="feeListTabButton" class="fee-view-tab active" type="button" onclick="switchFeeTab('LIST')">Danh sách thu phí</button>
             <button id="feeChartTabButton" class="fee-view-tab" type="button" onclick="switchFeeTab('CHART')">Biểu đồ &amp; đánh giá</button>
             <button id="feeSourceTabButton" class="fee-view-tab" type="button" onclick="switchFeeTab('SOURCE')">Thống kê nguồn thu</button>
+            <button id="feeDailyTabButton" class="fee-view-tab" type="button" onclick="switchFeeTab('DAILY')">Thống kê theo ngày</button>
           </div>
 
           <div id="feeListTabPanel" class="fee-tab-panel">
@@ -538,6 +546,14 @@
               <div id="feeSourceGrid" class="fee-source-grid"></div>
             </div>
           </div>
+          <div id="feeDailyTabPanel" class="fee-tab-panel" hidden>
+            <div class="fee-chart-card">
+              <div class="fee-chart-title">Tổng tiền học phí đã thu theo ngày</div>
+              <div class="fee-chart-subtitle">Tổng hợp theo ngày đóng thực tế và các bộ lọc tháng, khối, lớp, trạng thái, tìm kiếm hiện tại.</div>
+              <div id="feeDailySummary" class="fee-analysis-grid"></div>
+              <div id="feeDailyGrid" class="fee-daily-table-wrap"></div>
+            </div>
+          </div>
         </div>
       </section>
     </main>
@@ -614,7 +630,8 @@
 
           <div class="field">
             <label>Số tiền ghi nhận đã thu</label>
-            <input id="formSoTienDaThu" type="text" inputmode="numeric" oninput="formatMoneyInput('formSoTienDaThu'); updateFeePreview();" placeholder="Nhập số tiền thực nhận">
+            <input id="formSoTienDaThu" type="text" inputmode="numeric" oninput="handleCollectedAmountInput()" placeholder="Tự động bằng tổng phải thu">
+            <div class="fee-stat-sub">Mặc định bằng học phí và toàn bộ khoản thu thêm; có thể sửa khi phụ huynh đóng một phần.</div>
           </div>
 
           <div class="field">

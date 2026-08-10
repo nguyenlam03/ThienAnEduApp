@@ -21,6 +21,8 @@
     let feeLoadRequestId = 0;
     let feeLoadTimeoutId = null;
     let currentFeeTab = 'LIST';
+    let autoFillCollectedAmount = true;
+    let collectedAmountFloor = 0;
     let feePageInitialized = false;
     const FEE_LOAD_TIMEOUT_MS = 30000;
 
@@ -325,15 +327,18 @@
     }
 
     function switchFeeTab(tab) {
-      currentFeeTab = ['LIST', 'CHART', 'SOURCE'].indexOf(tab) !== -1 ? tab : 'LIST';
-      const showChart = tab === 'CHART';
-      const showSource = tab === 'SOURCE';
-      document.getElementById('feeListTabPanel').hidden = showChart || showSource;
+      currentFeeTab = ['LIST', 'CHART', 'SOURCE', 'DAILY'].indexOf(tab) !== -1 ? tab : 'LIST';
+      const showChart = currentFeeTab === 'CHART';
+      const showSource = currentFeeTab === 'SOURCE';
+      const showDaily = currentFeeTab === 'DAILY';
+      document.getElementById('feeListTabPanel').hidden = showChart || showSource || showDaily;
       document.getElementById('feeChartTabPanel').hidden = !showChart;
       document.getElementById('feeSourceTabPanel').hidden = !showSource;
-      document.getElementById('feeListTabButton').classList.toggle('active', !showChart && !showSource);
+      document.getElementById('feeDailyTabPanel').hidden = !showDaily;
+      document.getElementById('feeListTabButton').classList.toggle('active', !showChart && !showSource && !showDaily);
       document.getElementById('feeChartTabButton').classList.toggle('active', showChart);
       document.getElementById('feeSourceTabButton').classList.toggle('active', showSource);
+      document.getElementById('feeDailyTabButton').classList.toggle('active', showDaily);
       renderTable();
     }
 
@@ -420,6 +425,7 @@
       // Nhờ đó lỗi hoặc phép tính ở tab phụ không thể chặn danh sách chính.
       if (currentFeeTab === 'CHART') renderFeeDashboard(list);
       if (currentFeeTab === 'SOURCE') renderFeeSourceStatistics(list);
+      if (currentFeeTab === 'DAILY') renderFeeDailyStatistics(list);
       document.getElementById('countText').textContent = list.length + ' học sinh';
 
       if (list.length === 0) {
@@ -651,6 +657,57 @@
       }).join('') || '<div class="empty-box">Chưa có học phí đã thu trong tháng.</div>';
     }
 
+    function renderFeeDailyStatistics(list) {
+      const dayMap = {};
+      (list || []).forEach(function (item) {
+        const date = String(item.ngayThu || '').trim();
+        const amount = Number(item.soTienDaThu || 0);
+        if (item.tamNghi || !date || amount <= 0) return;
+        if (!dayMap[date]) dayMap[date] = { date: date, amount: 0, studentCount: 0 };
+        dayMap[date].amount += amount;
+        dayMap[date].studentCount++;
+      });
+
+      const days = Object.keys(dayMap).map(function (date) { return dayMap[date]; })
+        .sort(function (a, b) { return b.date.localeCompare(a.date); });
+      const total = days.reduce(function (sum, day) { return sum + day.amount; }, 0);
+      const average = days.length ? total / days.length : 0;
+      const highest = days.reduce(function (best, day) {
+        return !best || day.amount > best.amount ? day : best;
+      }, null);
+
+      document.getElementById('feeDailySummary').innerHTML = [
+        ['Tổng tiền đã thu', formatMoney(total)],
+        ['Số ngày có phát sinh', days.length + ' ngày'],
+        ['Bình quân mỗi ngày', formatMoney(average)],
+        ['Ngày thu cao nhất', highest ? formatDateDisplayClient(highest.date) + ' · ' + formatMoney(highest.amount) : 'Chưa có']
+      ].map(function (item) {
+        return `<div class="fee-analysis-item"><div class="fee-analysis-label">${item[0]}</div><div class="fee-analysis-value">${item[1]}</div></div>`;
+      }).join('');
+
+      if (!days.length) {
+        document.getElementById('feeDailyGrid').innerHTML = '<div class="empty-box">Chưa có khoản học phí nào được ghi nhận theo ngày trong phạm vi lọc.</div>';
+        return;
+      }
+
+      const maxAmount = Math.max.apply(null, days.map(function (day) { return day.amount; }));
+      document.getElementById('feeDailyGrid').innerHTML = `
+        <table class="fee-daily-table">
+          <thead><tr><th>Ngày thu</th><th>Số học sinh</th><th>Tổng tiền</th><th>Tỷ trọng tháng</th><th>Mức thu theo ngày</th></tr></thead>
+          <tbody>${days.map(function (day) {
+            const monthlyRate = total > 0 ? day.amount * 100 / total : 0;
+            const barRate = maxAmount > 0 ? day.amount * 100 / maxAmount : 0;
+            return `<tr>
+              <td>${escapeHtml(formatDateDisplayClient(day.date))}</td>
+              <td>${day.studentCount} học sinh</td>
+              <td class="amount">${formatMoney(day.amount)}</td>
+              <td>${formatPercent(monthlyRate)}</td>
+              <td><div class="fee-daily-progress" title="${escapeAttribute(formatMoney(day.amount))}"><span style="width:${Math.max(2, barRate)}%"></span></div></td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>`;
+    }
+
     function renderGroupedFeeRows(list, renderRow) {
       const totalHocPhi = list.reduce((sum, item) => sum + Number(item.hocPhi || 0), 0);
       const groups = [];
@@ -868,6 +925,9 @@
       const baseFee = item.hocPhiCoBan !== undefined
         ? Number(item.hocPhiCoBan || 0)
         : Math.max(Number(item.hocPhiGoc || item.hocPhi || 0) - savedExtraTotal, 0);
+      const totalFee = baseFee + savedExtraTotal;
+      autoFillCollectedAmount = true;
+      collectedAmountFloor = Number(item.soTienDaThu || 0);
       feeBeforeTemporary = baseFee;
       paidBeforeTemporary = item.tamNghi
         ? Number(item.hocPhiGoc || baseFee + savedExtraTotal)
@@ -884,7 +944,7 @@
         item.tamNghi ? 0 : baseFee
       );
       document.getElementById('formSoTienDaThu').value = formatMoneyInputValue(
-        item.tamNghi ? 0 : Number(item.soTienDaThu || 0)
+        item.tamNghi ? 0 : Math.max(totalFee, collectedAmountFloor)
       );
 
       document.getElementById('formNguonTienThu').value = item.tamNghi
@@ -957,11 +1017,22 @@
       setFeeActionButtonsBusy(false, '');
     }
 
+    function handleCollectedAmountInput() {
+      autoFillCollectedAmount = false;
+      formatMoneyInput('formSoTienDaThu');
+      updateFeePreview();
+    }
+
     function updateFeePreview() {
       const tamNghi = document.getElementById('formTamNghi').checked;
       const hocPhiCoBan = tamNghi ? 0 : Number(getMoneyRawValue('formSoTienPhaiThu') || 0);
       const tongKhoanThuThem = tamNghi ? 0 : collectFeeExtraItems().reduce(function (sum, item) { return sum + Number(item.soTien || 0); }, 0);
       const tongPhaiThu = hocPhiCoBan + tongKhoanThuThem;
+      if (!tamNghi && autoFillCollectedAmount) {
+        document.getElementById('formSoTienDaThu').value = formatMoneyInputValue(
+          Math.max(tongPhaiThu, collectedAmountFloor)
+        );
+      }
       const daThu = tamNghi ? 0 : Number(getMoneyRawValue('formSoTienDaThu') || 0);
       const conLai = Math.max(tongPhaiThu - daThu, 0);
 
