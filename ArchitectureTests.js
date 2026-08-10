@@ -74,8 +74,9 @@ function runArchitectureUnitTests() {
     equal(failed, true, 'Không chặn ngày không tồn tại');
   });
   test('Phiếu chi giữ hũ tài chính do người dùng lựa chọn', function () {
-    var command = CashbookDomain.transaction({ loai: 'CHI', ngayGiaoDich: '2026-08-01', maDanhMuc: 'CHI_MARKETING', maHuTaiChinh: 'dau_tu', maNguonTien: 'TIEN_MAT', noiDung: 'Quảng cáo tuyển sinh', soTien: 2000000 });
+    var command = CashbookDomain.transaction({ loai: 'CHI', ngayGiaoDich: '2026-08-01', maDanhMuc: 'CHI_MARKETING', maNhanSu: 'NS_001', maHuTaiChinh: 'dau_tu', maNguonTien: 'TIEN_MAT', noiDung: 'Quảng cáo tuyển sinh', soTien: 2000000 });
     equal(command.maHuTaiChinh, 'DAU_TU', 'Không giữ hũ tài chính trên phiếu chi');
+    equal(command.maNhanSu, 'NS_001', 'Không giữ mã nhân sự để đối soát khoản chi');
   });
 
   test('Nguồn tiền trung tâm và gia đình được tách phạm vi', function () {

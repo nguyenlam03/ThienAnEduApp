@@ -308,16 +308,18 @@
     <div class="modal-body">
       <input id="formTransactionId" type="hidden">
       <input id="formTransactionPlanId" type="hidden">
+      <input id="formTransactionStaffId" type="hidden">
       <div class="finance-form-grid">
         <div id="transactionPlanLink" class="field full" style="display:none"><div class="fee-action-note"><strong>Khoản kế hoạch:</strong> <span id="transactionPlanName"></span>. Phiếu chi này sẽ tự cập nhật số đã chi và còn phải chi.</div></div>
         <div class="field"><label>Số phiếu</label><input id="formTransactionReceiptNo" class="receipt-field" type="text" readonly placeholder="Hệ thống tự tạo khi lưu"></div>
-        <div class="field"><label>Ngày lập *</label><input id="formTransactionDate" type="date"></div>
+        <div class="field"><label>Ngày lập *</label><input id="formTransactionDate" type="date" onchange="syncSalaryPlanOptions()"></div>
         <div class="field"><label>Loại phiếu *</label><select id="formTransactionType" onchange="handleTransactionTypeChange()"><option value="THU">Phiếu thu</option><option value="CHI">Phiếu chi</option></select></div>
         <div class="field"><label>Nguồn tiền *</label><select id="formTransactionSource" onchange="updateTransactionMethodNote()"></select><div id="transactionMethodNote" class="read-note"></div></div>
         <div class="field"><label>Danh mục *</label><select id="formTransactionCategory" onchange="handleTransactionCategoryChange()"></select></div>
         <div id="formTransactionJarField" class="field"><label>Hũ tài chính *</label><select id="formTransactionJar"></select><div class="read-note">Tự chọn theo danh mục; có thể đổi cho trường hợp đặc biệt.</div></div>
         <div class="field"><label>Số tiền *</label><input id="formTransactionAmount" type="text" inputmode="numeric" oninput="formatMoneyInputById('formTransactionAmount')" placeholder="Nhập số tiền"></div>
-        <div class="field"><label id="formTransactionPersonLabel">Người nộp</label><div class="input-action-row"><select id="formTransactionPerson"><option value="">Chọn người nộp/nhận</option></select><button class="quick-add-button" type="button" title="Thêm nhanh" onclick="openQuickPersonModal()">+</button></div></div>
+        <div class="field"><label id="formTransactionPersonLabel">Người nộp</label><div class="input-action-row"><select id="formTransactionPerson" onchange="handleTransactionPersonChange()"><option value="">Chọn người nộp/nhận</option></select><button id="formTransactionPersonAdd" class="quick-add-button" type="button" title="Thêm nhanh" onclick="openQuickPersonModal()">+</button></div></div>
+        <div id="formTransactionSalaryPlanField" class="field full" style="display:none"><label>Khoản lương / kế hoạch tháng</label><select id="formTransactionSalaryPlan" onchange="handleSalaryPlanChange()"></select><div id="salaryPlanNote" class="read-note"></div></div>
         <div class="field"><label>Số chứng từ liên quan</label><input id="formTransactionVoucher" type="text" placeholder="Hoá đơn, uỷ nhiệm chi..."></div>
         <div class="field full"><label>Ảnh hoá đơn / chứng từ</label><input id="formTransactionAttachment" type="file" accept="image/jpeg,image/png,image/webp" onchange="previewTransactionAttachment()"><div id="transactionAttachmentPreview" class="attachment-preview">Chưa chọn ảnh chứng từ.</div></div>
         <div class="field full"><label>Nội dung *</label><input id="formTransactionContent" type="text" placeholder="Nhập nội dung phiếu"></div>
@@ -421,7 +423,7 @@ const APP_TOKEN=<?!= JSON.stringify(token) ?>;
 const APP_URL=<?!= JSON.stringify(appUrl) ?>;
 const APP_CACHE_ENABLED=<?!= JSON.stringify(cacheEnabled) ?>;
 const APP_BRAND_NAME=<?!= JSON.stringify(brandName) ?>;
-let financeData={categories:[],financialJars:[],people:[],sources:[],sourceSummaries:[],transactions:[],recentTransactions:[],cashbook:[],reports:{categories:[],sources:[]},summary:{},range:{},monthlyFinance:{items:[],summary:{},config:{},warnings:[]}};
+let financeData={categories:[],financialJars:[],people:[],staff:[],sources:[],sourceSummaries:[],transactions:[],recentTransactions:[],cashbook:[],reports:{categories:[],sources:[]},summary:{},range:{},monthlyFinance:{items:[],summary:{},config:{},warnings:[]}};
 let activeTab='dashboard';
 let financeSearchTimer=null;
 let financeLoadSequence=0;
@@ -603,19 +605,33 @@ function renderReports(){
 
 function renderWarning(){const n=(financeData.summary&&financeData.summary.unassignedCount)||0,w=document.getElementById('unassignedWarning');if(n>0){w.className='warning-box show';w.textContent='Có '+n+' giao dịch cũ chưa xác định nguồn tiền. Hãy sửa giao dịch nhập tay hoặc cập nhật nguồn nhận tại trang Quản lý thu phí.'}else{w.className='warning-box';w.textContent=''}}
 function switchTab(tab){activeTab=tab;document.querySelectorAll('.finance-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active',p.id==='tab-'+tab))}
-function renderTransactionPeople(selected){
-  const type=v('formTransactionType'),select=document.getElementById('formTransactionPerson');
-  select.innerHTML='<option value="">Chọn '+(type==='CHI'?'người nhận':'người nộp')+'</option>';
-  (financeData.people||[]).filter(x=>x.loai==='BOTH'||x.loai===type).forEach(x=>select.appendChild(new Option(x.tenDoiTuong,x.tenDoiTuong)));
-  if(selected&&!Array.from(select.options).some(o=>o.value===selected))select.appendChild(new Option(selected,selected));
-  if(selected)select.value=selected;
-  t('formTransactionPersonLabel',type==='CHI'?'Người nhận':'Người nộp');
+function isSalaryTransaction(){return v('formTransactionType')==='CHI'&&v('formTransactionCategory')==='CHI_LUONG'}
+function renderTransactionPeople(selected,staffId){
+  const type=v('formTransactionType'),salary=isSalaryTransaction(),select=document.getElementById('formTransactionPerson'),add=document.getElementById('formTransactionPersonAdd');
+  select.innerHTML='<option value="">'+(salary?'Chọn nhân sự':'Chọn '+(type==='CHI'?'người nhận':'người nộp'))+'</option>';
+  if(salary){
+    (financeData.staff||[]).filter(x=>x.trangThai==='ACTIVE'||x.maNhanSu===staffId).forEach(x=>{const o=new Option(x.hoTen+(x.trangThai==='ACTIVE'?'':' · đã ngừng'),x.hoTen);o.dataset.staffId=x.maNhanSu;select.appendChild(o)});
+    if(add)add.style.display='none';
+  }else{
+    (financeData.people||[]).filter(x=>x.loai==='BOTH'||x.loai===type).forEach(x=>select.appendChild(new Option(x.tenDoiTuong,x.tenDoiTuong)));
+    if(selected&&!Array.from(select.options).some(o=>o.value===selected))select.appendChild(new Option(selected,selected));
+    if(add)add.style.display='';
+  }
+  const target=staffId?Array.from(select.options).find(o=>o.dataset.staffId===staffId):Array.from(select.options).find(o=>o.value===selected);
+  if(target)select.value=target.value;
+  document.getElementById('formTransactionStaffId').value=target&&target.dataset.staffId||'';
+  t('formTransactionPersonLabel',salary?'Nhân sự nhận lương':(type==='CHI'?'Người nhận':'Người nộp'));
+  if(salary)renderTransactionJars(v('formTransactionJar'));
+  syncSalaryPlanOptions();
 }
 function getJarName(code){const x=(financeData.financialJars||[]).find(i=>i.code===code);return x?x.name:code||'Chưa cấu hình'}
 function fillJarSelect(id,selected){const select=document.getElementById(id);if(!select)return;select.innerHTML='';(financeData.financialJars||[]).forEach(x=>select.appendChild(new Option(x.name,x.code)));if(selected&&Array.from(select.options).some(o=>o.value===selected))select.value=selected}
-function renderTransactionJars(selected){const isExpense=v('formTransactionType')==='CHI',field=document.getElementById('formTransactionJarField');field.style.display=isExpense?'':'none';if(!isExpense){document.getElementById('formTransactionJar').innerHTML='';return}const category=(financeData.categories||[]).find(x=>x.maDanhMuc===v('formTransactionCategory')),jar=selected||(category&&category.maHuMacDinh)||'';fillJarSelect('formTransactionJar',jar)}
-function handleTransactionCategoryChange(){renderTransactionJars('')}
+function renderTransactionJars(selected){const isExpense=v('formTransactionType')==='CHI',field=document.getElementById('formTransactionJarField');field.style.display=isExpense?'':'none';if(!isExpense){document.getElementById('formTransactionJar').innerHTML='';return}const category=(financeData.categories||[]).find(x=>x.maDanhMuc===v('formTransactionCategory')),jar=selected||(category&&category.maHuMacDinh)||'';fillJarSelect('formTransactionJar',jar);if(isSalaryTransaction()){const staff=(financeData.staff||[]).find(x=>x.maNhanSu===v('formTransactionStaffId')),isOwner=staff&&String(staff.vaiTro||'').toLowerCase().includes('chủ cơ sở'),chosen=(financeData.financialJars||[]).find(x=>x.code===v('formTransactionJar'));if(!isOwner&&chosen&&chosen.systemRole==='OWNER_COMPENSATION'){const fallback=(financeData.financialJars||[]).find(x=>x.code==='VAN_HANH')||(financeData.financialJars||[]).find(x=>x.systemRole!=='OWNER_COMPENSATION'&&/lương trung tâm|lương nhân viên|vận hành/i.test(x.name||''));if(fallback)document.getElementById('formTransactionJar').value=fallback.code}}}
+function handleTransactionCategoryChange(){renderTransactionPeople('',v('formTransactionStaffId'));renderTransactionJars('')}
 function handleTransactionTypeChange(){if(v('formTransactionType')!=='CHI')setTransactionPlanLink('','');renderTransactionCategories();renderTransactionPeople('')}
+function handleTransactionPersonChange(){const o=document.getElementById('formTransactionPerson').selectedOptions[0];document.getElementById('formTransactionStaffId').value=o&&o.dataset.staffId||'';renderTransactionJars(v('formTransactionJar'));syncSalaryPlanOptions()}
+function syncSalaryPlanOptions(){const field=document.getElementById('formTransactionSalaryPlanField'),select=document.getElementById('formTransactionSalaryPlan');if(!field||!select)return;const salary=isSalaryTransaction(),staffId=v('formTransactionStaffId');field.style.display=salary?'':'none';if(!salary){select.innerHTML='';t('salaryPlanNote','');return}const current=v('formTransactionPlanId'),dateMonth=(v('formTransactionDate')||'').slice(0,7),planMonth=((financeData.monthlyFinance||{}).thang||''),items=((financeData.monthlyFinance||{}).items||[]).filter(x=>x.maDanhMuc==='CHI_LUONG'&&x.maNhanSu===staffId&&(!dateMonth||!planMonth||dateMonth===planMonth));select.innerHTML='<option value="">Không liên kết kế hoạch</option>'+items.map(x=>`<option value="${attr(x.maKeHoachChi)}">${esc(x.tenKhoanChi)} · còn ${money(x.conPhaiChi)}</option>`).join('');const chosen=items.find(x=>x.maKeHoachChi===current)||items.find(x=>x.nguonKeHoach==='NHANSU')||(items.length===1?items[0]:null);if(chosen){select.value=chosen.maKeHoachChi;setTransactionPlanLink(chosen.maKeHoachChi,chosen.tenKhoanChi)}else if(current&&!items.some(x=>x.maKeHoachChi===current))setTransactionPlanLink('','');t('salaryPlanNote',!staffId?'Chọn nhân sự để tìm khoản lương tháng.':items.length?'Phiếu chi sẽ cập nhật tiến độ khoản lương đã chọn.':'Chưa có kế hoạch lương của nhân sự trong tháng này.')}
+function handleSalaryPlanChange(){const item=((financeData.monthlyFinance||{}).items||[]).find(x=>x.maKeHoachChi===v('formTransactionSalaryPlan'));setTransactionPlanLink(item?item.maKeHoachChi:'',item?item.tenKhoanChi:'');if(item&&Number(item.conPhaiChi||0)>0&&!rawMoney('formTransactionAmount'))document.getElementById('formTransactionAmount').value=numberText(item.conPhaiChi)}
 function openQuickPersonModal(typeOverride){
   const type=typeOverride||v('formTransactionType');
   document.getElementById('formQuickPersonType').value=type;
@@ -638,6 +654,7 @@ function prepareVoucherImage(){
 function openTransactionModal(type){
   const isExpense=type==='CHI';
   document.getElementById('formTransactionId').value='';
+  document.getElementById('formTransactionStaffId').value='';
   setTransactionPlanLink('','');
   document.getElementById('formTransactionReceiptNo').value='';
   document.getElementById('formTransactionType').disabled=false;
@@ -646,12 +663,12 @@ function openTransactionModal(type){
   document.getElementById('formTransactionDate').value=dateToInput(new Date());
   document.getElementById('formTransactionAmount').value='';
   document.getElementById('formTransactionContent').value='';
-  renderTransactionPeople('');
   document.getElementById('formTransactionVoucher').value='';
   document.getElementById('formTransactionNote').value='';
   resetTransactionAttachment('');
   fillSourceSelect('formTransactionSource',false,'',financeData.centerSources);
   renderTransactionCategories();
+  renderTransactionPeople('');
   updateTransactionMethodNote();
   t('transactionModalTitle',isExpense?'Phiếu chi':'Phiếu thu');
   openModal('transactionModal')
@@ -659,7 +676,7 @@ function openTransactionModal(type){
 function setTransactionPlanLink(id,name){document.getElementById('formTransactionPlanId').value=id||'';document.getElementById('transactionPlanLink').style.display=id?'':'none';t('transactionPlanName',name||'')}
 function openPlanPayment(id){
   const item=((financeData.monthlyFinance||{}).items||[]).find(x=>x.maKeHoachChi===id);if(!item||Number(item.conPhaiChi||0)<=0)return;
-  openTransactionModal('CHI');setTransactionPlanLink(item.maKeHoachChi,item.tenKhoanChi);document.getElementById('formTransactionType').disabled=true;renderTransactionCategories(item.maDanhMuc);document.getElementById('formTransactionCategory').disabled=true;document.getElementById('formTransactionAmount').value=numberText(item.conPhaiChi);document.getElementById('formTransactionContent').value='Thanh toán '+item.tenKhoanChi;renderTransactionPeople(item.nguoiNhan||'');document.getElementById('formTransactionNote').value='Theo kế hoạch chi tháng '+formatMonthText((financeData.monthlyFinance||{}).thang||'');t('transactionModalTitle','Ghi nhận chi - '+item.tenKhoanChi)
+  openTransactionModal('CHI');setTransactionPlanLink(item.maKeHoachChi,item.tenKhoanChi);document.getElementById('formTransactionType').disabled=true;renderTransactionCategories(item.maDanhMuc);document.getElementById('formTransactionCategory').disabled=true;document.getElementById('formTransactionAmount').value=numberText(item.conPhaiChi);document.getElementById('formTransactionContent').value='Thanh toán '+item.tenKhoanChi;renderTransactionPeople(item.nguoiNhan||'',item.maNhanSu||'');document.getElementById('formTransactionNote').value='Theo kế hoạch chi tháng '+formatMonthText((financeData.monthlyFinance||{}).thang||'');t('transactionModalTitle','Ghi nhận chi - '+item.tenKhoanChi)
 }
 function editTransaction(id){
   const x=(financeData.transactions||[]).find(i=>i.maGiaoDich===id);
@@ -676,7 +693,7 @@ function editTransaction(id){
   document.getElementById('formTransactionCategory').disabled=!!x.maKeHoachChi;
   document.getElementById('formTransactionAmount').value=numberText(x.soTien);
   document.getElementById('formTransactionContent').value=x.noiDung||'';
-  renderTransactionPeople(x.nguoiNopNhan||'');
+  renderTransactionPeople(x.nguoiNopNhan||'',x.maNhanSu||'');
   document.getElementById('formTransactionVoucher').value=x.soChungTu||'';
   document.getElementById('formTransactionNote').value=x.ghiChu||'';
   resetTransactionAttachment(x.chungTuUrl||'');
@@ -687,7 +704,8 @@ function editTransaction(id){
 function renderTransactionCategories(selected){const type=v('formTransactionType'),s=document.getElementById('formTransactionCategory');s.innerHTML='';(financeData.categories||[]).filter(x=>x.phamVi==='TRUNG_TAM'&&x.loai===type&&x.trangThai==='ACTIVE').forEach(x=>s.appendChild(new Option(x.tenDanhMuc,x.maDanhMuc)));if(selected)s.value=selected;renderTransactionJars('')}
 function updateTransactionMethodNote(){const code=v('formTransactionSource'),bank=['VIETCOMBANK','VIETINBANK','BIDV'].includes(code);t('transactionMethodNote',code?'Hình thức: '+(bank?'Chuyển khoản':'Tiền mặt'):'')}
 function saveTransaction(printAfter){
-  const data={maGiaoDich:v('formTransactionId'),maKeHoachChi:v('formTransactionPlanId'),loai:v('formTransactionType'),ngayGiaoDich:v('formTransactionDate'),maNguonTien:v('formTransactionSource'),maDanhMuc:v('formTransactionCategory'),maHuTaiChinh:v('formTransactionType')==='CHI'?v('formTransactionJar'):'',soTien:rawMoney('formTransactionAmount'),noiDung:v('formTransactionContent').trim(),nguoiNopNhan:v('formTransactionPerson').trim(),soChungTu:v('formTransactionVoucher').trim(),ghiChu:v('formTransactionNote').trim()};
+  const data={maGiaoDich:v('formTransactionId'),maKeHoachChi:v('formTransactionPlanId'),maNhanSu:v('formTransactionStaffId'),loai:v('formTransactionType'),ngayGiaoDich:v('formTransactionDate'),maNguonTien:v('formTransactionSource'),maDanhMuc:v('formTransactionCategory'),maHuTaiChinh:v('formTransactionType')==='CHI'?v('formTransactionJar'):'',soTien:rawMoney('formTransactionAmount'),noiDung:v('formTransactionContent').trim(),nguoiNopNhan:v('formTransactionPerson').trim(),soChungTu:v('formTransactionVoucher').trim(),ghiChu:v('formTransactionNote').trim()};
+  if(data.loai==='CHI'&&data.maDanhMuc==='CHI_LUONG'&&!data.maNhanSu){showNotification('Vui lòng chọn người nhận từ danh sách nhân sự.','warning');return}
   if(!data.ngayGiaoDich||!data.maNguonTien||!data.maDanhMuc||!data.noiDung||Number(data.soTien)<=0||(data.loai==='CHI'&&!data.maHuTaiChinh)){showNotification('Vui lòng nhập đầy đủ ngày lập, nguồn tiền, danh mục, hũ tài chính, nội dung và số tiền.','warning');return}
   const receiptDraft={loai:data.loai,ngayGiaoDich:data.ngayGiaoDich,ngayDisplay:formatDateDisplayClient(data.ngayGiaoDich),tenNguonTien:getSourceNameByCode(data.maNguonTien),tenDanhMuc:getCategoryNameByCode(data.maDanhMuc),maHuTaiChinh:data.maHuTaiChinh,noiDung:data.noiDung,nguoiNopNhan:data.nguoiNopNhan,soChungTu:data.soChungTu,ghiChu:data.ghiChu,soTien:Number(data.soTien),trangThai:'HOAT_DONG'};
   const pendingPrintWindow=printAfter?window.open('','_blank','width=850,height=900'):null;

@@ -21,6 +21,7 @@ var CashbookDomain = (function () {
       loai: text(input.loai, 10).toUpperCase(),
       maDanhMuc: text(input.maDanhMuc, 80),
       maKeHoachChi: text(input.maKeHoachChi, 80),
+      maNhanSu: text(input.maNhanSu, 80),
       maHuTaiChinh: text(input.maHuTaiChinh, 40).toUpperCase(),
       maNguonTien: text(input.maNguonTien, 40).toUpperCase(),
       ngayGiaoDich: text(input.ngayGiaoDich, 10),
