@@ -2966,15 +2966,29 @@ function getDefaultDanhMucThuChi_() {
     ['THU_KHAC', 'THU', 'Thu khác', 99, ''],
     ['CHI_LUONG', 'CHI', 'Lương giáo viên, nhân viên', 1, 'LUONG'],
     ['CHI_BAN_TRU', 'CHI', 'Cơm bán trú, người nấu ăn', 2, 'VAN_HANH'],
-    ['CHI_THUE', 'CHI', 'Thuê mặt bằng', 3, 'VAN_HANH'],
-    ['CHI_DIEN_NUOC', 'CHI', 'Điện, nước, Internet', 4, 'VAN_HANH'],
-    ['CHI_HOC_CU', 'CHI', 'Học cụ, tài liệu', 5, 'VAN_HANH'],
-    ['CHI_THUE_PHI', 'CHI', 'Thuế, phí và nghĩa vụ tài chính', 6, 'VAN_HANH'],
-    ['CHI_GIA_DINH', 'CHI', 'Chi gia đình / chủ sở hữu', 7, 'LOI_NHUAN'],
-    ['CHI_MARKETING', 'CHI', 'Marketing, quảng cáo', 8, 'DAU_TU'],
-    ['CHI_SUA_CHUA', 'CHI', 'Sửa chữa, bảo trì', 9, 'VAN_HANH'],
+    ['CHI_XE_16_CHO', 'CHI', 'Thuê xe 16 chỗ', 3, 'VAN_HANH'],
+    ['CHI_XE_30_CHO', 'CHI', 'Thuê xe 30 chỗ', 4, 'VAN_HANH'],
+    ['CHI_THUE', 'CHI', 'Thuê mặt bằng', 5, 'VAN_HANH'],
+    ['CHI_DIEN_NUOC', 'CHI', 'Điện, nước, Internet', 6, 'VAN_HANH'],
+    ['CHI_HOC_CU', 'CHI', 'Học cụ, tài liệu', 7, 'VAN_HANH'],
+    ['CHI_THUE_PHI', 'CHI', 'Thuế, phí và nghĩa vụ tài chính', 8, 'VAN_HANH'],
+    ['CHI_GIA_DINH', 'CHI', 'Chi gia đình / chủ sở hữu', 9, 'LOI_NHUAN'],
+    ['CHI_MARKETING', 'CHI', 'Marketing, quảng cáo', 10, 'DAU_TU'],
+    ['CHI_SUA_CHUA', 'CHI', 'Sửa chữa, bảo trì', 11, 'VAN_HANH'],
     ['CHI_KHAC', 'CHI', 'Chi khác', 99, 'VAN_HANH']
   ];
+}
+
+function isMonthlyPlanRequiredCategory_(maDanhMuc) {
+  return ['CHI_LUONG', 'CHI_BAN_TRU', 'CHI_XE_16_CHO', 'CHI_XE_30_CHO']
+    .indexOf(String(maDanhMuc || '').trim().toUpperCase()) !== -1;
+}
+
+function normalizeExpenseGroupForCategory_(maDanhMuc, requestedGroup) {
+  const category = String(maDanhMuc || '').trim().toUpperCase();
+  if (category === 'CHI_LUONG') return 'LUONG';
+  if (['CHI_BAN_TRU', 'CHI_XE_16_CHO', 'CHI_XE_30_CHO'].indexOf(category) !== -1) return 'VAN_HANH';
+  return normalizeNhomChiTaiChinh_(requestedGroup);
 }
 
 function normalizeMaHuTaiChinh_(value) {
@@ -3100,7 +3114,7 @@ function ensureQuanLyTaiChinhSheets_() {
 function ensureThuChiSheets_(maKyHoc) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const props = PropertiesService.getScriptProperties();
-  const schemaVersion = '14';
+  const schemaVersion = '15';
   const schemaKey = 'THUCHI_SCHEMA_VERSION';
   const sourceKey = maKyHoc
     ? 'THUCHI_NGUON_INIT_' + String(maKyHoc || '').trim()
@@ -3179,6 +3193,7 @@ function ensureThuChiSheets_(maKyHoc) {
         missingCategories,
         getDanhMucThuChiHeaders_()
       );
+      bumpDataVersion_();
     }
 
     if (maKyHoc) {
@@ -3463,7 +3478,7 @@ function buildKeHoachChiThangData_(maKyHoc, yearMonth, activeTransactions, closi
         thang: yearMonth,
         maDanhMuc: String(row.MaDanhMuc || '').trim(),
         tenKhoanChi: String(row.TenKhoanChi || '').trim(),
-        nhomChi: normalizeNhomChiTaiChinh_(row.NhomChi),
+        nhomChi: normalizeExpenseGroupForCategory_(row.MaDanhMuc, row.NhomChi),
         maNhanSu: staffId,
         nguoiNhan: staffId && staffMap[staffId] ? staffMap[staffId].hoTen : String(row.NguoiNhan || '').trim(),
         soTienPhaiChi: planned,
@@ -3648,7 +3663,7 @@ function saveKeHoachChiThang(token, data) {
     row[index.Thang] = yearMonth;
     row[index.MaDanhMuc] = categoryId;
     row[index.TenKhoanChi] = name;
-    row[index.NhomChi] = normalizeNhomChiTaiChinh_(data.nhomChi);
+    row[index.NhomChi] = normalizeExpenseGroupForCategory_(categoryId, data.nhomChi);
     row[index.NguoiNhan] = String(data.nguoiNhan || '').trim();
     row[index.SoTienPhaiChi] = amount;
     row[index.HanThanhToan] = dueText ? parseInputDate_(dueText) : '';
@@ -3854,7 +3869,7 @@ function getKhoanChiDinhKyList_(maKyHoc, yearMonth) {
     const paid = plan ? number_(paidMap[String(plan.MaKeHoachChi || '').trim()]) : 0;
     return {
       maKhoanDinhKy: id, tenKhoanChi: String(row.TenKhoanChi || '').trim(),
-      maDanhMuc: String(row.MaDanhMuc || '').trim(), nhomChi: normalizeNhomChiTaiChinh_(row.NhomChi),
+      maDanhMuc: String(row.MaDanhMuc || '').trim(), nhomChi: normalizeExpenseGroupForCategory_(row.MaDanhMuc, row.NhomChi),
       maNhanSu: maNhanSu, nguoiNhan: maNhanSu && staffMap[maNhanSu] ? staffMap[maNhanSu].hoTen : '',
       loaiKhoanNhanSu: String(row.LoaiKhoanNhanSu || '').trim().toUpperCase(),
       phuongPhapTinh: String(row.PhuongPhapTinh || 'FIXED').trim().toUpperCase(), dinhMuc: number_(row.DinhMuc),
@@ -3864,9 +3879,111 @@ function getKhoanChiDinhKyList_(maKyHoc, yearMonth) {
       maKeHoachChi: plan ? String(plan.MaKeHoachChi || '').trim() : '', soTienPhaiChi: planned, soTienDaChi: paid,
       conPhaiChi: Math.max(planned - paid, 0), vuotKeHoach: Math.max(paid - planned, 0),
       tienDo: planned > 0 ? paid * 100 / planned : (paid > 0 ? 100 : 0),
+      hanThanhToan: plan && plan.HanThanhToan
+        ? formatDateForInput_(toDateOnly_(plan.HanThanhToan))
+        : (/^\d{4}-(0[1-9]|1[0-2])$/.test(month) ? financeDueDate_(month, row.NgayThanhToan) : ''),
       trangThaiThanhToan: !plan ? 'CHUA_TAO' : (paid > planned ? 'VUOT' : (planned > 0 && paid >= planned ? 'DA_CHI' : (paid > 0 ? 'MOT_PHAN' : 'CHUA_CHI')))
     };
   }).filter(item => item.maKhoanDinhKy && item.tenKhoanChi).sort((a, b) => a.tenKhoanChi.localeCompare(b.tenKhoanChi, 'vi'));
+}
+
+/**
+ * Trung tâm nhắc việc dùng chung khi người dùng vào hệ thống.
+ * Mỗi nguồn dữ liệu trả về cùng một cấu trúc để sau này có thể bổ sung
+ * công việc định kỳ mà không phải thay đổi phần hiển thị notification.
+ */
+function getStartupReminders(token) {
+  const session = requireSession_(token);
+  if (!SecurityService.hasPermission(session.vaiTro, 'finance.read')) {
+    return jsonResponse_({ items: [], generatedAt: new Date().toISOString() });
+  }
+
+  const today = Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd');
+  const month = today.slice(0, 7);
+  const context = {
+    maKyHoc: session.maKyHoc,
+    today: today,
+    month: month,
+    recurringExpenses: getKhoanChiDinhKyList_(session.maKyHoc, month)
+  };
+
+  return jsonResponse_({
+    items: buildStartupReminderItems_(context),
+    generatedAt: new Date().toISOString()
+  });
+}
+
+function buildStartupReminderItems_(context) {
+  const providers = [buildRecurringExpenseReminderItems_];
+  const seen = {};
+  return providers.reduce((items, provider) => {
+    return items.concat(provider(context) || []);
+  }, []).filter(item => {
+    const id = String(item && item.id || '').trim();
+    if (!id || seen[id]) return false;
+    seen[id] = true;
+    return true;
+  }).sort((a, b) => {
+    if (a.level !== b.level) return a.level === 'OVERDUE' ? -1 : 1;
+    return String(a.dueDate || '').localeCompare(String(b.dueDate || ''));
+  });
+}
+
+function buildRecurringExpenseReminderItems_(context) {
+  const month = String(context && context.month || '').trim();
+  const today = String(context && context.today || '').trim();
+  const rows = context && Array.isArray(context.recurringExpenses) ? context.recurringExpenses : [];
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || !/^\d{4}-\d{2}-\d{2}$/.test(today)) return [];
+
+  return rows.filter(item => {
+    return String(item.trangThai || '').toUpperCase() === 'ACTIVE' &&
+      (!item.tuThang || item.tuThang <= month) &&
+      (!item.denThang || item.denThang >= month) &&
+      ['DA_CHI', 'VUOT'].indexOf(String(item.trangThaiThanhToan || '').toUpperCase()) === -1;
+  }).map(item => {
+    const dueDate = String(item.hanThanhToan || financeDueDate_(month, item.ngayThanhToan)).slice(0, 10);
+    const daysUntilDue = financeDateDifferenceDays_(today, dueDate);
+    if (daysUntilDue > 3) return null;
+
+    const overdue = daysUntilDue < 0;
+    const remaining = item.maKeHoachChi
+      ? Math.max(0, number_(item.conPhaiChi))
+      : (String(item.phuongPhapTinh || '').toUpperCase() === 'FIXED' ? Math.max(0, number_(item.dinhMuc)) : 0);
+    const dueLabel = formatReminderDate_(dueDate);
+    const timing = overdue
+      ? 'đã trễ ' + Math.abs(daysUntilDue) + ' ngày'
+      : (daysUntilDue === 0 ? 'đến hạn hôm nay' : (daysUntilDue === 1 ? 'đến hạn ngày mai' : 'còn ' + daysUntilDue + ' ngày'));
+    const amountText = remaining > 0 ? ' · Còn phải chi ' + formatMoneyText_(remaining) : '';
+    const planText = String(item.trangThaiThanhToan || '').toUpperCase() === 'CHUA_TAO'
+      ? ' · Chưa tạo kế hoạch tháng'
+      : '';
+
+    return {
+      id: 'RECURRING_EXPENSE|' + item.maKhoanDinhKy + '|' + month,
+      source: 'RECURRING_EXPENSE',
+      level: overdue ? 'OVERDUE' : 'DUE_SOON',
+      title: overdue ? 'Khoản chi quá hạn' : 'Khoản chi sắp đến hạn',
+      message: item.tenKhoanChi + ' — hạn ' + dueLabel + ', ' + timing + amountText + planText,
+      dueDate: dueDate,
+      daysUntilDue: daysUntilDue,
+      amountRemaining: remaining,
+      referenceId: item.maKhoanDinhKy
+    };
+  }).filter(Boolean);
+}
+
+function financeDateDifferenceDays_(fromDate, toDate) {
+  function serial(value) {
+    const parts = String(value || '').split('-').map(Number);
+    if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return NaN;
+    return Date.UTC(parts[0], parts[1] - 1, parts[2]);
+  }
+  return Math.round((serial(toDate) - serial(fromDate)) / 86400000);
+}
+
+function formatReminderDate_(dateText) {
+  const parts = String(dateText || '').split('-');
+  return parts.length === 3 ? parts[2] + '/' + parts[1] + '/' + parts[0] : String(dateText || '');
 }
 
 function saveKhoanChiDinhKy(token, data) {
@@ -3896,7 +4013,7 @@ function saveKhoanChiDinhKy(token, data) {
   const lock = LockService.getScriptLock(); if (!lock.tryLock(30000)) throw new Error('Hệ thống đang cập nhật khoản chi định kỳ.');
   try {
     upsertFinanceObject_(SHEET_KHOANCHI_DINHKY, getKhoanChiDinhKyHeaders_(), 'MaKhoanDinhKy', id, {
-      MaKyHoc: session.maKyHoc, TenKhoanChi: name, MaDanhMuc: categoryId, NhomChi: normalizeNhomChiTaiChinh_(data.nhomChi),
+      MaKyHoc: session.maKyHoc, TenKhoanChi: name, MaDanhMuc: categoryId, NhomChi: normalizeExpenseGroupForCategory_(categoryId, data.nhomChi),
       MaNhanSu: maNhanSu, LoaiKhoanNhanSu: loaiKhoanNhanSu,
       PhuongPhapTinh: method, DinhMuc: recurringRate, NgayThanhToan: Math.max(1, Math.min(31, number_(data.ngayThanhToan) || 28)),
       BatBuoc: toBoolean_(data.batBuoc) ? 'Có' : 'Không', TuThang: String(data.tuThang || '').trim(), DenThang: String(data.denThang || '').trim(),
@@ -3947,7 +4064,7 @@ function syncKhoanChiDinhKyPlan_(session, id, yearMonth) {
   try {
     upsertFinanceObject_(SHEET_KEHOACH_CHI_THANG, getKeHoachChiThangHeaders_(), 'MaKeHoachChi', planId, {
       MaKyHoc: session.maKyHoc, Thang: yearMonth, MaDanhMuc: String(row.MaDanhMuc || '').trim(),
-      TenKhoanChi: String(row.TenKhoanChi || '').trim(), NhomChi: normalizeNhomChiTaiChinh_(row.NhomChi),
+      TenKhoanChi: String(row.TenKhoanChi || '').trim(), NhomChi: normalizeExpenseGroupForCategory_(row.MaDanhMuc, row.NhomChi),
       MaNhanSu: maNhanSu, NguoiNhan: staff ? staff.hoTen : '', SoTienPhaiChi: Math.max(0, amount),
       HanThanhToan: parseInputDate_(financeDueDate_(yearMonth, row.NgayThanhToan)), BatBuoc: toBoolean_(row.BatBuoc) ? 'Có' : 'Không',
       NguonKeHoach: 'DINHKY', MaThamChieu: reference, GhiChu: String(row.GhiChu || '').trim(), TrangThai: 'ACTIVE'
@@ -4036,7 +4153,7 @@ function taoKeHoachTaiChinhTuDanhMuc(token, yearMonth) {
     if (item.phuongPhapTinh === 'PERCENT_REVENUE') amount = item.dinhMuc * number_(config.doanhThuDuKien) / 100;
     if (item.phuongPhapTinh === 'MANUAL') amount = 0;
     rows.push({ MaKeHoachChi: 'KHCHI_' + Utilities.getUuid().slice(0, 10).toUpperCase(), MaKyHoc: session.maKyHoc, Thang: yearMonth,
-      MaDanhMuc: item.maDanhMuc, TenKhoanChi: item.tenKhoanChi, NhomChi: item.nhomChi, MaNhanSu: item.maNhanSu, NguoiNhan: item.nguoiNhan, SoTienPhaiChi: amount,
+      MaDanhMuc: item.maDanhMuc, TenKhoanChi: item.tenKhoanChi, NhomChi: normalizeExpenseGroupForCategory_(item.maDanhMuc, item.nhomChi), MaNhanSu: item.maNhanSu, NguoiNhan: item.nguoiNhan, SoTienPhaiChi: amount,
       HanThanhToan: parseInputDate_(financeDueDate_(yearMonth, item.ngayThanhToan)), BatBuoc: item.batBuoc ? 'Có' : 'Không',
       NguonKeHoach: 'DINHKY', MaThamChieu: ref, GhiChu: item.ghiChu, TrangThai: 'ACTIVE', CreatedAt: now, UpdatedAt: now });
   });
@@ -5526,6 +5643,7 @@ function saveThuChiGiaoDich(token, data) {
   if (!category) {
     throw new Error('Danh mục không tồn tại, đã ngừng sử dụng hoặc không đúng loại giao dịch.');
   }
+  const requiresMonthlyPlan = loai === 'CHI' && isMonthlyPlanRequiredCategory_(maDanhMuc);
   let selectedStaff = null;
   if (loai === 'CHI' && maDanhMuc === 'CHI_LUONG') {
     selectedStaff = getNhanSuTaiChinhList_(session.maKyHoc).find(item => item.maNhanSu === maNhanSu && (item.trangThai === 'ACTIVE' || !!maGiaoDich)) || null;
@@ -5543,6 +5661,22 @@ function saveThuChiGiaoDich(token, data) {
     }
   } else {
     maNhanSu = '';
+  }
+  if (requiresMonthlyPlan && !maKeHoachChi) {
+    const month = ngayText.slice(0, 7);
+    const matchingPlans = readObjectsNoCache_(SHEET_KEHOACH_CHI_THANG).filter(row =>
+      String(row.MaKyHoc || '').trim() === session.maKyHoc &&
+      financeYearMonthValue_(row.Thang) === month &&
+      String(row.MaDanhMuc || '').trim() === maDanhMuc &&
+      String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED'
+    );
+    if (matchingPlans.length === 1) {
+      maKeHoachChi = String(matchingPlans[0].MaKeHoachChi || '').trim();
+    } else if (!matchingPlans.length) {
+      throw new Error('Danh mục này là khoản chi định kỳ. Hãy tạo kế hoạch tháng trước khi lập phiếu chi.');
+    } else {
+      throw new Error('Danh mục này có nhiều khoản trong kế hoạch tháng. Vui lòng chọn đúng khoản kế hoạch cần thanh toán.');
+    }
   }
   const activeJarCodes = getDanhMucHuTaiChinhList_(false).reduce((map, item) => { map[item.code] = true; return map; }, {});
   if (loai === 'CHI' && requestedJar && !activeJarCodes[normalizeMaHuTaiChinh_(requestedJar)]) {
@@ -5574,6 +5708,9 @@ function saveThuChiGiaoDich(token, data) {
         String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED';
     });
     if (!plan) throw new Error('Khoản kế hoạch chi không còn tồn tại.');
+    if (financeYearMonthValue_(plan.Thang) !== ngayText.slice(0, 7)) {
+      throw new Error('Khoản kế hoạch phải thuộc cùng tháng với ngày lập phiếu chi.');
+    }
     if (String(plan.MaDanhMuc || '').trim() !== maDanhMuc) {
       throw new Error('Danh mục phiếu chi phải trùng với danh mục của khoản kế hoạch.');
     }

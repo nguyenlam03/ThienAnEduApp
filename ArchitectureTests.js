@@ -118,6 +118,32 @@ function runArchitectureUnitTests() {
     equal(number_(String('2,5').replace(',', '.')), 2.5, 'Định mức phần trăm bị đọc sai');
   });
 
+  test('Recurring expense reminders classify due and overdue items', function () {
+    var reminders = buildRecurringExpenseReminderItems_({
+      month: '2026-08',
+      today: '2026-08-14',
+      recurringExpenses: [
+        { maKhoanDinhKy: 'K1', tenKhoanChi: 'Electricity', trangThai: 'ACTIVE', ngayThanhToan: 16, phuongPhapTinh: 'FIXED', dinhMuc: 3000000, trangThaiThanhToan: 'CHUA_TAO' },
+        { maKhoanDinhKy: 'K2', tenKhoanChi: 'Internet', trangThai: 'ACTIVE', ngayThanhToan: 10, maKeHoachChi: 'KH2', conPhaiChi: 300000, trangThaiThanhToan: 'CHUA_CHI' },
+        { maKhoanDinhKy: 'K3', tenKhoanChi: 'Paid', trangThai: 'ACTIVE', ngayThanhToan: 12, maKeHoachChi: 'KH3', conPhaiChi: 0, trangThaiThanhToan: 'DA_CHI' }
+      ]
+    });
+    equal(reminders.length, 2, 'Unexpected reminder count');
+    equal(reminders[0].level, 'DUE_SOON', 'Due-soon item not classified');
+    equal(reminders[0].daysUntilDue, 2, 'Due-soon day count is wrong');
+    equal(reminders[1].level, 'OVERDUE', 'Overdue item not classified');
+    equal(reminders[1].daysUntilDue, -4, 'Overdue day count is wrong');
+  });
+
+  test('Khoản vận hành định kỳ bắt buộc liên kết kế hoạch tháng', function () {
+    equal(isMonthlyPlanRequiredCategory_('CHI_BAN_TRU'), true, 'Cơm bán trú chưa bắt buộc kế hoạch');
+    equal(isMonthlyPlanRequiredCategory_('CHI_XE_16_CHO'), true, 'Xe 16 chỗ chưa bắt buộc kế hoạch');
+    equal(isMonthlyPlanRequiredCategory_('CHI_XE_30_CHO'), true, 'Xe 30 chỗ chưa bắt buộc kế hoạch');
+    equal(isMonthlyPlanRequiredCategory_('CHI_KHAC'), false, 'Chi khác bị bắt buộc kế hoạch ngoài dự kiến');
+    equal(normalizeExpenseGroupForCategory_('CHI_BAN_TRU', 'BAN_TRU'), 'VAN_HANH', 'Cơm bán trú chưa về nhóm vận hành');
+    equal(normalizeExpenseGroupForCategory_('CHI_XE_16_CHO', 'KHAC'), 'VAN_HANH', 'Xe 16 chỗ chưa về nhóm vận hành');
+  });
+
   var failed = results.filter(function (item) { return !item.passed; }).length;
   return jsonResponse_({ passed: results.length - failed, failed: failed, total: results.length, results: results });
 }

@@ -268,10 +268,47 @@
     const APP_CACHE_ENABLED = <?!= JSON.stringify(cacheEnabled) ?>;
     const APP_CURRENT_USER_ROLE = <?!= JSON.stringify(currentUserRole) ?>;
     let accountList = [];
+    let startupRemindersRequested = false;
 
     document.addEventListener('DOMContentLoaded', function () {
       AppTheme.bindSelect(document.getElementById('headerThemeSelect'));
+      window.setTimeout(loadStartupReminders, 350);
     });
+
+    function loadStartupReminders() {
+      if (startupRemindersRequested) return;
+      startupRemindersRequested = true;
+      google.script.run
+        .withSuccessHandler(function (response) {
+          const data = parseServer(response) || {};
+          const items = Array.isArray(data.items) ? data.items : [];
+          showStartupReminderGroup(
+            items.filter(function (item) { return item.level === 'OVERDUE'; }),
+            'error',
+            'Nhắc việc đã quá hạn'
+          );
+          showStartupReminderGroup(
+            items.filter(function (item) { return item.level === 'DUE_SOON'; }),
+            'warning',
+            'Nhắc việc đến hạn trong 3 ngày'
+          );
+        })
+        .withFailureHandler(function (error) {
+          console.warn('Không tải được nhắc việc khi khởi động:', getErrorMessage(error));
+        })
+        .getStartupReminders(APP_TOKEN);
+    }
+
+    function showStartupReminderGroup(items, type, title) {
+      if (!items.length) return;
+      const message = items.map(function (item) {
+        return '• ' + String(item.message || '');
+      }).join('\n');
+      showNotification(message, type, {
+        title: title + ' (' + items.length + ')',
+        duration: 15000
+      });
+    }
 
     function changeAppTheme(theme) {
       const appliedTheme = AppTheme.set(theme);
