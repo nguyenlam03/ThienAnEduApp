@@ -3877,6 +3877,9 @@ function saveKhoanChiDinhKy(token, data) {
   const methods = ['FIXED', 'PER_STUDENT', 'PERCENT_REVENUE', 'MANUAL'];
   const method = String(data.phuongPhapTinh || 'FIXED').trim().toUpperCase();
   if (methods.indexOf(method) === -1) throw new Error('Phương pháp tính khoản chi không hợp lệ.');
+  const recurringRate = method === 'PERCENT_REVENUE'
+    ? Math.max(0, number_(String(data.dinhMuc === undefined ? '' : data.dinhMuc).replace(',', '.')))
+    : Math.max(0, moneyNumber_(data.dinhMuc));
   const category = readObjectsNoCache_(SHEET_DANHMUC_THUCHI).find(row => String(row.MaDanhMuc || '').trim() === categoryId && String(row.Loai || '').trim().toUpperCase() === 'CHI');
   if (!category) throw new Error('Danh mục chi không hợp lệ.');
   let maNhanSu = '';
@@ -3895,7 +3898,7 @@ function saveKhoanChiDinhKy(token, data) {
     upsertFinanceObject_(SHEET_KHOANCHI_DINHKY, getKhoanChiDinhKyHeaders_(), 'MaKhoanDinhKy', id, {
       MaKyHoc: session.maKyHoc, TenKhoanChi: name, MaDanhMuc: categoryId, NhomChi: normalizeNhomChiTaiChinh_(data.nhomChi),
       MaNhanSu: maNhanSu, LoaiKhoanNhanSu: loaiKhoanNhanSu,
-      PhuongPhapTinh: method, DinhMuc: Math.max(0, number_(data.dinhMuc)), NgayThanhToan: Math.max(1, Math.min(31, number_(data.ngayThanhToan) || 28)),
+      PhuongPhapTinh: method, DinhMuc: recurringRate, NgayThanhToan: Math.max(1, Math.min(31, number_(data.ngayThanhToan) || 28)),
       BatBuoc: toBoolean_(data.batBuoc) ? 'Có' : 'Không', TuThang: String(data.tuThang || '').trim(), DenThang: String(data.denThang || '').trim(),
       TrangThai: String(data.trangThai || 'ACTIVE').trim().toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE', GhiChu: String(data.ghiChu || '').trim()
     });

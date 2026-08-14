@@ -113,6 +113,11 @@ function runArchitectureUnitTests() {
     equal(result.remaining, 4000000, 'Sai số tiền gia đình thực còn lại');
   });
 
+  test('Định mức khoản chi đọc đúng tiền có dấu phân cách hàng nghìn', function () {
+    equal(moneyNumber_('10.000.000'), 10000000, 'Định mức tiền bị đọc sai');
+    equal(number_(String('2,5').replace(',', '.')), 2.5, 'Định mức phần trăm bị đọc sai');
+  });
+
   var failed = results.filter(function (item) { return !item.passed; }).length;
   return jsonResponse_({ passed: results.length - failed, failed: failed, total: results.length, results: results });
 }
