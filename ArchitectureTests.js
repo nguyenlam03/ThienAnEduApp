@@ -144,6 +144,27 @@ function runArchitectureUnitTests() {
     equal(normalizeExpenseGroupForCategory_('CHI_XE_16_CHO', 'KHAC'), 'VAN_HANH', 'Xe 16 chỗ chưa về nhóm vận hành');
   });
 
+  test('Nghĩa vụ kế hoạch tháng được phân bổ đúng hũ tài chính', function () {
+    var jars = [
+      { code: 'VAN_HANH', systemRole: '' },
+      { code: 'LUONG_CHU', systemRole: 'OWNER_COMPENSATION' },
+      { code: 'DAU_TU', systemRole: '' }
+    ];
+    var categoryJarMap = {
+      CHI_LUONG: 'LUONG_CHU',
+      CHI_BAN_TRU: 'VAN_HANH',
+      CHI_DAU_TU: 'DAU_TU'
+    };
+    var staffMap = {
+      NS_OWNER: { vaiTro: 'Chủ cơ sở' },
+      NS_TEACHER: { vaiTro: 'Giáo viên' }
+    };
+    equal(getHuTaiChinhCodeForPlanItem_({ maDanhMuc: 'CHI_LUONG', maNhanSu: 'NS_OWNER' }, categoryJarMap, jars, staffMap), 'LUONG_CHU', 'Lương chủ cơ sở chưa vào hũ lương chủ');
+    equal(getHuTaiChinhCodeForPlanItem_({ maDanhMuc: 'CHI_LUONG', maNhanSu: 'NS_TEACHER' }, categoryJarMap, jars, staffMap), 'VAN_HANH', 'Lương giáo viên chưa vào hũ vận hành');
+    equal(getHuTaiChinhCodeForPlanItem_({ maDanhMuc: 'CHI_BAN_TRU' }, categoryJarMap, jars, staffMap), 'VAN_HANH', 'Chi bán trú chưa vào hũ vận hành');
+    equal(getHuTaiChinhCodeForPlanItem_({ maDanhMuc: 'CHI_DAU_TU' }, categoryJarMap, jars, staffMap), 'DAU_TU', 'Chi đầu tư chưa vào đúng hũ cấu hình');
+  });
+
   var failed = results.filter(function (item) { return !item.passed; }).length;
   return jsonResponse_({ passed: results.length - failed, failed: failed, total: results.length, results: results });
 }

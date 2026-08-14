@@ -147,6 +147,10 @@
     animation: app-notification-countdown var(--notification-duration, 5000ms) linear forwards;
   }
 
+  .app-notification.paused .app-notification-progress::after {
+    animation-play-state: paused;
+  }
+
   @keyframes app-notification-countdown {
     from { transform: scaleX(1); }
     to { transform: scaleX(0); }
@@ -235,6 +239,35 @@
       }
     }
 
+    function armNotificationTimer(id, record) {
+      if (!record || record.remaining <= 0) {
+        closeNotification(id);
+        return;
+      }
+      record.startedAt = Date.now();
+      record.timer = global.setTimeout(function () {
+        closeNotification(id);
+      }, record.remaining);
+    }
+
+    function pauseNotification(id) {
+      const record = activeNotifications.get(id);
+      if (!record || record.paused) return;
+      if (record.timer) global.clearTimeout(record.timer);
+      record.remaining = Math.max(0, record.remaining - (Date.now() - record.startedAt));
+      record.timer = null;
+      record.paused = true;
+      record.element.classList.add('paused');
+    }
+
+    function resumeNotification(id) {
+      const record = activeNotifications.get(id);
+      if (!record || !record.paused) return;
+      record.paused = false;
+      record.element.classList.remove('paused');
+      armNotificationTimer(id, record);
+    }
+
     function showNotification(message, type, options) {
       const text = String(message == null ? '' : message).trim();
       if (!text) return '';
@@ -290,20 +323,28 @@
       progress.className = 'app-notification-progress';
       progress.setAttribute('aria-hidden', 'true');
 
+      notification.addEventListener('mouseenter', function () {
+        pauseNotification(id);
+      });
+      notification.addEventListener('mouseleave', function () {
+        resumeNotification(id);
+      });
+
       notification.appendChild(icon);
       notification.appendChild(content);
       notification.appendChild(closeButton);
       notification.appendChild(progress);
       container.appendChild(notification);
 
-      const timer = global.setTimeout(function () {
-        closeNotification(id);
-      }, duration);
-
-      activeNotifications.set(id, {
+      const record = {
         element: notification,
-        timer: timer
-      });
+        timer: null,
+        remaining: duration,
+        startedAt: Date.now(),
+        paused: false
+      };
+      activeNotifications.set(id, record);
+      armNotificationTimer(id, record);
 
       global.requestAnimationFrame(function () {
         notification.classList.add('show');

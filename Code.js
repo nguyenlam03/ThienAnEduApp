@@ -4637,6 +4637,29 @@ function getHuTaiChinhCodeForTransaction_(transaction, planGroupMap, categoryJar
   return 'VAN_HANH';
 }
 
+function getHuTaiChinhCodeForPlanItem_(planItem, categoryJarMap, jarDefinitions, staffMap) {
+  const categoryCode = String(planItem && planItem.maDanhMuc || '').trim().toUpperCase();
+  const availableJars = jarDefinitions || [];
+  if (categoryCode === 'CHI_LUONG' && planItem.maNhanSu) {
+    const staff = staffMap[String(planItem.maNhanSu || '').trim()] || null;
+    const isOwner = staff && normalizeText_(staff.vaiTro || '').indexOf('chu co so') !== -1;
+    if (isOwner) {
+      const ownerJar = availableJars.find(item => item.systemRole === 'OWNER_COMPENSATION');
+      if (ownerJar) return ownerJar.code;
+    } else if (availableJars.some(item => item.code === 'VAN_HANH')) {
+      return 'VAN_HANH';
+    }
+  }
+  const categoryJar = normalizeMaHuTaiChinh_(categoryJarMap[categoryCode]);
+  if (categoryJar) return categoryJar;
+  const group = String(planItem && planItem.nhomChi || '').trim().toUpperCase();
+  if (group === 'LUONG' && availableJars.some(item => item.code === 'LUONG')) return 'LUONG';
+  if (group === 'DAU_TU' && availableJars.some(item => item.code === 'DAU_TU')) return 'DAU_TU';
+  if (group === 'DU_PHONG' && availableJars.some(item => item.code === 'DU_PHONG')) return 'DU_PHONG';
+  if (group === 'PHUC_LOI' && availableJars.some(item => item.code === 'PHUC_LOI')) return 'PHUC_LOI';
+  return availableJars.some(item => item.code === 'VAN_HANH') ? 'VAN_HANH' : (availableJars[0] ? availableJars[0].code : '');
+}
+
 function buildHuTaiChinhData_(maKyHoc, month, feeSummary, allTransactions, planData) {
   const jars = getHuTaiChinhThang_(maKyHoc, month);
   const allocationStatus = getChotPhanBoHu_(maKyHoc, month);
@@ -4649,6 +4672,7 @@ function buildHuTaiChinhData_(maKyHoc, month, feeSummary, allTransactions, planD
     return map;
   }, {});
   const actualByJar = {};
+  const actualDetailsByJar = {};
   let currentTuitionRevenue = 0;
   (allTransactions || []).forEach(transaction => {
     if (transaction.nguonDuLieu === 'CHUYEN_NOI_BO' || !transaction.ngayGiaoDich) return;
@@ -4662,6 +4686,42 @@ function buildHuTaiChinhData_(maKyHoc, month, feeSummary, allTransactions, planD
     if (transaction.loai !== 'CHI') return;
     const code = getHuTaiChinhCodeForTransaction_(transaction, planGroupMap, categoryJarMap);
     actualByJar[code] = (actualByJar[code] || 0) + number_(transaction.soTien);
+    if (!actualDetailsByJar[code]) actualDetailsByJar[code] = [];
+    actualDetailsByJar[code].push({
+      maGiaoDich: transaction.maGiaoDich,
+      soPhieu: transaction.soPhieu,
+      ngayGiaoDich: transaction.ngayGiaoDich,
+      tenDanhMuc: transaction.tenDanhMuc,
+      noiDung: transaction.noiDung,
+      nguoiNhan: transaction.nguoiNopNhan,
+      tenNguonTien: transaction.tenNguonTien,
+      soTien: number_(transaction.soTien)
+    });
+  });
+  const staffMap = getNhanSuTaiChinhList_(maKyHoc).reduce((map, item) => {
+    map[item.maNhanSu] = item;
+    return map;
+  }, {});
+  const obligationByJar = {};
+  const obligationDetailsByJar = {};
+  (planData.items || []).forEach(planItem => {
+    const remaining = Math.max(0, number_(planItem.conPhaiChi));
+    if (!remaining) return;
+    const code = getHuTaiChinhCodeForPlanItem_(planItem, categoryJarMap, jars, staffMap);
+    if (!code) return;
+    obligationByJar[code] = (obligationByJar[code] || 0) + remaining;
+    if (!obligationDetailsByJar[code]) obligationDetailsByJar[code] = [];
+    obligationDetailsByJar[code].push({
+      maKeHoachChi: planItem.maKeHoachChi,
+      tenKhoanChi: planItem.tenKhoanChi,
+      nguoiNhan: planItem.nguoiNhan,
+      hanThanhToan: planItem.hanThanhToan,
+      soTienPhaiChi: number_(planItem.soTienPhaiChi),
+      soTienDaChi: number_(planItem.soTienDaChi),
+      conPhaiChi: remaining,
+      nguonKeHoach: planItem.nguonKeHoach,
+      ghiChu: planItem.ghiChu
+    });
   });
   const currentExpectedRevenue = number_(feeSummary.expected);
   const plannedTuitionRevenue = allocationStatus.locked ? number_(allocationStatus.baseTuition) : currentExpectedRevenue;
@@ -4677,9 +4737,20 @@ function buildHuTaiChinhData_(maKyHoc, month, feeSummary, allTransactions, planD
   result.items.forEach(item => {
     const definition = jars.find(jar => jar.code === item.code) || {};
     item.systemRole = definition.systemRole || '';
+    item.actualDetails = (actualDetailsByJar[item.code] || []).sort((a, b) => String(b.ngayGiaoDich || '').localeCompare(String(a.ngayGiaoDich || '')));
+    item.obligation = Math.max(0, number_(obligationByJar[item.code]));
+    item.obligationDetails = (obligationDetailsByJar[item.code] || []).sort((a, b) => String(a.hanThanhToan || '').localeCompare(String(b.hanThanhToan || '')));
+    item.projectedTotal = item.actual + item.obligation;
+    item.remainingAfterCommitments = item.allocated - item.projectedTotal;
+    item.projectedPercent = item.allocated > 0 ? item.projectedTotal * 100 / item.allocated : (item.projectedTotal > 0 ? 999 : 0);
+    item.overAllocationPercent = item.allocated > 0 ? Math.max(0, item.projectedTotal - item.allocated) * 100 / item.allocated : (item.projectedTotal > 0 ? 999 : 0);
+    item.commitmentStatus = item.overAllocationPercent > 10 ? 'DANGER' : (item.overAllocationPercent > 0 ? 'WARNING' : 'NORMAL');
     if (item.remaining < 0) warnings.push({ level: 'danger', message: item.name + ' đã vượt ngân sách kế hoạch ' + formatMoneyText_(Math.abs(item.remaining)) + '.' });
     else if (item.usedPercent >= 90) warnings.push({ level: 'warning', message: item.name + ' đã sử dụng ' + item.usedPercent.toFixed(1) + '% ngân sách tháng.' });
   });
+  result.summary.obligationTotal = result.items.reduce((sum, item) => sum + item.obligation, 0);
+  result.summary.projectedTotal = result.items.reduce((sum, item) => sum + item.projectedTotal, 0);
+  result.summary.remainingAfterCommitmentsTotal = result.summary.allocatedTotal - result.summary.projectedTotal;
   result.expectedRevenue = plannedTuitionRevenue;
   result.currentExpectedRevenue = currentExpectedRevenue;
   result.postLockRevenue = allocationStatus.locked ? Math.max(currentExpectedRevenue - plannedTuitionRevenue, 0) : 0;
