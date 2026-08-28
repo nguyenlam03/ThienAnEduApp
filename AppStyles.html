@@ -165,6 +165,108 @@
     box-shadow: 0 10px 22px rgba(2, 132, 199, 0.25);
   }
 
+  .app-navigation {
+    position: relative;
+    z-index: 80;
+    gap: 10px;
+    overflow: visible;
+  }
+
+  .app-navigation .nav-group {
+    position: relative;
+  }
+
+  .app-navigation .nav-group-toggle {
+    min-width: 132px;
+    justify-content: center;
+  }
+
+  .app-navigation .nav-chevron {
+    margin-left: 4px;
+    font-size: 16px;
+    line-height: 1;
+    transition: transform .18s ease;
+  }
+
+  .app-navigation .nav-group.open .nav-chevron {
+    transform: rotate(180deg);
+  }
+
+  .app-navigation .nav-dropdown {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 0;
+    width: 310px;
+    padding: 8px;
+    border: 1px solid #d7e3f1;
+    border-radius: 16px;
+    background: #ffffff;
+    box-shadow: 0 22px 55px rgba(15, 23, 42, .18);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-7px);
+    transition: opacity .16s ease, transform .16s ease, visibility .16s ease;
+  }
+
+  .app-navigation .nav-group:last-child .nav-dropdown {
+    left: auto;
+    right: 0;
+  }
+
+  .app-navigation .nav-group.open .nav-dropdown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+
+  .app-navigation .nav-dropdown-item {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    border: 0;
+    border-radius: 11px;
+    padding: 10px 11px;
+    background: transparent;
+    color: #17345f;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .app-navigation .nav-dropdown-item:hover,
+  .app-navigation .nav-dropdown-item.active {
+    background: #edf8ff;
+    color: #0369a1;
+  }
+
+  .app-navigation .nav-dropdown-item strong,
+  .app-navigation .nav-dropdown-item small {
+    display: block;
+  }
+
+  .app-navigation .nav-dropdown-item strong {
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .app-navigation .nav-dropdown-item small {
+    margin-top: 2px;
+    color: #718096;
+    font-size: 11px;
+    line-height: 1.35;
+    font-weight: 600;
+  }
+
+  .app-navigation .nav-dropdown-section {
+    padding: 8px 11px 5px;
+    color: #94a3b8;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
   .main {
     width: 100%;
     min-width: 0;
@@ -735,8 +837,31 @@
     }
 
     .ribbon {
-      overflow-x: auto;
       padding: 12px 16px;
+    }
+
+    .app-navigation {
+      overflow: visible;
+      flex-wrap: wrap;
+    }
+
+    .app-navigation .ribbon-button {
+      height: 40px;
+      padding: 0 13px;
+    }
+
+    .app-navigation .nav-group-toggle {
+      min-width: 0;
+    }
+
+    .app-navigation .nav-dropdown {
+      position: fixed;
+      top: auto;
+      left: 16px !important;
+      right: 16px !important;
+      width: auto;
+      max-height: min(70vh, 520px);
+      overflow: auto;
     }
 
     .main {

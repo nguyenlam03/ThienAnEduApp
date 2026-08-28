@@ -1,0 +1,78 @@
+<nav class="ribbon app-navigation" aria-label="Điều hướng chính">
+  <button class="ribbon-button nav-direct" type="button" data-page="Index" onclick="goPage('Index')">
+    <span class="nav-icon" aria-hidden="true">🏠</span><span>Trang chính</span>
+  </button>
+
+  <div class="nav-group" data-pages="QuanLyHocSinh QuanLyDiemDanh">
+    <button class="ribbon-button nav-group-toggle" type="button" aria-haspopup="true" aria-expanded="false">
+      <span class="nav-icon" aria-hidden="true">🎓</span><span>Học sinh</span><span class="nav-chevron">⌄</span>
+    </button>
+    <div class="nav-dropdown" role="menu">
+      <button type="button" class="nav-dropdown-item" data-page="QuanLyHocSinh" onclick="goPage('QuanLyHocSinh')"><span>👨‍🎓</span><span><strong>Quản lý học sinh</strong><small>Hồ sơ, kỳ học và sắp xếp</small></span></button>
+      <button type="button" class="nav-dropdown-item" data-page="QuanLyDiemDanh" onclick="goPage('QuanLyDiemDanh')"><span>✅</span><span><strong>Điểm danh</strong><small>Điểm danh và theo dõi chuyên cần</small></span></button>
+    </div>
+  </div>
+
+  <button class="ribbon-button nav-direct" type="button" data-page="QuanLyNhacViec" onclick="goPage('QuanLyNhacViec')">
+    <span class="nav-icon" aria-hidden="true">📌</span><span>Chăm sóc</span>
+  </button>
+
+  <div class="nav-group" data-pages="QuanLyThuPhu QuanLyThuChi QuanLyTaiChinh KeHoachTaiChinh TaiChinhGiaDinh">
+    <button class="ribbon-button nav-group-toggle" type="button" aria-haspopup="true" aria-expanded="false">
+      <span class="nav-icon" aria-hidden="true">💼</span><span>Tài chính</span><span class="nav-chevron">⌄</span>
+    </button>
+    <div class="nav-dropdown nav-dropdown-wide" role="menu">
+      <div class="nav-dropdown-section">Nghiệp vụ</div>
+      <button type="button" class="nav-dropdown-item" data-page="QuanLyThuPhu" onclick="goPage('QuanLyThuPhu')"><span>💰</span><span><strong>Quản lý thu phí</strong><small>Học phí và các khoản thu</small></span></button>
+      <button type="button" class="nav-dropdown-item" data-page="QuanLyThuChi" onclick="goPage('QuanLyThuChi')"><span>🧾</span><span><strong>Quản lý thu chi</strong><small>Phiếu thu, phiếu chi và nguồn tiền</small></span></button>
+      <div class="nav-dropdown-section">Quản trị</div>
+      <button type="button" class="nav-dropdown-item" data-page="QuanLyTaiChinh" onclick="goPage('QuanLyTaiChinh')"><span>📊</span><span><strong>Tổng quan tài chính</strong><small>Dòng tiền và hiệu quả hoạt động</small></span></button>
+      <button type="button" class="nav-dropdown-item" data-page="KeHoachTaiChinh" onclick="goPage('KeHoachTaiChinh')"><span>🗓️</span><span><strong>Kế hoạch tài chính</strong><small>Hũ tài chính và nghĩa vụ tháng</small></span></button>
+      <button type="button" class="nav-dropdown-item" data-page="TaiChinhGiaDinh" onclick="goPage('TaiChinhGiaDinh')"><span>🏡</span><span><strong>Tài chính gia đình</strong><small>Thu nhập và ngân sách gia đình</small></span></button>
+    </div>
+  </div>
+</nav>
+
+<script>
+(function () {
+  function closeNavigationGroups(except) {
+    document.querySelectorAll('.app-navigation .nav-group.open').forEach(function (group) {
+      if (group === except) return;
+      group.classList.remove('open');
+      var toggle = group.querySelector('.nav-group-toggle');
+      if (toggle) toggle.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  function initializeAppNavigation() {
+    var navigation = document.querySelector('.app-navigation');
+    if (!navigation) return;
+    var currentPage = String(window.APP_CURRENT_PAGE || 'Index');
+    var currentItem = navigation.querySelector('[data-page="' + currentPage + '"]');
+    if (currentItem) currentItem.classList.add('active');
+    navigation.querySelectorAll('.nav-group').forEach(function (group) {
+      var pages = String(group.getAttribute('data-pages') || '').split(/\s+/);
+      if (pages.indexOf(currentPage) !== -1) group.querySelector('.nav-group-toggle').classList.add('active');
+      var toggle = group.querySelector('.nav-group-toggle');
+      toggle.addEventListener('click', function (event) {
+        event.stopPropagation();
+        var willOpen = !group.classList.contains('open');
+        closeNavigationGroups(group);
+        if (willOpen && window.matchMedia('(max-width: 720px)').matches) {
+          group.querySelector('.nav-dropdown').style.top = (toggle.getBoundingClientRect().bottom + 8) + 'px';
+        }
+        group.classList.toggle('open', willOpen);
+        toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+      });
+    });
+    document.addEventListener('click', function (event) {
+      if (!event.target.closest('.app-navigation')) closeNavigationGroups();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') closeNavigationGroups();
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', initializeAppNavigation);
+})();
+</script>
