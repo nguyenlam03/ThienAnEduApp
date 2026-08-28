@@ -479,6 +479,59 @@
       opacity: 0.35;
     }
 
+    .student-header-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 9px;
+      flex-wrap: wrap;
+    }
+
+    .term-modal {
+      max-width: 820px;
+      max-height: calc(100vh - 48px);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .term-modal .modal-body {
+      overflow-y: auto;
+    }
+
+    .term-form-grid {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr;
+      gap: 13px 15px;
+      padding: 15px;
+      border: 1px solid #dbeafe;
+      border-radius: 16px;
+      background: #f8fafc;
+    }
+
+    .term-form-grid .full {
+      grid-column: 1 / -1;
+    }
+
+    .term-list {
+      display: grid;
+      gap: 9px;
+      margin-top: 16px;
+    }
+
+    .term-list-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 14px;
+      border: 1px solid #dbeafe;
+      border-radius: 14px;
+      background: #fff;
+    }
+
+    .term-list-name { font-weight: 800; color: #0f172a; }
+    .term-list-meta { margin-top: 3px; color: #64748b; font-size: 12px; }
+
     @media (max-width: 900px) {
       .student-modal {
         max-height: calc(100vh - 24px);
@@ -509,6 +562,8 @@
     }
 
     @media (max-width: 680px) {
+      .term-form-grid { grid-template-columns: 1fr; }
+      .term-form-grid .full { grid-column: 1; }
       .sort-student-modal .modal-body {
         overflow-y: auto;
       }
@@ -568,6 +623,11 @@
         <span>Điểm danh</span>
       </button>
 
+      <button class="ribbon-button" onclick="goPage('QuanLyNhacViec')">
+        <span>📌</span>
+        <span>Nhắc việc</span>
+      </button>
+
       <button class="ribbon-button" onclick="goPage('QuanLyThuPhu')">
         <span>💰</span>
         <span>Quản lý thu phí</span>
@@ -593,9 +653,10 @@
             </div>
           </div>
 
-          <button class="primary-button" onclick="openAddForm()">
-            + Thêm học sinh
-          </button>
+          <div class="student-header-actions">
+            <button class="secondary-button" onclick="openTermModal()">Kỳ học</button>
+            <button class="primary-button" onclick="openAddForm()">+ Thêm học sinh</button>
+          </div>
         </div>
 
         <div class="content">
@@ -636,6 +697,11 @@
               <button class="column-config-button" type="button" onclick="openSortStudentModal()">
                 <span aria-hidden="true">↕</span>
                 <span>Sắp xếp học sinh</span>
+              </button>
+
+              <button class="column-config-button" type="button" onclick="exportStudentExcel()">
+                <span aria-hidden="true">⇩</span>
+                <span>Xuất Excel</span>
               </button>
 
               <button id="studentColumnButton" class="column-config-button" type="button" onclick="GridColumnConfig.open('student-list')">
@@ -819,6 +885,41 @@
       <div class="modal-footer">
         <button class="cancel-button" onclick="closeModal()">Huỷ</button>
         <button id="btnSave" class="save-button" onclick="saveHocSinh()">Lưu học sinh</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="termModal" class="modal-backdrop">
+    <div class="modal term-modal">
+      <div class="modal-header">
+        <div class="modal-title">Quản lý kỳ học</div>
+        <button class="close-button" onclick="closeTermModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="term-form-grid">
+          <div class="field">
+            <label>Tên kỳ học *</label>
+            <input id="termName" type="text" placeholder="Ví dụ: Học kỳ 1 năm học 2026–2027">
+          </div>
+          <div class="field">
+            <label>Mã kỳ học</label>
+            <input id="termCode" type="text" placeholder="Để trống để hệ thống tự tạo">
+          </div>
+          <label class="checkbox-row full" for="termDefault">
+            <input id="termDefault" type="checkbox">
+            <span><span class="checkbox-title">Đặt làm kỳ học mặc định</span><span class="checkbox-help" style="display:block;padding-left:0">Kỳ học mặc định được ưu tiên tại màn hình đăng nhập.</span></span>
+          </label>
+          <div class="full" style="display:flex;justify-content:flex-end">
+            <button id="btnSaveTerm" class="primary-button" onclick="saveTerm()">+ Thêm kỳ học</button>
+          </div>
+        </div>
+        <div class="sort-student-help" style="margin:16px 0 0">
+          “Chuyển học sinh” sẽ thêm toàn bộ học sinh của kỳ đang đăng nhập vào kỳ mới và vẫn giữ dữ liệu kỳ cũ để đối chiếu lịch sử.
+        </div>
+        <div id="termList" class="term-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="primary-button" onclick="closeTermModal()">Đóng</button>
       </div>
     </div>
   </div>
@@ -1169,6 +1270,121 @@
         .map(function (input) {
           return input.value;
         });
+    }
+
+    function openTermModal() {
+      document.getElementById('termName').value = '';
+      document.getElementById('termCode').value = '';
+      document.getElementById('termDefault').checked = false;
+      renderTermList();
+      document.getElementById('termModal').classList.add('show');
+    }
+
+    function closeTermModal() {
+      document.getElementById('termModal').classList.remove('show');
+    }
+
+    function renderTermList() {
+      const container = document.getElementById('termList');
+      container.innerHTML = (kyHocList || []).map(function (item) {
+        const isCurrent = item.maKyHoc === APP_MAKYHOC;
+        return `
+          <div class="term-list-item">
+            <div>
+              <div class="term-list-name">${escapeHtml(item.tenKyHoc)} ${item.macDinh ? '<span class="multi-tag">Mặc định</span>' : ''}</div>
+              <div class="term-list-meta">Mã: ${escapeHtml(item.maKyHoc)}${isCurrent ? ' · Kỳ đang đăng nhập' : ''}</div>
+            </div>
+            <div>
+              ${isCurrent ? '<span class="pill-badge">Đang sử dụng</span>' : `<button class="secondary-button" onclick="transferStudentsToTerm('${escapeAttribute(item.maKyHoc)}')">Chuyển học sinh</button>`}
+            </div>
+          </div>
+        `;
+      }).join('') || '<div class="empty-box">Chưa có kỳ học.</div>';
+    }
+
+    function saveTerm() {
+      const data = {
+        tenKyHoc: document.getElementById('termName').value.trim(),
+        maKyHoc: document.getElementById('termCode').value.trim(),
+        macDinh: document.getElementById('termDefault').checked
+      };
+      if (!data.tenKyHoc) {
+        showNotification('Vui lòng nhập tên kỳ học.', 'warning');
+        return;
+      }
+      const button = document.getElementById('btnSaveTerm');
+      button.disabled = true;
+      showBusy('Đang thêm kỳ học...');
+      google.script.run
+        .withSuccessHandler(function (res) {
+          const result = parseServerJson(res) || {};
+          button.disabled = false;
+          hideBusy();
+          kyHocList = result.kyHocList || kyHocList;
+          document.getElementById('termName').value = '';
+          document.getElementById('termCode').value = '';
+          document.getElementById('termDefault').checked = false;
+          renderTermList();
+          renderKyHocDropdown([APP_MAKYHOC]);
+          showMessage(result.message || 'Đã thêm kỳ học.', 'success');
+        })
+        .withFailureHandler(function (error) {
+          button.disabled = false;
+          hideBusy();
+          showNotification(getErrorMessage(error), 'error');
+        })
+        .saveKyHoc(APP_TOKEN, data);
+    }
+
+    function transferStudentsToTerm(termId) {
+      const term = (kyHocList || []).find(function (item) { return item.maKyHoc === termId; });
+      const termName = term ? term.tenKyHoc : termId;
+      if (!confirm('Chuyển tiếp toàn bộ học sinh của kỳ hiện tại sang "' + termName + '"? Dữ liệu kỳ cũ vẫn được giữ lại.')) return;
+      showBusy('Đang chuyển học sinh sang kỳ học mới...');
+      google.script.run
+        .withSuccessHandler(function (res) {
+          const result = parseServerJson(res) || {};
+          hideBusy();
+          showMessage(result.message || 'Đã chuyển học sinh sang kỳ học mới.', 'success');
+          loadHocSinh({ silent: true });
+        })
+        .withFailureHandler(function (error) {
+          hideBusy();
+          showNotification(getErrorMessage(error), 'error');
+        })
+        .transferHocSinhToKyHoc(APP_TOKEN, termId);
+    }
+
+    function exportStudentExcel() {
+      const filters = {
+        khoi: document.getElementById('filterKhoi').value,
+        lop: document.getElementById('filterLop').value,
+        keyword: document.getElementById('filterKeyword').value
+      };
+      showBusy('Đang tạo file Excel theo thứ tự danh sách...');
+      google.script.run
+        .withSuccessHandler(function (res) {
+          const result = parseServerJson(res) || {};
+          const binary = atob(result.base64 || '');
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          const blob = new Blob([bytes], { type: result.mimeType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = result.fileName || 'Danh-sach-hoc-sinh.xlsx';
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+          hideBusy();
+          showMessage('Đã xuất ' + Number(result.count || 0) + ' học sinh ra Excel.', 'success');
+        })
+        .withFailureHandler(function (error) {
+          hideBusy();
+          showNotification(getErrorMessage(error), 'error');
+        })
+        .exportHocSinhExcel(APP_TOKEN, filters);
     }
 
     function loadHocSinh(options) {

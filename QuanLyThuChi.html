@@ -82,6 +82,7 @@
     <button class="ribbon-button" onclick="goPage('Index')"><span>🏠</span><span>Trang chính</span></button>
     <button class="ribbon-button" onclick="goPage('QuanLyHocSinh')"><span>👨‍🎓</span><span>Quản lý học sinh</span></button>
     <button class="ribbon-button" onclick="goPage('QuanLyDiemDanh')"><span>✅</span><span>Điểm danh</span></button>
+    <button class="ribbon-button" onclick="goPage('QuanLyNhacViec')"><span>📌</span><span>Nhắc việc</span></button>
     <button class="ribbon-button" onclick="goPage('QuanLyThuPhu')"><span>💰</span><span>Quản lý thu phí</span></button>
     <button class="ribbon-button active" onclick="goPage('QuanLyThuChi')"><span>💼</span><span>Quản lý thu chi</span></button>
     <button class="ribbon-button" onclick="goPage('QuanLyTaiChinh')"><span>&#128202;</span><span>T&#7893;ng quan t&#224;i ch&#237;nh</span></button>
@@ -314,6 +315,7 @@
         <div class="field"><label>Số phiếu</label><input id="formTransactionReceiptNo" class="receipt-field" type="text" readonly placeholder="Hệ thống tự tạo khi lưu"></div>
         <div class="field"><label>Ngày lập *</label><input id="formTransactionDate" type="date" onchange="syncMonthlyPlanOptions()"></div>
         <div class="field"><label>Loại phiếu *</label><select id="formTransactionType" onchange="handleTransactionTypeChange()"><option value="THU">Phiếu thu</option><option value="CHI">Phiếu chi</option></select></div>
+        <div class="field"><label>Phạm vi *</label><select id="formTransactionScope" onchange="handleTransactionScopeChange()"><option value="TRUNG_TAM">Trung tâm</option><option value="GIA_DINH">Gia đình</option></select><div id="transactionScopeReason" class="read-note"></div></div>
         <div class="field"><label>Nguồn tiền *</label><select id="formTransactionSource" onchange="updateTransactionMethodNote()"></select><div id="transactionMethodNote" class="read-note"></div></div>
         <div class="field"><label>Danh mục *</label><select id="formTransactionCategory" onchange="handleTransactionCategoryChange()"></select></div>
         <div id="formTransactionJarField" class="field"><label>Hũ tài chính *</label><select id="formTransactionJar"></select><div class="read-note">Tự chọn theo danh mục; có thể đổi cho trường hợp đặc biệt.</div></div>
@@ -468,7 +470,7 @@ function loadFinanceData(options){
 }
 function renderAll(){renderSourceOptions();renderFilterCategories();renderSummary();renderMonthlyFinance();renderSourceCards();renderTransactions();renderCashbook();renderCategories();renderPeople();renderReports();renderWarning()}
 function renderSourceOptions(){
-  const current=v('filterSource')||'ALL';fillSourceSelect('filterSource',true,current,financeData.sources);fillSourceSelect('formTransactionSource',false,v('formTransactionSource'),financeData.centerSources);fillSourceSelect('formTransferFrom',false,v('formTransferFrom'),financeData.centerSources);fillSourceSelect('formTransferTo',false,v('formTransferTo'),financeData.centerSources)
+  const current=v('filterSource')||'ALL';fillSourceSelect('filterSource',true,current,financeData.sources);fillSourceSelect('formTransactionSource',false,v('formTransactionSource'),getTransactionScopeSources());fillSourceSelect('formTransferFrom',false,v('formTransferFrom'),financeData.centerSources);fillSourceSelect('formTransferTo',false,v('formTransferTo'),financeData.centerSources)
 }
 function fillSourceSelect(id,includeAll,selected,items){
   const s=document.getElementById(id);if(!s)return;s.innerHTML='';
@@ -603,8 +605,10 @@ function renderReports(){
 
 function renderWarning(){const n=(financeData.summary&&financeData.summary.unassignedCount)||0,w=document.getElementById('unassignedWarning');if(n>0){w.className='warning-box show';w.textContent='Có '+n+' giao dịch cũ chưa xác định nguồn tiền. Hãy sửa giao dịch nhập tay hoặc cập nhật nguồn nhận tại trang Quản lý thu phí.'}else{w.className='warning-box';w.textContent=''}}
 function switchTab(tab){activeTab=tab;document.querySelectorAll('.finance-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active',p.id==='tab-'+tab))}
-function isSalaryTransaction(){return v('formTransactionType')==='CHI'&&v('formTransactionCategory')==='CHI_LUONG'}
-function isMonthlyPlanTransaction(){return v('formTransactionType')==='CHI'&&MONTHLY_PLAN_REQUIRED_CATEGORIES.includes(v('formTransactionCategory'))}
+function getTransactionScope(){return v('formTransactionScope')||'TRUNG_TAM'}
+function getTransactionScopeSources(){return getTransactionScope()==='GIA_DINH'?(financeData.familySources||[]):(financeData.centerSources||[])}
+function isSalaryTransaction(){return getTransactionScope()==='TRUNG_TAM'&&v('formTransactionType')==='CHI'&&v('formTransactionCategory')==='CHI_LUONG'}
+function isMonthlyPlanTransaction(){return getTransactionScope()==='TRUNG_TAM'&&v('formTransactionType')==='CHI'&&MONTHLY_PLAN_REQUIRED_CATEGORIES.includes(v('formTransactionCategory'))}
 function renderTransactionPeople(selected,staffId){
   const type=v('formTransactionType'),salary=isSalaryTransaction(),select=document.getElementById('formTransactionPerson'),add=document.getElementById('formTransactionPersonAdd');
   select.innerHTML='<option value="">'+(salary?'Chọn nhân sự':'Chọn '+(type==='CHI'?'người nhận':'người nộp'))+'</option>';
@@ -625,9 +629,10 @@ function renderTransactionPeople(selected,staffId){
 }
 function getJarName(code){const x=(financeData.financialJars||[]).find(i=>i.code===code);return x?x.name:code||'Chưa cấu hình'}
 function fillJarSelect(id,selected){const select=document.getElementById(id);if(!select)return;select.innerHTML='';(financeData.financialJars||[]).forEach(x=>select.appendChild(new Option(x.name,x.code)));if(selected&&Array.from(select.options).some(o=>o.value===selected))select.value=selected}
-function renderTransactionJars(selected){const isExpense=v('formTransactionType')==='CHI',field=document.getElementById('formTransactionJarField');field.style.display=isExpense?'':'none';if(!isExpense){document.getElementById('formTransactionJar').innerHTML='';return}const category=(financeData.categories||[]).find(x=>x.maDanhMuc===v('formTransactionCategory')),jar=selected||(category&&category.maHuMacDinh)||'';fillJarSelect('formTransactionJar',jar);if(isSalaryTransaction()){const staff=(financeData.staff||[]).find(x=>x.maNhanSu===v('formTransactionStaffId')),isOwner=staff&&String(staff.vaiTro||'').toLowerCase().includes('chủ cơ sở'),chosen=(financeData.financialJars||[]).find(x=>x.code===v('formTransactionJar'));if(!isOwner&&chosen&&chosen.systemRole==='OWNER_COMPENSATION'){const fallback=(financeData.financialJars||[]).find(x=>x.code==='VAN_HANH')||(financeData.financialJars||[]).find(x=>x.systemRole!=='OWNER_COMPENSATION'&&/lương trung tâm|lương nhân viên|vận hành/i.test(x.name||''));if(fallback)document.getElementById('formTransactionJar').value=fallback.code}}}
-function handleTransactionCategoryChange(){renderTransactionPeople('',v('formTransactionStaffId'));renderTransactionJars('')}
-function handleTransactionTypeChange(){if(v('formTransactionType')!=='CHI')setTransactionPlanLink('','');renderTransactionCategories();renderTransactionPeople('')}
+function renderTransactionJars(selected){const isExpense=getTransactionScope()==='TRUNG_TAM'&&v('formTransactionType')==='CHI',field=document.getElementById('formTransactionJarField');field.style.display=isExpense?'':'none';if(!isExpense){document.getElementById('formTransactionJar').innerHTML='';return}const category=(financeData.categories||[]).find(x=>x.maDanhMuc===v('formTransactionCategory')&&x.phamVi==='TRUNG_TAM'),jar=selected||(category&&category.maHuMacDinh)||'';fillJarSelect('formTransactionJar',jar);if(isSalaryTransaction()){const staff=(financeData.staff||[]).find(x=>x.maNhanSu===v('formTransactionStaffId')),isOwner=staff&&String(staff.vaiTro||'').toLowerCase().includes('chủ cơ sở'),chosen=(financeData.financialJars||[]).find(x=>x.code===v('formTransactionJar'));if(!isOwner&&chosen&&chosen.systemRole==='OWNER_COMPENSATION'){const fallback=(financeData.financialJars||[]).find(x=>x.code==='VAN_HANH')||(financeData.financialJars||[]).find(x=>x.systemRole!=='OWNER_COMPENSATION'&&/lương trung tâm|lương nhân viên|vận hành/i.test(x.name||''));if(fallback)document.getElementById('formTransactionJar').value=fallback.code}}}
+function handleTransactionCategoryChange(){renderTransactionPeople('',v('formTransactionStaffId'));renderTransactionJars('');updateTransactionScopeReason()}
+function handleTransactionTypeChange(){if(v('formTransactionType')!=='CHI')setTransactionPlanLink('','');renderTransactionCategories();renderTransactionPeople('');updateTransactionScopeReason()}
+function handleTransactionScopeChange(){setTransactionPlanLink('','');document.getElementById('formTransactionStaffId').value='';fillSourceSelect('formTransactionSource',false,'',getTransactionScopeSources());renderTransactionCategories();renderTransactionPeople('');updateTransactionMethodNote();updateTransactionScopeReason()}
 function handleTransactionPersonChange(){const o=document.getElementById('formTransactionPerson').selectedOptions[0];document.getElementById('formTransactionStaffId').value=o&&o.dataset.staffId||'';renderTransactionJars(v('formTransactionJar'));syncMonthlyPlanOptions()}
 function syncMonthlyPlanOptions(){
   const field=document.getElementById('formTransactionSalaryPlanField'),select=document.getElementById('formTransactionSalaryPlan');if(!field||!select)return;
@@ -670,24 +675,27 @@ function openTransactionModal(type){
   document.getElementById('formTransactionReceiptNo').value='';
   document.getElementById('formTransactionType').disabled=false;
   document.getElementById('formTransactionCategory').disabled=false;
+  document.getElementById('formTransactionScope').disabled=false;
   document.getElementById('formTransactionType').value=isExpense?'CHI':'THU';
+  document.getElementById('formTransactionScope').value=v('filterScope')==='GIA_DINH'?'GIA_DINH':'TRUNG_TAM';
   document.getElementById('formTransactionDate').value=dateToInput(new Date());
   document.getElementById('formTransactionAmount').value='';
   document.getElementById('formTransactionContent').value='';
   document.getElementById('formTransactionVoucher').value='';
   document.getElementById('formTransactionNote').value='';
   resetTransactionAttachment('');
-  fillSourceSelect('formTransactionSource',false,'',financeData.centerSources);
+  fillSourceSelect('formTransactionSource',false,'',getTransactionScopeSources());
   renderTransactionCategories();
   renderTransactionPeople('');
   updateTransactionMethodNote();
+  updateTransactionScopeReason();
   t('transactionModalTitle',isExpense?'Phiếu chi':'Phiếu thu');
   openModal('transactionModal')
 }
 function setTransactionPlanLink(id,name){document.getElementById('formTransactionPlanId').value=id||'';document.getElementById('transactionPlanLink').style.display=id?'':'none';t('transactionPlanName',name||'')}
 function openPlanPayment(id){
   const item=((financeData.monthlyFinance||{}).items||[]).find(x=>x.maKeHoachChi===id);if(!item||Number(item.conPhaiChi||0)<=0)return;
-  openTransactionModal('CHI');setTransactionPlanLink(item.maKeHoachChi,item.tenKhoanChi);document.getElementById('formTransactionType').disabled=true;renderTransactionCategories(item.maDanhMuc);document.getElementById('formTransactionCategory').disabled=true;document.getElementById('formTransactionAmount').value=numberText(item.conPhaiChi);document.getElementById('formTransactionContent').value='Thanh toán '+item.tenKhoanChi;renderTransactionPeople(item.nguoiNhan||'',item.maNhanSu||'');document.getElementById('formTransactionNote').value='Theo kế hoạch chi tháng '+formatMonthText((financeData.monthlyFinance||{}).thang||'');t('transactionModalTitle','Ghi nhận chi - '+item.tenKhoanChi)
+  openTransactionModal('CHI');document.getElementById('formTransactionScope').value='TRUNG_TAM';handleTransactionScopeChange();document.getElementById('formTransactionScope').disabled=true;setTransactionPlanLink(item.maKeHoachChi,item.tenKhoanChi);document.getElementById('formTransactionType').disabled=true;renderTransactionCategories(item.maDanhMuc);document.getElementById('formTransactionCategory').disabled=true;document.getElementById('formTransactionAmount').value=numberText(item.conPhaiChi);document.getElementById('formTransactionContent').value='Thanh toán '+item.tenKhoanChi;renderTransactionPeople(item.nguoiNhan||'',item.maNhanSu||'');document.getElementById('formTransactionNote').value='Theo kế hoạch chi tháng '+formatMonthText((financeData.monthlyFinance||{}).thang||'');updateTransactionScopeReason();t('transactionModalTitle','Ghi nhận chi - '+item.tenKhoanChi)
 }
 function editTransaction(id){
   const x=(financeData.transactions||[]).find(i=>i.maGiaoDich===id);
@@ -697,8 +705,10 @@ function editTransaction(id){
   document.getElementById('formTransactionReceiptNo').value=x.soPhieu||'';
   document.getElementById('formTransactionType').value=x.loai;
   document.getElementById('formTransactionType').disabled=true;
+  document.getElementById('formTransactionScope').value=x.phamVi||'TRUNG_TAM';
+  document.getElementById('formTransactionScope').disabled=!!x.maKeHoachChi;
   document.getElementById('formTransactionDate').value=x.ngayGiaoDich;
-  fillSourceSelect('formTransactionSource',false,x.maNguonTien,financeData.centerSources);
+  fillSourceSelect('formTransactionSource',false,x.maNguonTien,getTransactionScopeSources());
   renderTransactionCategories(x.maDanhMuc);
   renderTransactionJars(x.maHuTaiChinh||'');
   document.getElementById('formTransactionCategory').disabled=!!x.maKeHoachChi;
@@ -710,16 +720,18 @@ function editTransaction(id){
   resetTransactionAttachment(x.chungTuUrl||'');
   t('transactionModalTitle',x.loai==='CHI'?'Cập nhật phiếu chi':'Cập nhật phiếu thu');
   updateTransactionMethodNote();
+  updateTransactionScopeReason();
   openModal('transactionModal')
 }
-function renderTransactionCategories(selected){const type=v('formTransactionType'),s=document.getElementById('formTransactionCategory');s.innerHTML='';(financeData.categories||[]).filter(x=>x.phamVi==='TRUNG_TAM'&&x.loai===type&&x.trangThai==='ACTIVE').forEach(x=>s.appendChild(new Option(x.tenDanhMuc,x.maDanhMuc)));if(selected)s.value=selected;renderTransactionJars('')}
-function updateTransactionMethodNote(){const code=v('formTransactionSource'),bank=['VIETCOMBANK','VIETINBANK','BIDV'].includes(code);t('transactionMethodNote',code?'Hình thức: '+(bank?'Chuyển khoản':'Tiền mặt'):'')}
+function renderTransactionCategories(selected){const type=v('formTransactionType'),scope=getTransactionScope(),s=document.getElementById('formTransactionCategory');s.innerHTML='';(financeData.categories||[]).filter(x=>x.phamVi===scope&&x.loai===type&&x.trangThai==='ACTIVE').forEach(x=>s.appendChild(new Option(x.tenDanhMuc,x.maDanhMuc)));if(selected&&Array.from(s.options).some(o=>o.value===selected))s.value=selected;renderTransactionJars('');updateTransactionScopeReason()}
+function updateTransactionMethodNote(){const code=v('formTransactionSource'),source=(financeData.centerSources||[]).concat(financeData.familySources||[]).find(x=>x.maNguonTien===code),bank=source?/chuyển khoản|bank|bidv|vietcombank|vietinbank|tiết kiệm/i.test((source.tenNguonTien||'')+' '+code):false;t('transactionMethodNote',code?'Hình thức: '+(bank?'Chuyển khoản':'Tiền mặt'):'');updateTransactionScopeReason()}
+function updateTransactionScopeReason(){const scope=getTransactionScope(),category=(financeData.categories||[]).find(x=>x.maDanhMuc===v('formTransactionCategory')&&x.phamVi===scope),source=getTransactionScopeSources().find(x=>x.maNguonTien===v('formTransactionSource')),label=scope==='GIA_DINH'?'Gia đình':'Trung tâm';t('transactionScopeReason',(category&&source)?'Hệ thống tự gắn '+label+' vì danh mục và nguồn tiền đều thuộc '+label.toLowerCase()+'. Bạn vẫn có thể đổi phạm vi khi phiếu chưa liên kết kế hoạch.':'Phạm vi '+label+' do người dùng lựa chọn.')}
 function saveTransaction(printAfter){
-  const data={maGiaoDich:v('formTransactionId'),maKeHoachChi:v('formTransactionPlanId'),maNhanSu:v('formTransactionStaffId'),loai:v('formTransactionType'),ngayGiaoDich:v('formTransactionDate'),maNguonTien:v('formTransactionSource'),maDanhMuc:v('formTransactionCategory'),maHuTaiChinh:v('formTransactionType')==='CHI'?v('formTransactionJar'):'',soTien:rawMoney('formTransactionAmount'),noiDung:v('formTransactionContent').trim(),nguoiNopNhan:v('formTransactionPerson').trim(),soChungTu:v('formTransactionVoucher').trim(),ghiChu:v('formTransactionNote').trim()};
-  if(data.loai==='CHI'&&data.maDanhMuc==='CHI_LUONG'&&!data.maNhanSu){showNotification('Vui lòng chọn người nhận từ danh sách nhân sự.','warning');return}
-  if(data.loai==='CHI'&&MONTHLY_PLAN_REQUIRED_CATEGORIES.includes(data.maDanhMuc)&&!data.maKeHoachChi){showNotification('Khoản chi định kỳ phải được liên kết với kế hoạch tháng trước khi lưu phiếu chi.','warning');return}
-  if(!data.ngayGiaoDich||!data.maNguonTien||!data.maDanhMuc||!data.noiDung||Number(data.soTien)<=0||(data.loai==='CHI'&&!data.maHuTaiChinh)){showNotification('Vui lòng nhập đầy đủ ngày lập, nguồn tiền, danh mục, hũ tài chính, nội dung và số tiền.','warning');return}
-  const receiptDraft={loai:data.loai,ngayGiaoDich:data.ngayGiaoDich,ngayDisplay:formatDateDisplayClient(data.ngayGiaoDich),tenNguonTien:getSourceNameByCode(data.maNguonTien),tenDanhMuc:getCategoryNameByCode(data.maDanhMuc),maHuTaiChinh:data.maHuTaiChinh,noiDung:data.noiDung,nguoiNopNhan:data.nguoiNopNhan,soChungTu:data.soChungTu,ghiChu:data.ghiChu,soTien:Number(data.soTien),trangThai:'HOAT_DONG'};
+  const data={maGiaoDich:v('formTransactionId'),maKeHoachChi:v('formTransactionPlanId'),maNhanSu:v('formTransactionStaffId'),phamVi:getTransactionScope(),loai:v('formTransactionType'),ngayGiaoDich:v('formTransactionDate'),maNguonTien:v('formTransactionSource'),maDanhMuc:v('formTransactionCategory'),maHuTaiChinh:v('formTransactionType')==='CHI'&&getTransactionScope()==='TRUNG_TAM'?v('formTransactionJar'):'',soTien:rawMoney('formTransactionAmount'),noiDung:v('formTransactionContent').trim(),nguoiNopNhan:v('formTransactionPerson').trim(),soChungTu:v('formTransactionVoucher').trim(),ghiChu:v('formTransactionNote').trim()};
+  if(data.phamVi==='TRUNG_TAM'&&data.loai==='CHI'&&data.maDanhMuc==='CHI_LUONG'&&!data.maNhanSu){showNotification('Vui lòng chọn người nhận từ danh sách nhân sự.','warning');return}
+  if(data.phamVi==='TRUNG_TAM'&&data.loai==='CHI'&&MONTHLY_PLAN_REQUIRED_CATEGORIES.includes(data.maDanhMuc)&&!data.maKeHoachChi){showNotification('Khoản chi định kỳ phải được liên kết với kế hoạch tháng trước khi lưu phiếu chi.','warning');return}
+  if(!data.ngayGiaoDich||!data.maNguonTien||!data.maDanhMuc||!data.noiDung||Number(data.soTien)<=0||(data.phamVi==='TRUNG_TAM'&&data.loai==='CHI'&&!data.maHuTaiChinh)){showNotification('Vui lòng nhập đầy đủ ngày lập, phạm vi, nguồn tiền, danh mục, nội dung, số tiền và hũ tài chính (nếu là chi trung tâm).','warning');return}
+  const receiptDraft={phamVi:data.phamVi,loai:data.loai,ngayGiaoDich:data.ngayGiaoDich,ngayDisplay:formatDateDisplayClient(data.ngayGiaoDich),tenNguonTien:getSourceNameByCode(data.maNguonTien),tenDanhMuc:getCategoryNameByCode(data.maDanhMuc),maHuTaiChinh:data.maHuTaiChinh,noiDung:data.noiDung,nguoiNopNhan:data.nguoiNopNhan,soChungTu:data.soChungTu,ghiChu:data.ghiChu,soTien:Number(data.soTien),trangThai:'HOAT_DONG'};
   const pendingPrintWindow=printAfter?window.open('','_blank','width=850,height=900'):null;
   if(printAfter&&!pendingPrintWindow){showNotification('Trình duyệt đang chặn cửa sổ in. Phiếu vẫn sẽ được lưu.','warning');}
   showBusy('Đang xử lý ảnh chứng từ và lưu phiếu...');
@@ -731,6 +743,8 @@ function saveTransaction(printAfter){
       receiptDraft.maGiaoDich=result.maGiaoDich||data.maGiaoDich;
       receiptDraft.soPhieu=result.soPhieu||v('formTransactionReceiptNo');
       receiptDraft.chungTuUrl=result.chungTuUrl||'';
+      receiptDraft.phamVi=result.phamVi||data.phamVi;
+      receiptDraft.ghiChu=result.ghiChu||data.ghiChu;
       document.getElementById('formTransactionReceiptNo').value=receiptDraft.soPhieu||'';
       closeModal('transactionModal');
       showMessage(result.message||'Đã lưu phiếu.','success');
@@ -752,7 +766,7 @@ function editCategory(id){const x=(financeData.categories||[]).find(i=>i.maDanhM
 function saveCategory(){const data={maDanhMuc:v('formCategoryId'),loai:v('formCategoryType'),thuTu:v('formCategoryOrder'),tenDanhMuc:v('formCategoryName').trim(),maHuMacDinh:v('formCategoryType')==='CHI'?v('formCategoryJar'):''};if(!data.tenDanhMuc||(data.loai==='CHI'&&!data.maHuMacDinh)){showNotification('Vui lòng nhập tên danh mục và chọn hũ tài chính mặc định.','warning');return}showBusy('Đang lưu danh mục...');google.script.run.withSuccessHandler(()=>{hideBusy();closeModal('categoryModal');loadFinanceData()}).withFailureHandler(e=>{hideBusy();showNotification(getErrorMessage(e),'error')}).saveDanhMucThuChi(APP_TOKEN,data)}
 function toggleCategory(id,enabled){showBusy('Đang cập nhật danh mục...');google.script.run.withSuccessHandler(()=>{hideBusy();loadFinanceData()}).withFailureHandler(e=>{hideBusy();showNotification(getErrorMessage(e),'error')}).toggleDanhMucThuChi(APP_TOKEN,id,enabled)}
 function syncTuitionForSelectedMonth(){const d=v('filterFromDate');if(!d){showNotification('Vui lòng chọn ngày bắt đầu.','warning');return}const ym=d.slice(0,7);if(!confirm('Đồng bộ học phí tháng '+ym.slice(5,7)+'/'+ym.slice(0,4)+' vào sổ thu chi?'))return;showBusy('Đang đồng bộ học phí...');google.script.run.withSuccessHandler(r=>{hideBusy();showMessage((parseServerJson(r)||{}).message||'Đã đồng bộ.','success');loadFinanceData()}).withFailureHandler(e=>{hideBusy();showNotification(getErrorMessage(e),'error')}).syncHocPhiToThuChi(APP_TOKEN,ym)}
-function getSourceNameByCode(code){const x=(financeData.sources||[]).find(i=>i.maNguonTien===code);return x?x.tenNguonTien:code||''}
+function getSourceNameByCode(code){const x=(financeData.centerSources||[]).concat(financeData.familySources||[]).find(i=>i.maNguonTien===code);return x?x.tenNguonTien:code||''}
 function getCategoryNameByCode(code){const x=(financeData.categories||[]).find(i=>i.maDanhMuc===code);return x?x.tenDanhMuc:code||''}
 function formatDateDisplayClient(value){if(!value)return'';const p=String(value).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:value}
 function printTransactionReceipt(id){const x=(financeData.transactions||[]).find(i=>i.maGiaoDich===id);if(!x||!x.soPhieu){showNotification('Giao dịch chưa có số phiếu.','warning');return}printReceiptDocument(x)}
@@ -767,6 +781,7 @@ function printReceiptDocument(item,existingWindow){
   </style></head><body><div class="sheet">${status}<div class="org">${esc(APP_BRAND_NAME)}</div><div class="title">${title}</div><div class="number">Số: <strong>${esc(item.soPhieu||'')}</strong> &nbsp; | &nbsp; Ngày: <strong>${esc(item.ngayDisplay||formatDateDisplayClient(item.ngayGiaoDich)||'')}</strong></div>
   <div class="line"><div class="label">${personLabel}:</div><div>${esc(item.nguoiNopNhan||'')}</div></div>
   <div class="line"><div class="label">Nội dung:</div><div>${esc(item.noiDung||'')}</div></div>
+  <div class="line"><div class="label">Phạm vi:</div><div>${item.phamVi==='GIA_DINH'?'Gia đình':'Trung tâm'}</div></div>
   <div class="line"><div class="label">Danh mục:</div><div>${esc(item.tenDanhMuc||'')}</div></div>
   ${isExpense&&item.maHuTaiChinh?`<div class="line"><div class="label">Hũ tài chính:</div><div>${esc(getJarName(item.maHuTaiChinh))}</div></div>`:''}
   <div class="line"><div class="label">Nguồn tiền:</div><div>${esc(item.tenNguonTien||'')}</div></div>
@@ -784,7 +799,7 @@ function numberToVietnameseWords(value){
   function readThree(num,full){const h=Math.floor(num/100),t=Math.floor((num%100)/10),u=num%10;let a=[];if(h>0||full){a.push(digits[h]+' trăm')}if(t>1){a.push(digits[t]+' mươi');if(u===1)a.push('mốt');else if(u===5)a.push('lăm');else if(u>0)a.push(digits[u])}else if(t===1){a.push('mười');if(u===5)a.push('lăm');else if(u>0)a.push(digits[u])}else if(u>0){if(h>0||full)a.push('lẻ');a.push(digits[u])}return a.join(' ')}
   const units=['',' nghìn',' triệu',' tỷ',' nghìn tỷ',' triệu tỷ'];let groups=[],x=n;while(x>0){groups.push(x%1000);x=Math.floor(x/1000)}let out=[];for(let i=groups.length-1;i>=0;i--){if(groups[i]===0)continue;out.push(readThree(groups[i],i<groups.length-1&&groups[i]<100)+units[i])}let text=out.join(' ').replace(/\s+/g,' ').trim();return text.charAt(0).toUpperCase()+text.slice(1)+' đồng'
 }
-function exportTransactionsCsv(){const rows=[['Ngày','Số phiếu','Loại','Nguồn tiền','Danh mục','Hũ tài chính','Nội dung','Người nộp/nhận','Chứng từ','Thu','Chi','Dữ liệu','Trạng thái']];(financeData.transactions||[]).forEach(x=>rows.push([x.ngayDisplay,x.soPhieu,x.loai,x.tenNguonTien,x.tenDanhMuc,x.loai==='CHI'?getJarName(x.maHuTaiChinh):'',x.noiDung,x.nguoiNopNhan,x.soChungTu,x.loai==='THU'?x.soTien:'',x.loai==='CHI'?x.soTien:'',sourceLabel(x.nguonDuLieu),x.trangThai]));downloadCsv(rows,'SoThuChi.csv')}
+function exportTransactionsCsv(){const rows=[['Ngày','Số phiếu','Phạm vi','Loại','Nguồn tiền','Danh mục','Hũ tài chính','Nội dung','Người nộp/nhận','Chứng từ','Thu','Chi','Dữ liệu','Trạng thái']];(financeData.transactions||[]).forEach(x=>rows.push([x.ngayDisplay,x.soPhieu,x.phamVi==='GIA_DINH'?'Gia đình':'Trung tâm',x.loai,x.tenNguonTien,x.tenDanhMuc,x.loai==='CHI'?getJarName(x.maHuTaiChinh):'',x.noiDung,x.nguoiNopNhan,x.soChungTu,x.loai==='THU'?x.soTien:'',x.loai==='CHI'?x.soTien:'',sourceLabel(x.nguonDuLieu),x.trangThai]));downloadCsv(rows,'SoThuChi.csv')}
 function exportCashbookCsv(){const rows=[['Ngày','Nguồn tiền','Diễn giải','Danh mục','Thu','Chi','Số dư','Dữ liệu']];(financeData.cashbook||[]).forEach(x=>rows.push([x.ngayDisplay,x.tenNguonTien,x.noiDung,x.tenDanhMuc,x.loai==='THU'?x.soTien:'',x.loai==='CHI'?x.soTien:'',x.soDu,sourceLabel(x.nguonDuLieu)]));downloadCsv(rows,'SoQuyTheoNguon.csv')}
 function downloadCsv(rows,name){const csv='\ufeff'+rows.map(r=>r.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\r\n'),blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(a.href)}
 function openModal(id){document.getElementById(id).classList.add('show')}function closeModal(id){document.getElementById(id).classList.remove('show')}

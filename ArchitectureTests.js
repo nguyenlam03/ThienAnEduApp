@@ -81,6 +81,32 @@ function runArchitectureUnitTests() {
     equal(command.maNhanSu, 'NS_001', 'Không giữ mã nhân sự để đối soát khoản chi');
   });
 
+  test('Phiếu thu chi giữ phạm vi người dùng chọn', function () {
+    var command = CashbookDomain.transaction({
+      phamVi: 'gia_dinh', loai: 'CHI', ngayGiaoDich: '2026-08-01',
+      maDanhMuc: 'GD_AN_UONG', maNguonTien: 'GD_TIEN_MAT', noiDung: 'Chi sinh hoạt', soTien: 500000
+    });
+    equal(command.phamVi, 'GIA_DINH', 'Không chuẩn hóa phạm vi gia đình');
+    var failed = false;
+    try {
+      CashbookDomain.transaction({ phamVi: 'KHAC', loai: 'THU', ngayGiaoDich: '2026-08-01', maDanhMuc: 'THU_KHAC', maNguonTien: 'TIEN_MAT', noiDung: 'Sai phạm vi', soTien: 1 });
+    } catch (error) { failed = true; }
+    equal(failed, true, 'Không chặn phạm vi giao dịch sai');
+  });
+
+  test('Ghi chú phạm vi tự động được thay thế, không nhân đôi', function () {
+    var first = mergeThuChiScopeReason_('Ghi chú của người dùng', buildThuChiScopeReason_('TRUNG_TAM', 'Điện', 'BIDV'));
+    var second = mergeThuChiScopeReason_(first, buildThuChiScopeReason_('GIA_DINH', 'Ăn uống', 'Tiền mặt gia đình'));
+    equal((second.match(/\[Phạm vi\]/g) || []).length, 1, 'Lý do phạm vi bị ghi trùng');
+    if (second.indexOf('Ghi chú của người dùng') === -1 || second.indexOf('Gia đình') === -1) {
+      throw new Error('Không giữ ghi chú người dùng hoặc lý do phạm vi mới');
+    }
+  });
+
+  test('Mã kỳ học được chuẩn hóa ổn định', function () {
+    equal(normalizeKyHocCode_('Khóa học 2026 - 2027'), 'KHOA_HOC_2026_2027', 'Mã kỳ học sinh tự động sai');
+  });
+
   test('Nguồn tiền trung tâm và gia đình được tách phạm vi', function () {
     equal(getNguonTienDefinition_('BIDV').phamVi, 'TRUNG_TAM', 'BIDV trung tâm sai phạm vi');
     equal(getNguonTienDefinition_('GD_BIDV').phamVi, 'GIA_DINH', 'BIDV cá nhân sai phạm vi');
@@ -163,6 +189,16 @@ function runArchitectureUnitTests() {
     equal(getHuTaiChinhCodeForPlanItem_({ maDanhMuc: 'CHI_LUONG', maNhanSu: 'NS_TEACHER' }, categoryJarMap, jars, staffMap), 'VAN_HANH', 'Lương giáo viên chưa vào hũ vận hành');
     equal(getHuTaiChinhCodeForPlanItem_({ maDanhMuc: 'CHI_BAN_TRU' }, categoryJarMap, jars, staffMap), 'VAN_HANH', 'Chi bán trú chưa vào hũ vận hành');
     equal(getHuTaiChinhCodeForPlanItem_({ maDanhMuc: 'CHI_DAU_TU' }, categoryJarMap, jars, staffMap), 'DAU_TU', 'Chi đầu tư chưa vào đúng hũ cấu hình');
+  });
+
+  test('Nhắc việc được chia đúng nhóm trễ hạn, hôm nay và 3 ngày tới', function () {
+    var base = { MaCongViec: 'NV_01', TieuDe: 'Gọi phụ huynh', TrangThai: 'CHUA_THUC_HIEN' };
+    equal(mapNhacViec_(Object.assign({}, base, { HanXuLy: '2026-08-27' }), '2026-08-28').nhomThoiGian, 'QUA_HAN', 'Không nhận diện việc trễ hạn');
+    equal(mapNhacViec_(Object.assign({}, base, { HanXuLy: '2026-08-28' }), '2026-08-28').nhomThoiGian, 'HOM_NAY', 'Không nhận diện việc hôm nay');
+    equal(mapNhacViec_(Object.assign({}, base, { HanXuLy: '2026-08-31' }), '2026-08-28').nhomThoiGian, 'BA_NGAY_TOI', 'Không nhận diện việc trong 3 ngày tới');
+    equal(mapNhacViec_(Object.assign({}, base, { HanXuLy: '2026-09-01' }), '2026-08-28').nhomThoiGian, 'SAU_NAY', 'Đưa việc sau 3 ngày vào sai nhóm');
+    equal(mapNhacViec_(Object.assign({}, base, { HanXuLy: '2026-08-27', TrangThai: 'HOAN_THANH' }), '2026-08-28').nhomThoiGian, 'HOAN_THANH', 'Việc hoàn thành vẫn bị báo trễ');
+    equal(mapNhacViec_(Object.assign({}, base, { HanXuLy: '2026-08-27', TrangThai: 'DA_HUY' }), '2026-08-28').nhomThoiGian, 'DA_HUY', 'Việc đã hủy vẫn bị báo trễ');
   });
 
   var failed = results.filter(function (item) { return !item.passed; }).length;

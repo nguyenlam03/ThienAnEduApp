@@ -19,6 +19,10 @@ const SHEET_DANHMUC_GIADINH = 'DanhMucTaiChinhGiaDinh';
 const SHEET_GIAODICH_GIADINH = 'GiaoDichTaiChinhGiaDinh';
 const SHEET_CAUHINH_GIADINH_THANG = 'CauHinhGiaDinhThang';
 const SHEET_DIEMDANH = 'DiemDanh';
+const SHEET_NHACVIEC_PHUHUYNH = 'NhacViecPhuHuynh';
+const SHEET_TUYENSINH_LEAD = 'TuyenSinhLead';
+const SHEET_MAUTIN_PHUHUYNH = 'MauTinPhuHuynh';
+const SHEET_LICHSU_LIENHE = 'LichSuLienHePhuHuynh';
 const SHEET_CAUHINH = 'CauHinh';
 const SHEET_DANHMUC_KHOANTHU_PHI = 'DanhMucKhoanThuPhi';
 const CONFIG_NOTIFICATION_DURATION = 'NOTIFICATION_DURATION_SECONDS';
@@ -68,6 +72,7 @@ function doGet(e) {
     'Index',
     'QuanLyHocSinh',
     'QuanLyDiemDanh',
+    'QuanLyNhacViec',
     'QuanLyThuPhu',
     'QuanLyThuChi',
     'QuanLyTaiChinh',
@@ -147,6 +152,7 @@ function setupDatabase() {
   ensureSheet_(ss, SHEET_CAUHINH_TAICHINH_THANG, getCauHinhTaiChinhThangHeaders_());
   ensureQuanLyTaiChinhSheets_();
   ensureSheet_(ss, SHEET_DIEMDANH, getDiemDanhHeaders_());
+  ensureNhacViecSheets_();
   ensureDanhMucKhoanThuPhiSheet_();
   ensureAppConfigSheet_();
 
@@ -349,6 +355,125 @@ function getKyHocArray_() {
       tenKyHoc: String(row.TenKyHoc || '').trim(),
       macDinh: row.MacDinh === true || String(row.MacDinh).toUpperCase() === 'TRUE'
     }));
+}
+
+function normalizeKyHocCode_(value) {
+  return normalizeText_(value || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40);
+}
+
+function saveKyHoc(token, data) {
+  const session = requireSession_(token, 'student.write');
+  data = data || {};
+  const tenKyHoc = String(data.tenKyHoc || '').trim();
+  const requestedCode = String(data.maKyHoc || '').trim();
+  const maKyHoc = normalizeKyHocCode_(requestedCode || ('KY_' + tenKyHoc));
+  const macDinh = toBoolean_(data.macDinh);
+  if (!tenKyHoc) throw new Error('Vui lòng nhập tên kỳ học.');
+  if (!maKyHoc || maKyHoc.length < 3) throw new Error('Mã kỳ học phải có ít nhất 3 ký tự chữ hoặc số.');
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('Hệ thống đang cập nhật kỳ học. Vui lòng thử lại.');
+  try {
+    const sheet = ensureSheet_(SpreadsheetApp.getActiveSpreadsheet(), SHEET_KYHOC, [
+      'MaKyHoc', 'TenKyHoc', 'TrangThai', 'MacDinh'
+    ]);
+    const values = sheet.getDataRange().getValues();
+    const headers = values[0].map(value => String(value || '').trim());
+    const index = buildHeaderIndex_(headers);
+    const duplicateCode = values.slice(1).some(row => String(row[index.MaKyHoc] || '').trim().toUpperCase() === maKyHoc);
+    if (duplicateCode) throw new Error('Mã kỳ học ' + maKyHoc + ' đã tồn tại.');
+    const duplicateName = values.slice(1).some(row =>
+      normalizeText_(row[index.TenKyHoc]) === normalizeText_(tenKyHoc) &&
+      String(row[index.TrangThai] || 'ACTIVE').trim().toUpperCase() !== 'DELETED'
+    );
+    if (duplicateName) throw new Error('Tên kỳ học này đã tồn tại.');
+
+    if (macDinh && values.length > 1) {
+      for (let i = 1; i < values.length; i++) values[i][index.MacDinh] = false;
+      sheet.getRange(2, 1, values.length - 1, headers.length).setValues(values.slice(1));
+    }
+    const row = new Array(headers.length).fill('');
+    row[index.MaKyHoc] = maKyHoc;
+    row[index.TenKyHoc] = tenKyHoc;
+    row[index.TrangThai] = 'ACTIVE';
+    row[index.MacDinh] = macDinh;
+    sheet.getRange(sheet.getLastRow() + 1, 1, 1, headers.length).setValues([row]);
+  } finally {
+    lock.releaseLock();
+  }
+
+  bumpDataVersion_();
+  safeWriteAuditLog_(session, 'CREATE', 'KY_HOC', maKyHoc, null, { tenKyHoc: tenKyHoc, macDinh: macDinh });
+  return jsonResponse_({
+    success: true,
+    maKyHoc: maKyHoc,
+    kyHocList: getKyHocArray_(),
+    message: 'Đã thêm kỳ học ' + tenKyHoc + '.'
+  });
+}
+
+function transferHocSinhToKyHoc(token, targetKyHocId) {
+  const session = requireSession_(token, 'student.write');
+  const targetId = String(targetKyHocId || '').trim();
+  if (!targetId) throw new Error('Vui lòng chọn kỳ học mới.');
+  if (targetId === session.maKyHoc) throw new Error('Kỳ học đích phải khác kỳ học đang đăng nhập.');
+  const target = getKyHocArray_().find(item => item.maKyHoc === targetId);
+  if (!target) throw new Error('Kỳ học đích không tồn tại hoặc đã ngừng sử dụng.');
+
+  const students = JSON.parse(getHocSinhList(token, {}));
+  if (!students.length) throw new Error('Kỳ học hiện tại chưa có học sinh để chuyển tiếp.');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('Hệ thống đang chuyển học sinh sang kỳ học mới. Vui lòng thử lại.');
+  let createdCount = 0;
+  let skippedCount = 0;
+  try {
+    const sheet = ensureSheet_(SpreadsheetApp.getActiveSpreadsheet(), SHEET_HOCSINH_KYHOC, getHocSinhKyHocHeaders_());
+    const activeTargetMap = readObjectsNoCache_(SHEET_HOCSINH_KYHOC).reduce((map, row) => {
+      if (
+        String(row.MaKyHoc || '').trim() === targetId &&
+        String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED'
+      ) map[String(row.MaHocSinh || '').trim()] = true;
+      return map;
+    }, {});
+    const now = new Date();
+    const newRows = [];
+    students.forEach(student => {
+      if (activeTargetMap[student.maHocSinh]) {
+        skippedCount++;
+        return;
+      }
+      newRows.push({
+        MaHocSinh: student.maHocSinh,
+        MaKyHoc: targetId,
+        HocPhi: number_(student.hocPhi),
+        TrangThaiHocPhi: '',
+        GhiChuHocPhi: '',
+        TrangThai: 'ACTIVE',
+        CreatedAt: now,
+        UpdatedAt: now
+      });
+    });
+    if (newRows.length) appendObjectsToSheet_(sheet, newRows, getHocSinhKyHocHeaders_());
+    createdCount = newRows.length;
+  } finally {
+    lock.releaseLock();
+  }
+
+  bumpDataVersion_();
+  safeWriteAuditLog_(session, 'CREATE', 'CHUYEN_KY_HOC', session.maKyHoc + '|' + targetId, null, {
+    tuKyHoc: session.maKyHoc, denKyHoc: targetId, soHocSinh: createdCount, boQua: skippedCount
+  });
+  return jsonResponse_({
+    success: true,
+    createdCount: createdCount,
+    skippedCount: skippedCount,
+    message: 'Đã chuyển tiếp ' + createdCount + ' học sinh sang ' + target.tenKyHoc +
+      (skippedCount ? '; bỏ qua ' + skippedCount + ' học sinh đã có trong kỳ này.' : '.')
+  });
 }
 
 function checkLogin(password, maKyHoc, username) {
@@ -654,6 +779,85 @@ function getHocSinhList(token, filters) {
   cachePutString_(cacheKey, json, CACHE_SECONDS);
 
   return json;
+}
+
+function exportHocSinhExcel(token, filters) {
+  const session = requireSession_(token, 'student.read');
+  const students = JSON.parse(getHocSinhList(token, filters || {}));
+  if (!students.length) throw new Error('Không có học sinh phù hợp để xuất Excel.');
+  const khoiMap = getKhoiList_().reduce((map, item) => { map[item.khoi] = item.tenKhoi; return map; }, {});
+  const lopMap = getLopList_().reduce((map, item) => { map[item.maLop] = item.tenLop; return map; }, {});
+  const term = getKyHocArray_().find(item => item.maKyHoc === session.maKyHoc);
+  const safeTermName = String(term ? term.tenKyHoc : session.tenKyHoc || session.maKyHoc)
+    .replace(/[\\/:*?"<>|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const fileName = 'Danh-sach-hoc-sinh-' + (safeTermName || session.maKyHoc).replace(/\s+/g, '-') + '.xlsx';
+  let spreadsheetId = '';
+  try {
+    const workbook = SpreadsheetApp.create('TMP_' + fileName.replace(/\.xlsx$/i, ''));
+    spreadsheetId = workbook.getId();
+    const sheet = workbook.getSheets()[0];
+    sheet.setName('Danh sách học sinh');
+    const headers = [
+      'STT', 'Mã học sinh', 'Họ và tên', 'Khối', 'Lớp', 'Giới tính', 'Trường',
+      'Ngày vào', 'SĐT phụ huynh', 'Học phí', 'Không thu phí', 'Sắp xếp', 'Kỳ học', 'Ghi chú'
+    ];
+    const rows = students.map((student, index) => [
+      index + 1,
+      student.maHocSinh,
+      student.hoTen,
+      khoiMap[student.khoi] || student.khoi,
+      lopMap[student.lop] || student.lop,
+      student.gioiTinh || '',
+      student.truong || '',
+      student.ngaySinhDisplay || '',
+      student.sdtPhuHuynh || '',
+      student.khongThuPhi ? 0 : number_(student.hocPhi),
+      student.khongThuPhi ? 'Có' : 'Không',
+      number_(student.sapXep),
+      (student.kyHocNames || []).join(', '),
+      student.ghiChu || ''
+    ]);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+    sheet.setFrozenRows(1);
+    sheet.getRange(1, 1, 1, headers.length)
+      .setBackground('#0b3a75')
+      .setFontColor('#ffffff')
+      .setFontWeight('bold')
+      .setHorizontalAlignment('center');
+    sheet.getRange(2, 1, rows.length, 1).setHorizontalAlignment('center');
+    sheet.getRange(2, 10, rows.length, 1).setNumberFormat('#,##0"đ"');
+    sheet.getRange(2, 12, rows.length, 1).setNumberFormat('0');
+    sheet.getDataRange().setVerticalAlignment('middle').setWrap(true);
+    sheet.autoResizeColumns(1, headers.length);
+    sheet.setColumnWidth(3, 230);
+    sheet.setColumnWidth(7, 190);
+    sheet.setColumnWidth(13, 220);
+    sheet.setColumnWidth(14, 260);
+    SpreadsheetApp.flush();
+
+    const exportUrl = 'https://docs.google.com/spreadsheets/d/' + spreadsheetId + '/export?format=xlsx';
+    const response = UrlFetchApp.fetch(exportUrl, {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+      muteHttpExceptions: true
+    });
+    if (response.getResponseCode() !== 200) throw new Error('Google không thể tạo tệp Excel. Vui lòng thử lại.');
+    const blob = response.getBlob().setName(fileName);
+    safeWriteAuditLog_(session, 'EXPORT', 'HOC_SINH', session.maKyHoc, null, { soHocSinh: students.length, dinhDang: 'XLSX' });
+    return jsonResponse_({
+      success: true,
+      fileName: fileName,
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      base64: Utilities.base64Encode(blob.getBytes()),
+      count: students.length
+    });
+  } finally {
+    if (spreadsheetId) {
+      try { DriveApp.getFileById(spreadsheetId).setTrashed(true); } catch (ignore) {}
+    }
+  }
 }
 
 function getDiemDanhData(token, dateText) {
@@ -1386,6 +1590,423 @@ function hasMappingForKyHoc_(maKyHoc) {
       return String(row.MaKyHoc || '').trim() === maKyHoc &&
         String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED';
     });
+}
+
+/* =========================================================
+   NHẮC VIỆC, TUYỂN SINH VÀ GIAO TIẾP PHỤ HUYNH
+========================================================= */
+
+function getNhacViecHeaders_() {
+  return [
+    'MaCongViec', 'MaKyHoc', 'TieuDe', 'NhomViec', 'DoiTuongLoai',
+    'MaHocSinh', 'MaLead', 'TenDoiTuong', 'TenPhuHuynh', 'SoDienThoai',
+    'KenhLienHe', 'MucUuTien', 'HanXuLy', 'NoiDungTinNhan', 'TrangThai',
+    'KetQua', 'NgayLienHeLai', 'NguoiPhuTrach', 'GhiChu', 'NguonTao',
+    'MaThamChieu', 'CompletedAt', 'CreatedAt', 'UpdatedAt'
+  ];
+}
+
+function getTuyenSinhLeadHeaders_() {
+  return [
+    'MaLead', 'MaKyHoc', 'TenHocSinh', 'LopQuanTam', 'TenPhuHuynh',
+    'SoDienThoai', 'TruongDangHoc', 'NhuCau', 'NguonTuyenSinh', 'TrangThai',
+    'NgayLienHeGanNhat', 'NgayLienHeTiep', 'NguoiPhuTrach', 'LyDoChuaDangKy',
+    'GhiChu', 'MaHocSinh', 'CreatedAt', 'UpdatedAt'
+  ];
+}
+
+function getMauTinPhuHuynhHeaders_() {
+  return [
+    'MaMauTin', 'MaKyHoc', 'TenMau', 'NhomViec', 'KenhLienHe',
+    'NoiDung', 'ThuTu', 'TrangThai', 'CreatedAt', 'UpdatedAt'
+  ];
+}
+
+function getLichSuLienHeHeaders_() {
+  return [
+    'MaLienHe', 'MaKyHoc', 'MaCongViec', 'DoiTuongLoai', 'MaDoiTuong',
+    'TenDoiTuong', 'TenPhuHuynh', 'SoDienThoai', 'KenhLienHe', 'ThoiGian',
+    'NoiDung', 'KetQua', 'NguoiThucHien', 'CreatedAt'
+  ];
+}
+
+function ensureNhacViecSheets_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  ensureSheet_(ss, SHEET_NHACVIEC_PHUHUYNH, getNhacViecHeaders_());
+  ensureSheet_(ss, SHEET_TUYENSINH_LEAD, getTuyenSinhLeadHeaders_());
+  const templateSheet = ensureSheet_(ss, SHEET_MAUTIN_PHUHUYNH, getMauTinPhuHuynhHeaders_());
+  ensureSheet_(ss, SHEET_LICHSU_LIENHE, getLichSuLienHeHeaders_());
+  if (templateSheet.getLastRow() < 2) {
+    const now = new Date();
+    appendObjectsToSheet_(templateSheet, [
+      {
+        MaMauTin: 'MT_LICHHOC', MaKyHoc: 'ALL', TenMau: 'Xác nhận lịch học',
+        NhomViec: 'CHAM_SOC_PHU_HUYNH', KenhLienHe: 'ZALO', ThuTu: 1, TrangThai: 'ACTIVE',
+        NoiDung: 'Kính gửi phụ huynh em {{TenHocSinh}}, Thiên Ân Education xin xác nhận lịch học của em vào {{NgayHen}}. Nếu cần thay đổi lịch, phụ huynh vui lòng phản hồi giúp trung tâm. Chân thành cảm ơn quý phụ huynh!',
+        CreatedAt: now, UpdatedAt: now
+      },
+      {
+        MaMauTin: 'MT_HOCTHU', MaKyHoc: 'ALL', TenMau: 'Nhắc lịch học thử',
+        NhomViec: 'TUYEN_SINH', KenhLienHe: 'ZALO', ThuTu: 2, TrangThai: 'ACTIVE',
+        NoiDung: 'Kính gửi phụ huynh em {{TenHocSinh}}, trung tâm xin nhắc lịch học thử của em vào {{NgayHen}}. Rất mong được đón em tại Thiên Ân Education!',
+        CreatedAt: now, UpdatedAt: now
+      },
+      {
+        MaMauTin: 'MT_SAUHOCTHU', MaKyHoc: 'ALL', TenMau: 'Hỏi thăm sau buổi học thử',
+        NhomViec: 'TUYEN_SINH', KenhLienHe: 'ZALO', ThuTu: 3, TrangThai: 'ACTIVE',
+        NoiDung: 'Kính gửi phụ huynh em {{TenHocSinh}}, trung tâm xin hỏi thăm cảm nhận của gia đình sau buổi học thử. Nếu cần thêm thông tin, phụ huynh vui lòng trao đổi với trung tâm.',
+        CreatedAt: now, UpdatedAt: now
+      },
+      {
+        MaMauTin: 'MT_HOCPHI', MaKyHoc: 'ALL', TenMau: 'Nhắc học phí',
+        NhomViec: 'THU_HOC_PHI', KenhLienHe: 'ZALO', ThuTu: 4, TrangThai: 'ACTIVE',
+        NoiDung: 'Kính gửi phụ huynh em {{TenHocSinh}}, trung tâm xin gửi lời nhắc về học phí tháng {{Thang}}. Phụ huynh vui lòng kiểm tra và phản hồi nếu cần hỗ trợ. Chân thành cảm ơn quý phụ huynh!',
+        CreatedAt: now, UpdatedAt: now
+      },
+      {
+        MaMauTin: 'MT_VANGHOC', MaKyHoc: 'ALL', TenMau: 'Hỏi thăm học sinh vắng',
+        NhomViec: 'DIEM_DANH', KenhLienHe: 'ZALO', ThuTu: 5, TrangThai: 'ACTIVE',
+        NoiDung: 'Kính gửi phụ huynh em {{TenHocSinh}}, trung tâm ghi nhận em vắng học và xin phép hỏi thăm tình hình của em. Phụ huynh vui lòng phản hồi để trung tâm hỗ trợ và sắp xếp việc học phù hợp.',
+        CreatedAt: now, UpdatedAt: now
+      }
+    ], getMauTinPhuHuynhHeaders_());
+  }
+}
+
+function normalizeReminderDate_(value) {
+  const date = toDateOnly_(value);
+  return date ? formatDateForInput_(date) : '';
+}
+
+function formatDateTimeDisplay_(value) {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (isNaN(date.getTime())) return String(value || '');
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm');
+}
+
+function mapNhacViec_(row, todayText) {
+  const due = normalizeReminderDate_(row.HanXuLy);
+  const status = String(row.TrangThai || 'CHUA_THUC_HIEN').trim().toUpperCase();
+  const completed = status === 'HOAN_THANH';
+  const cancelled = status === 'DA_HUY';
+  let timeGroup = 'SAU_NAY';
+  if (!completed && !cancelled && due) {
+    const diff = Math.round((parseInputDate_(due).getTime() - parseInputDate_(todayText).getTime()) / 86400000);
+    if (diff < 0) timeGroup = 'QUA_HAN';
+    else if (diff === 0) timeGroup = 'HOM_NAY';
+    else if (diff <= 3) timeGroup = 'BA_NGAY_TOI';
+  } else if (completed) {
+    timeGroup = 'HOAN_THANH';
+  } else if (cancelled) {
+    timeGroup = 'DA_HUY';
+  }
+  return {
+    maCongViec: String(row.MaCongViec || '').trim(),
+    tieuDe: String(row.TieuDe || '').trim(),
+    nhomViec: String(row.NhomViec || 'KHAC').trim().toUpperCase(),
+    doiTuongLoai: String(row.DoiTuongLoai || 'KHAC').trim().toUpperCase(),
+    maHocSinh: String(row.MaHocSinh || '').trim(),
+    maLead: String(row.MaLead || '').trim(),
+    tenDoiTuong: String(row.TenDoiTuong || '').trim(),
+    tenPhuHuynh: String(row.TenPhuHuynh || '').trim(),
+    soDienThoai: String(row.SoDienThoai || '').trim(),
+    kenhLienHe: String(row.KenhLienHe || 'ZALO').trim().toUpperCase(),
+    mucUuTien: String(row.MucUuTien || 'BINH_THUONG').trim().toUpperCase(),
+    hanXuLy: due,
+    hanXuLyDisplay: due ? formatDateDisplay_(parseInputDate_(due)) : '',
+    noiDungTinNhan: String(row.NoiDungTinNhan || '').trim(),
+    trangThai: status,
+    ketQua: String(row.KetQua || '').trim(),
+    ngayLienHeLai: normalizeReminderDate_(row.NgayLienHeLai),
+    nguoiPhuTrach: String(row.NguoiPhuTrach || '').trim(),
+    ghiChu: String(row.GhiChu || '').trim(),
+    nguonTao: String(row.NguonTao || 'NHAP_TAY').trim().toUpperCase(),
+    maThamChieu: String(row.MaThamChieu || '').trim(),
+    nhomThoiGian: timeGroup
+  };
+}
+
+function mapTuyenSinhLead_(row) {
+  return {
+    maLead: String(row.MaLead || '').trim(),
+    tenHocSinh: String(row.TenHocSinh || '').trim(),
+    lopQuanTam: String(row.LopQuanTam || '').trim(),
+    tenPhuHuynh: String(row.TenPhuHuynh || '').trim(),
+    soDienThoai: String(row.SoDienThoai || '').trim(),
+    truongDangHoc: String(row.TruongDangHoc || '').trim(),
+    nhuCau: String(row.NhuCau || '').trim(),
+    nguonTuyenSinh: String(row.NguonTuyenSinh || '').trim(),
+    trangThai: String(row.TrangThai || 'MOI').trim().toUpperCase(),
+    ngayLienHeGanNhat: normalizeReminderDate_(row.NgayLienHeGanNhat),
+    ngayLienHeTiep: normalizeReminderDate_(row.NgayLienHeTiep),
+    nguoiPhuTrach: String(row.NguoiPhuTrach || '').trim(),
+    lyDoChuaDangKy: String(row.LyDoChuaDangKy || '').trim(),
+    ghiChu: String(row.GhiChu || '').trim(),
+    maHocSinh: String(row.MaHocSinh || '').trim()
+  };
+}
+
+function mapMauTinPhuHuynh_(row) {
+  return {
+    maMauTin: String(row.MaMauTin || '').trim(),
+    tenMau: String(row.TenMau || '').trim(),
+    nhomViec: String(row.NhomViec || 'KHAC').trim().toUpperCase(),
+    kenhLienHe: String(row.KenhLienHe || 'ZALO').trim().toUpperCase(),
+    noiDung: String(row.NoiDung || '').trim(),
+    thuTu: number_(row.ThuTu) || 999,
+    trangThai: String(row.TrangThai || 'ACTIVE').trim().toUpperCase()
+  };
+}
+
+function getNhacViecData(token) {
+  const session = requireSession_(token, 'student.read');
+  ensureNhacViecSheets_();
+  const todayText = formatDateForInput_(new Date());
+  const priorityOrder = { KHAN_CAP: 0, CAO: 1, BINH_THUONG: 2, THAP: 3 };
+  const tasks = readObjectsNoCache_(SHEET_NHACVIEC_PHUHUYNH)
+    .filter(row => String(row.MaKyHoc || '').trim() === session.maKyHoc && String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED')
+    .map(row => mapNhacViec_(row, todayText))
+    .filter(item => item.maCongViec && item.tieuDe)
+    .sort((a, b) => {
+      const aClosed = a.trangThai === 'HOAN_THANH' || a.trangThai === 'DA_HUY';
+      const bClosed = b.trangThai === 'HOAN_THANH' || b.trangThai === 'DA_HUY';
+      if (aClosed && !bClosed) return 1;
+      if (bClosed && !aClosed) return -1;
+      const dateCompare = String(a.hanXuLy || '9999-12-31').localeCompare(String(b.hanXuLy || '9999-12-31'));
+      if (dateCompare) return dateCompare;
+      const priorityA = Object.prototype.hasOwnProperty.call(priorityOrder, a.mucUuTien) ? priorityOrder[a.mucUuTien] : 9;
+      const priorityB = Object.prototype.hasOwnProperty.call(priorityOrder, b.mucUuTien) ? priorityOrder[b.mucUuTien] : 9;
+      return priorityA - priorityB;
+    });
+  const leads = readObjectsNoCache_(SHEET_TUYENSINH_LEAD)
+    .filter(row => String(row.MaKyHoc || '').trim() === session.maKyHoc && String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED')
+    .map(mapTuyenSinhLead_)
+    .filter(item => item.maLead && item.tenHocSinh)
+    .sort((a, b) => String(a.ngayLienHeTiep || '9999-12-31').localeCompare(String(b.ngayLienHeTiep || '9999-12-31')));
+  const templates = readObjectsNoCache_(SHEET_MAUTIN_PHUHUYNH)
+    .filter(row => {
+      const term = String(row.MaKyHoc || 'ALL').trim();
+      return (term === 'ALL' || term === session.maKyHoc) && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED';
+    })
+    .map(mapMauTinPhuHuynh_)
+    .filter(item => item.maMauTin && item.tenMau)
+    .sort((a, b) => a.thuTu - b.thuTu);
+  const history = readObjectsNoCache_(SHEET_LICHSU_LIENHE)
+    .filter(row => String(row.MaKyHoc || '').trim() === session.maKyHoc)
+    .slice(-100)
+    .reverse()
+    .map(row => ({
+      maLienHe: String(row.MaLienHe || '').trim(),
+      maCongViec: String(row.MaCongViec || '').trim(),
+      tenDoiTuong: String(row.TenDoiTuong || '').trim(),
+      tenPhuHuynh: String(row.TenPhuHuynh || '').trim(),
+      soDienThoai: String(row.SoDienThoai || '').trim(),
+      kenhLienHe: String(row.KenhLienHe || '').trim().toUpperCase(),
+      thoiGian: formatDateTimeDisplay_(row.ThoiGian || row.CreatedAt),
+      noiDung: String(row.NoiDung || '').trim(),
+      ketQua: String(row.KetQua || '').trim(),
+      nguoiThucHien: String(row.NguoiThucHien || '').trim()
+    }));
+  return jsonResponse_({
+    today: todayText,
+    tasks: tasks,
+    overdue: tasks.filter(item => item.nhomThoiGian === 'QUA_HAN'),
+    todayTasks: tasks.filter(item => item.nhomThoiGian === 'HOM_NAY'),
+    nextThreeDays: tasks.filter(item => item.nhomThoiGian === 'BA_NGAY_TOI'),
+    leads: leads,
+    templates: templates,
+    history: history,
+    students: JSON.parse(getHocSinhList(token, {})).map(item => ({
+      maHocSinh: item.maHocSinh, hoTen: item.hoTen, lop: item.lop,
+      sdtPhuHuynh: item.sdtPhuHuynh || ''
+    }))
+  });
+}
+
+function saveNhacViec(token, data) {
+  const session = requireSession_(token, 'student.write');
+  ensureNhacViecSheets_();
+  data = data || {};
+  const id = String(data.maCongViec || '').trim() || ('NV_' + Utilities.getUuid().slice(0, 12).toUpperCase());
+  const title = String(data.tieuDe || '').trim();
+  const due = normalizeReminderDate_(data.hanXuLy);
+  if (!title) throw new Error('Vui lòng nhập tiêu đề công việc.');
+  if (!due) throw new Error('Vui lòng chọn hạn xử lý.');
+  const allowedStatus = ['CHUA_THUC_HIEN', 'DANG_XU_LY', 'CHO_PHAN_HOI', 'HOAN_THANH', 'DA_HUY'];
+  const status = allowedStatus.indexOf(String(data.trangThai || '').trim().toUpperCase()) !== -1
+    ? String(data.trangThai).trim().toUpperCase() : 'CHUA_THUC_HIEN';
+  const student = data.maHocSinh
+    ? JSON.parse(getHocSinhList(token, {})).find(item => item.maHocSinh === String(data.maHocSinh).trim())
+    : null;
+  const lead = data.maLead
+    ? readObjectsNoCache_(SHEET_TUYENSINH_LEAD).map(mapTuyenSinhLead_).find(item => item.maLead === String(data.maLead).trim())
+    : null;
+  const now = new Date();
+  const object = {
+    MaCongViec: id,
+    MaKyHoc: session.maKyHoc,
+    TieuDe: title,
+    NhomViec: String(data.nhomViec || 'KHAC').trim().toUpperCase(),
+    DoiTuongLoai: lead ? 'LEAD' : (student ? 'HOC_SINH' : 'KHAC'),
+    MaHocSinh: student ? student.maHocSinh : '',
+    MaLead: lead ? lead.maLead : '',
+    TenDoiTuong: student ? student.hoTen : (lead ? lead.tenHocSinh : String(data.tenDoiTuong || '').trim()),
+    TenPhuHuynh: lead ? lead.tenPhuHuynh : String(data.tenPhuHuynh || '').trim(),
+    SoDienThoai: student ? String(student.sdtPhuHuynh || '').trim() : (lead ? lead.soDienThoai : String(data.soDienThoai || '').trim()),
+    KenhLienHe: String(data.kenhLienHe || 'ZALO').trim().toUpperCase(),
+    MucUuTien: String(data.mucUuTien || 'BINH_THUONG').trim().toUpperCase(),
+    HanXuLy: parseInputDate_(due),
+    NoiDungTinNhan: String(data.noiDungTinNhan || '').trim().slice(0, 3000),
+    TrangThai: status,
+    KetQua: String(data.ketQua || '').trim().slice(0, 1000),
+    NgayLienHeLai: normalizeReminderDate_(data.ngayLienHeLai) ? parseInputDate_(normalizeReminderDate_(data.ngayLienHeLai)) : '',
+    NguoiPhuTrach: String(data.nguoiPhuTrach || session.hoTen || session.tenDangNhap || '').trim(),
+    GhiChu: String(data.ghiChu || '').trim().slice(0, 2000),
+    NguonTao: String(data.nguonTao || 'NHAP_TAY').trim().toUpperCase(),
+    MaThamChieu: String(data.maThamChieu || '').trim(),
+    CompletedAt: status === 'HOAN_THANH' ? now : '',
+    CreatedAt: now,
+    UpdatedAt: now
+  };
+  const existing = readObjectsNoCache_(SHEET_NHACVIEC_PHUHUYNH).find(row => String(row.MaCongViec || '').trim() === id && String(row.MaKyHoc || '').trim() === session.maKyHoc);
+  if (existing) {
+    object.CreatedAt = existing.CreatedAt || now;
+    if (status !== 'HOAN_THANH') object.CompletedAt = '';
+    updateObjectRowById_(SHEET_NHACVIEC_PHUHUYNH, 'MaCongViec', id, object, getNhacViecHeaders_());
+  } else {
+    appendObjectsToSheet_(ensureSheet_(SpreadsheetApp.getActiveSpreadsheet(), SHEET_NHACVIEC_PHUHUYNH, getNhacViecHeaders_()), [object], getNhacViecHeaders_());
+  }
+  bumpDataVersion_();
+  safeWriteAuditLog_(session, existing ? 'UPDATE' : 'CREATE', 'NHAC_VIEC', id, existing || null, object);
+  return jsonResponse_({ success: true, maCongViec: id, message: existing ? 'Đã cập nhật công việc.' : 'Đã thêm công việc.' });
+}
+
+function updateNhacViecStatus(token, maCongViec, status) {
+  const session = requireSession_(token, 'student.write');
+  const id = String(maCongViec || '').trim();
+  const allowed = ['CHUA_THUC_HIEN', 'DANG_XU_LY', 'CHO_PHAN_HOI', 'HOAN_THANH', 'DA_HUY'];
+  const nextStatus = String(status || '').trim().toUpperCase();
+  if (allowed.indexOf(nextStatus) === -1) throw new Error('Trạng thái công việc không hợp lệ.');
+  const row = readObjectsNoCache_(SHEET_NHACVIEC_PHUHUYNH).find(item => String(item.MaCongViec || '').trim() === id && String(item.MaKyHoc || '').trim() === session.maKyHoc);
+  if (!row) throw new Error('Không tìm thấy công việc.');
+  row.TrangThai = nextStatus;
+  row.CompletedAt = nextStatus === 'HOAN_THANH' ? new Date() : '';
+  row.UpdatedAt = new Date();
+  updateObjectRowById_(SHEET_NHACVIEC_PHUHUYNH, 'MaCongViec', id, row, getNhacViecHeaders_());
+  bumpDataVersion_();
+  return jsonResponse_({ success: true, message: nextStatus === 'HOAN_THANH' ? 'Đã hoàn thành công việc.' : 'Đã cập nhật trạng thái.' });
+}
+
+function saveTuyenSinhLead(token, data) {
+  const session = requireSession_(token, 'student.write');
+  ensureNhacViecSheets_();
+  data = data || {};
+  const id = String(data.maLead || '').trim() || ('LEAD_' + Utilities.getUuid().slice(0, 10).toUpperCase());
+  const name = String(data.tenHocSinh || '').trim();
+  const phone = String(data.soDienThoai || '').trim();
+  if (!name) throw new Error('Vui lòng nhập tên học sinh quan tâm.');
+  if (!phone) throw new Error('Vui lòng nhập số điện thoại phụ huynh.');
+  const now = new Date();
+  const object = {
+    MaLead: id, MaKyHoc: session.maKyHoc, TenHocSinh: name,
+    LopQuanTam: String(data.lopQuanTam || '').trim(),
+    TenPhuHuynh: String(data.tenPhuHuynh || '').trim(), SoDienThoai: phone,
+    TruongDangHoc: String(data.truongDangHoc || '').trim(), NhuCau: String(data.nhuCau || '').trim(),
+    NguonTuyenSinh: String(data.nguonTuyenSinh || '').trim(),
+    TrangThai: String(data.trangThai || 'MOI').trim().toUpperCase(),
+    NgayLienHeGanNhat: normalizeReminderDate_(data.ngayLienHeGanNhat) ? parseInputDate_(normalizeReminderDate_(data.ngayLienHeGanNhat)) : '',
+    NgayLienHeTiep: normalizeReminderDate_(data.ngayLienHeTiep) ? parseInputDate_(normalizeReminderDate_(data.ngayLienHeTiep)) : '',
+    NguoiPhuTrach: String(data.nguoiPhuTrach || session.hoTen || session.tenDangNhap || '').trim(),
+    LyDoChuaDangKy: String(data.lyDoChuaDangKy || '').trim(), GhiChu: String(data.ghiChu || '').trim(),
+    MaHocSinh: String(data.maHocSinh || '').trim(), CreatedAt: now, UpdatedAt: now
+  };
+  const existing = readObjectsNoCache_(SHEET_TUYENSINH_LEAD).find(row => String(row.MaLead || '').trim() === id && String(row.MaKyHoc || '').trim() === session.maKyHoc);
+  if (existing) {
+    object.CreatedAt = existing.CreatedAt || now;
+    updateObjectRowById_(SHEET_TUYENSINH_LEAD, 'MaLead', id, object, getTuyenSinhLeadHeaders_());
+  } else {
+    appendObjectsToSheet_(ensureSheet_(SpreadsheetApp.getActiveSpreadsheet(), SHEET_TUYENSINH_LEAD, getTuyenSinhLeadHeaders_()), [object], getTuyenSinhLeadHeaders_());
+  }
+  const followUp = normalizeReminderDate_(data.ngayLienHeTiep);
+  if (followUp && object.TrangThai !== 'DA_NHAP_HOC' && object.TrangThai !== 'KHONG_THAM_GIA') {
+    const reference = 'LEAD|' + id;
+    const existingTask = readObjectsNoCache_(SHEET_NHACVIEC_PHUHUYNH).find(row =>
+      String(row.MaKyHoc || '').trim() === session.maKyHoc && String(row.MaThamChieu || '').trim() === reference &&
+      ['HOAN_THANH', 'DA_HUY', 'DELETED'].indexOf(String(row.TrangThai || '').trim().toUpperCase()) === -1
+    );
+    saveNhacViec(token, {
+      maCongViec: existingTask ? String(existingTask.MaCongViec || '').trim() : '',
+      tieuDe: 'Liên hệ tuyển sinh: ' + name,
+      nhomViec: 'TUYEN_SINH', maLead: id, kenhLienHe: 'ZALO', mucUuTien: 'CAO',
+      hanXuLy: followUp, noiDungTinNhan: '', trangThai: 'CHUA_THUC_HIEN',
+      nguoiPhuTrach: object.NguoiPhuTrach, nguonTao: 'TU_DONG', maThamChieu: reference,
+      ghiChu: 'Tự động tạo từ ngày liên hệ tiếp theo của hồ sơ tuyển sinh.'
+    });
+  }
+  bumpDataVersion_();
+  safeWriteAuditLog_(session, existing ? 'UPDATE' : 'CREATE', 'TUYEN_SINH_LEAD', id, existing || null, object);
+  return jsonResponse_({ success: true, maLead: id, message: existing ? 'Đã cập nhật hồ sơ tuyển sinh.' : 'Đã thêm hồ sơ tuyển sinh.' });
+}
+
+function saveMauTinPhuHuynh(token, data) {
+  const session = requireSession_(token, 'student.write');
+  ensureNhacViecSheets_();
+  data = data || {};
+  const id = String(data.maMauTin || '').trim() || ('MT_' + Utilities.getUuid().slice(0, 10).toUpperCase());
+  const name = String(data.tenMau || '').trim();
+  const content = String(data.noiDung || '').trim();
+  if (!name || !content) throw new Error('Vui lòng nhập tên và nội dung mẫu tin.');
+  const now = new Date();
+  const object = {
+    MaMauTin: id, MaKyHoc: session.maKyHoc, TenMau: name,
+    NhomViec: String(data.nhomViec || 'KHAC').trim().toUpperCase(),
+    KenhLienHe: String(data.kenhLienHe || 'ZALO').trim().toUpperCase(),
+    NoiDung: content.slice(0, 3000), ThuTu: Math.max(1, number_(data.thuTu) || 99),
+    TrangThai: 'ACTIVE', CreatedAt: now, UpdatedAt: now
+  };
+  const existing = readObjectsNoCache_(SHEET_MAUTIN_PHUHUYNH).find(row => String(row.MaMauTin || '').trim() === id && (String(row.MaKyHoc || '').trim() === session.maKyHoc || String(row.MaKyHoc || '').trim() === 'ALL'));
+  if (existing) {
+    object.MaKyHoc = String(existing.MaKyHoc || session.maKyHoc).trim();
+    object.CreatedAt = existing.CreatedAt || now;
+    updateObjectRowById_(SHEET_MAUTIN_PHUHUYNH, 'MaMauTin', id, object, getMauTinPhuHuynhHeaders_());
+  } else {
+    appendObjectsToSheet_(ensureSheet_(SpreadsheetApp.getActiveSpreadsheet(), SHEET_MAUTIN_PHUHUYNH, getMauTinPhuHuynhHeaders_()), [object], getMauTinPhuHuynhHeaders_());
+  }
+  bumpDataVersion_();
+  return jsonResponse_({ success: true, maMauTin: id, message: existing ? 'Đã cập nhật mẫu tin.' : 'Đã thêm mẫu tin.' });
+}
+
+function recordLienHePhuHuynh(token, data) {
+  const session = requireSession_(token, 'student.write');
+  ensureNhacViecSheets_();
+  data = data || {};
+  const taskId = String(data.maCongViec || '').trim();
+  const taskRow = readObjectsNoCache_(SHEET_NHACVIEC_PHUHUYNH).find(row => String(row.MaCongViec || '').trim() === taskId && String(row.MaKyHoc || '').trim() === session.maKyHoc);
+  if (!taskRow) throw new Error('Không tìm thấy công việc cần ghi nhận liên hệ.');
+  const now = new Date();
+  const channel = String(data.kenhLienHe || taskRow.KenhLienHe || 'ZALO').trim().toUpperCase();
+  const result = String(data.ketQua || '').trim();
+  appendObjectsToSheet_(ensureSheet_(SpreadsheetApp.getActiveSpreadsheet(), SHEET_LICHSU_LIENHE, getLichSuLienHeHeaders_()), [{
+    MaLienHe: 'LH_' + Utilities.getUuid().slice(0, 12).toUpperCase(), MaKyHoc: session.maKyHoc,
+    MaCongViec: taskId, DoiTuongLoai: taskRow.DoiTuongLoai || '',
+    MaDoiTuong: taskRow.MaHocSinh || taskRow.MaLead || '', TenDoiTuong: taskRow.TenDoiTuong || '',
+    TenPhuHuynh: taskRow.TenPhuHuynh || '', SoDienThoai: taskRow.SoDienThoai || '',
+    KenhLienHe: channel, ThoiGian: now, NoiDung: String(data.noiDung || taskRow.NoiDungTinNhan || '').trim(),
+    KetQua: result, NguoiThucHien: session.hoTen || session.tenDangNhap || '', CreatedAt: now
+  }], getLichSuLienHeHeaders_());
+  taskRow.TrangThai = String(data.trangThai || 'CHO_PHAN_HOI').trim().toUpperCase();
+  taskRow.KetQua = result;
+  const followUpDate = normalizeReminderDate_(taskRow.NgayLienHeLai);
+  if (followUpDate && taskRow.TrangThai !== 'HOAN_THANH' && taskRow.TrangThai !== 'DA_HUY') {
+    taskRow.HanXuLy = parseInputDate_(followUpDate);
+    taskRow.NgayLienHeLai = '';
+  }
+  taskRow.UpdatedAt = now;
+  taskRow.CompletedAt = taskRow.TrangThai === 'HOAN_THANH' ? now : '';
+  updateObjectRowById_(SHEET_NHACVIEC_PHUHUYNH, 'MaCongViec', taskId, taskRow, getNhacViecHeaders_());
+  bumpDataVersion_();
+  return jsonResponse_({ success: true, message: channel === 'GOI_DIEN' ? 'Đã ghi nhận cuộc gọi.' : 'Đã ghi nhận tin nhắn.' });
 }
 
 /* =========================================================
@@ -5678,6 +6299,20 @@ function saveDoiTuongThuChi(token, data) {
   return jsonResponse_({ success: true, item: saved, message: 'Đã thêm người nộp/người nhận.' });
 }
 
+function buildThuChiScopeReason_(scope, categoryName, sourceName) {
+  const scopeLabel = scope === 'GIA_DINH' ? 'Gia đình' : 'Trung tâm';
+  return '[Phạm vi] ' + scopeLabel + ' — danh mục "' + String(categoryName || '').trim() +
+    '" và nguồn tiền "' + String(sourceName || '').trim() + '" thuộc phạm vi ' + scopeLabel.toLowerCase() + '.';
+}
+
+function mergeThuChiScopeReason_(note, reason) {
+  const cleanNote = String(note || '').split(/\r?\n/)
+    .filter(line => String(line || '').trim().indexOf('[Phạm vi]') !== 0)
+    .join('\n')
+    .trim();
+  return [cleanNote, String(reason || '').trim()].filter(value => value).join('\n');
+}
+
 function saveThuChiGiaoDich(token, data) {
   const session = requireSession_(token, 'finance.write');
   ensureThuChiSheets_(session.maKyHoc);
@@ -5690,33 +6325,53 @@ function saveThuChiGiaoDich(token, data) {
   let maNhanSu = command.maNhanSu;
   const requestedJar = command.maHuTaiChinh;
   const maNguonTien = command.maNguonTien;
+  const scope = normalizeFinanceScope_(command.phamVi || 'TRUNG_TAM');
   const ngayText = command.ngayGiaoDich;
   const noiDung = command.noiDung;
   const soTien = command.soTien;
   let nguoiNopNhan = command.nguoiNopNhan;
   const soChungTu = command.soChungTu;
-  const ghiChu = command.ghiChu;
+  let ghiChu = command.ghiChu;
   const chungTuImage = command.chungTuImage;
 
   assertFinancePeriodOpen_(session, ngayText.slice(0, 7));
 
-  if (!maNguonTien || !getNguonTienDefinition_(maNguonTien)) {
+  const sourceDefinition = getNguonTienDefinition_(maNguonTien);
+  if (!maNguonTien || !sourceDefinition) {
     throw new Error('Vui lòng chọn đúng nguồn tiền.');
   }
+  if (sourceDefinition.phamVi !== scope) {
+    throw new Error('Nguồn tiền không thuộc phạm vi ' + (scope === 'GIA_DINH' ? 'gia đình.' : 'trung tâm.'));
+  }
 
-  const categories = readObjectsNoCache_(SHEET_DANHMUC_THUCHI);
-  const category = categories.find(row => {
-    return String(row.MaDanhMuc || '').trim() === maDanhMuc &&
-      String(row.Loai || '').trim().toUpperCase() === loai &&
-      String(row.TrangThai || '').trim().toUpperCase() === 'ACTIVE';
-  });
+  let category = null;
+  if (scope === 'GIA_DINH') {
+    const familyCategory = getDanhMucGiaDinhList_().find(item =>
+      item.maDanhMucGiaDinh === maDanhMuc &&
+      (item.loai === loai || (loai === 'CHI' && item.loai === 'TIET_KIEM')) &&
+      item.trangThai === 'ACTIVE'
+    );
+    if (familyCategory) category = {
+      MaDanhMuc: familyCategory.maDanhMucGiaDinh,
+      TenDanhMuc: familyCategory.tenDanhMuc,
+      Loai: loai,
+      LoaiGiaDinh: familyCategory.loai,
+      MaHuMacDinh: ''
+    };
+  } else {
+    category = readObjectsNoCache_(SHEET_DANHMUC_THUCHI).find(row => {
+      return String(row.MaDanhMuc || '').trim() === maDanhMuc &&
+        String(row.Loai || '').trim().toUpperCase() === loai &&
+        String(row.TrangThai || '').trim().toUpperCase() === 'ACTIVE';
+    });
+  }
 
   if (!category) {
     throw new Error('Danh mục không tồn tại, đã ngừng sử dụng hoặc không đúng loại giao dịch.');
   }
-  const requiresMonthlyPlan = loai === 'CHI' && isMonthlyPlanRequiredCategory_(maDanhMuc);
+  const requiresMonthlyPlan = scope === 'TRUNG_TAM' && loai === 'CHI' && isMonthlyPlanRequiredCategory_(maDanhMuc);
   let selectedStaff = null;
-  if (loai === 'CHI' && maDanhMuc === 'CHI_LUONG') {
+  if (scope === 'TRUNG_TAM' && loai === 'CHI' && maDanhMuc === 'CHI_LUONG') {
     selectedStaff = getNhanSuTaiChinhList_(session.maKyHoc).find(item => item.maNhanSu === maNhanSu && (item.trangThai === 'ACTIVE' || !!maGiaoDich)) || null;
     if (!selectedStaff) throw new Error('Vui lòng chọn người nhận từ danh sách nhân sự đang làm việc.');
     nguoiNopNhan = selectedStaff.hoTen;
@@ -5733,6 +6388,7 @@ function saveThuChiGiaoDich(token, data) {
   } else {
     maNhanSu = '';
   }
+  if (scope === 'GIA_DINH') maKeHoachChi = '';
   if (requiresMonthlyPlan && !maKeHoachChi) {
     const month = ngayText.slice(0, 7);
     const matchingPlans = readObjectsNoCache_(SHEET_KEHOACH_CHI_THANG).filter(row =>
@@ -5750,10 +6406,10 @@ function saveThuChiGiaoDich(token, data) {
     }
   }
   const activeJarCodes = getDanhMucHuTaiChinhList_(false).reduce((map, item) => { map[item.code] = true; return map; }, {});
-  if (loai === 'CHI' && requestedJar && !activeJarCodes[normalizeMaHuTaiChinh_(requestedJar)]) {
+  if (scope === 'TRUNG_TAM' && loai === 'CHI' && requestedJar && !activeJarCodes[normalizeMaHuTaiChinh_(requestedJar)]) {
     throw new Error('Hũ tài chính của phiếu chi không hợp lệ.');
   }
-  let maHuTaiChinh = loai === 'CHI'
+  let maHuTaiChinh = scope === 'TRUNG_TAM' && loai === 'CHI'
     ? (normalizeMaHuTaiChinh_(requestedJar) || normalizeMaHuTaiChinh_(category.MaHuMacDinh) || inferHuTaiChinhForCategory_(maDanhMuc, category.TenDanhMuc))
     : '';
 
@@ -5798,12 +6454,16 @@ function saveThuChiGiaoDich(token, data) {
     }
   }
 
-  const sourceList = getNguonTienList_(session.maKyHoc);
+  const sourceList = getNguonTienList_(session.maKyHoc, scope);
   const source = sourceList.find(item => item.maNguonTien === maNguonTien);
 
   if (!source || source.trangThai !== 'ACTIVE') {
     throw new Error('Nguồn tiền không tồn tại hoặc đã ngừng sử dụng.');
   }
+  ghiChu = mergeThuChiScopeReason_(
+    ghiChu,
+    buildThuChiScopeReason_(scope, category.TenDanhMuc, source.tenNguonTien)
+  );
 
   const uploadedAttachment = chungTuImage && chungTuImage.dataUrl
     ? saveThuChiAttachment_(chungTuImage, loai, ngayText)
@@ -5854,7 +6514,7 @@ function saveThuChiGiaoDich(token, data) {
         values[targetIndex][index.TrangThai] || 'HOAT_DONG'
       ).trim().toUpperCase();
 
-      if (sourceType !== 'NHAP_TAY') {
+      if (sourceType !== 'NHAP_TAY' && sourceType !== 'GIA_DINH') {
         throw new Error('Giao dịch tự động chỉ được xem và in; vui lòng điều chỉnh tại màn hình dữ liệu nguồn.');
       }
 
@@ -5872,11 +6532,14 @@ function saveThuChiGiaoDich(token, data) {
     const currentRow = targetIndex >= 0
       ? values[targetIndex].slice()
       : new Array(headers.length).fill('');
-    const existingSoPhieu = targetIndex >= 0 && index.SoPhieu !== undefined
+    const existingScope = targetIndex >= 0 && index.PhamVi !== undefined
+      ? normalizeFinanceScope_(currentRow[index.PhamVi] || 'TRUNG_TAM')
+      : scope;
+    const existingSoPhieu = targetIndex >= 0 && existingScope === scope && index.SoPhieu !== undefined
       ? String(currentRow[index.SoPhieu] || '').trim()
       : '';
     const soPhieu = existingSoPhieu || generateNextSoPhieuFromRows_(
-      loai,
+      scope === 'GIA_DINH' ? (loai === 'CHI' ? 'CHI_GIA_DINH' : 'THU_GIA_DINH') : loai,
       ngayText,
       values.slice(1),
       index
@@ -5890,8 +6553,8 @@ function saveThuChiGiaoDich(token, data) {
     currentRow[index.MaKyHoc] = session.maKyHoc;
     currentRow[index.LoaiGiaoDich] = loai;
     currentRow[index.MaDanhMuc] = maDanhMuc;
-    currentRow[index.MaKeHoachChi] = loai === 'CHI' ? maKeHoachChi : '';
-    currentRow[index.MaNhanSu] = loai === 'CHI' ? maNhanSu : '';
+    currentRow[index.MaKeHoachChi] = scope === 'TRUNG_TAM' && loai === 'CHI' ? maKeHoachChi : '';
+    currentRow[index.MaNhanSu] = scope === 'TRUNG_TAM' && loai === 'CHI' ? maNhanSu : '';
     currentRow[index.MaHuTaiChinh] = maHuTaiChinh;
     currentRow[index.TenDanhMuc] = String(category.TenDanhMuc || '').trim();
     currentRow[index.NoiDung] = noiDung;
@@ -5909,11 +6572,11 @@ function saveThuChiGiaoDich(token, data) {
       currentRow[index.ChungTuUrl] = uploadedAttachment.url;
     }
     currentRow[index.GhiChu] = ghiChu;
-    currentRow[index.NguonDuLieu] = 'NHAP_TAY';
-    currentRow[index.MaThamChieu] = '';
-    currentRow[index.PhamVi] = 'TRUNG_TAM';
-    currentRow[index.MaDanhMucGiaDinh] = '';
-    currentRow[index.LoaiGiaDinh] = '';
+    currentRow[index.NguonDuLieu] = scope === 'GIA_DINH' ? 'GIA_DINH' : 'NHAP_TAY';
+    currentRow[index.MaThamChieu] = scope === 'GIA_DINH' ? 'GD|' + id : '';
+    currentRow[index.PhamVi] = scope;
+    currentRow[index.MaDanhMucGiaDinh] = scope === 'GIA_DINH' ? maDanhMuc : '';
+    currentRow[index.LoaiGiaDinh] = scope === 'GIA_DINH' ? String(category.LoaiGiaDinh || loai).trim().toUpperCase() : '';
     currentRow[index.MaGiaoDichLienKet] = '';
     currentRow[index.TrangThai] = 'HOAT_DONG';
     currentRow[index.NguoiTao] = session.tenDangNhap || session.hoTen || session.maNguoiDung;
@@ -5933,13 +6596,16 @@ function saveThuChiGiaoDich(token, data) {
 
   bumpDataVersion_();
   safeWriteAuditLog_(session, maGiaoDich ? 'UPDATE' : 'CREATE', 'SO_THU_CHI', savedId, null, {
-    soPhieu: savedSoPhieu, loai: loai, soTien: soTien, ngayGiaoDich: ngayText, maDanhMuc: maDanhMuc, maHuTaiChinh: maHuTaiChinh
+    soPhieu: savedSoPhieu, loai: loai, soTien: soTien, ngayGiaoDich: ngayText,
+    maDanhMuc: maDanhMuc, maHuTaiChinh: maHuTaiChinh, phamVi: scope
   });
 
   return jsonResponse_({
     success: true,
     maGiaoDich: savedId,
     soPhieu: savedSoPhieu,
+    phamVi: scope,
+    ghiChu: ghiChu,
     chungTuFileId: uploadedAttachment ? uploadedAttachment.fileId : '',
     chungTuUrl: uploadedAttachment ? uploadedAttachment.url : '',
     message: maGiaoDich
@@ -6792,7 +7458,7 @@ function mapThuChiTransaction_(row) {
     nguoiTao: String(row.NguoiTao || '').trim(),
     createdAtRaw: row.CreatedAt || '',
     updatedAtRaw: row.UpdatedAt || '',
-    editable: source === 'NHAP_TAY' && scope === 'TRUNG_TAM' &&
+    editable: (source === 'NHAP_TAY' || source === 'GIA_DINH') &&
       String(row.TrangThai || 'HOAT_DONG').trim().toUpperCase() === 'HOAT_DONG',
     transfer: source === 'CHUYEN_NOI_BO' || source === 'GIA_DINH_CHUYEN',
     canCancelTransfer: (source === 'CHUYEN_NOI_BO' || source === 'GIA_DINH_CHUYEN') &&

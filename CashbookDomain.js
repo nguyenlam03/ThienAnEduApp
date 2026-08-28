@@ -24,6 +24,7 @@ var CashbookDomain = (function () {
       maNhanSu: text(input.maNhanSu, 80),
       maHuTaiChinh: text(input.maHuTaiChinh, 40).toUpperCase(),
       maNguonTien: text(input.maNguonTien, 40).toUpperCase(),
+      phamVi: text(input.phamVi || 'TRUNG_TAM', 20).toUpperCase(),
       ngayGiaoDich: text(input.ngayGiaoDich, 10),
       noiDung: text(input.noiDung, 500),
       soTien: Math.max(0, Number(input.soTien) || 0),
@@ -33,6 +34,7 @@ var CashbookDomain = (function () {
       chungTuImage: input.chungTuImage || null
     };
     if (command.loai !== 'THU' && command.loai !== 'CHI') throw new Error('Loại giao dịch không hợp lệ.');
+    if (command.phamVi !== 'TRUNG_TAM' && command.phamVi !== 'GIA_DINH') throw new Error('Phạm vi giao dịch không hợp lệ.');
     if (!validDate(command.ngayGiaoDich)) throw new Error('Vui lòng nhập ngày giao dịch hợp lệ.');
     if (!command.maDanhMuc) throw new Error('Vui lòng chọn danh mục thu chi.');
     if (!command.maNguonTien) throw new Error('Vui lòng chọn nguồn tiền.');
