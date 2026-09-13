@@ -1,7 +1,7 @@
 // Accept explicit grade labels, never extract arbitrary digits from class names.
 function normalizeTuitionGrade_(value) {
   const text = String(value == null ? '' : value).trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  const match = text.match(/^(?:(?:khoi|k)[ _-]*)?0?([1-9])$/);
+  const match = text.match(/^(?:(?:khoi|k|lop)[ _-]*)?0?([1-9])$/);
   return match ? Number(match[1]) : null;
 }
 function tuitionGradeContext_() {
@@ -18,7 +18,8 @@ function resolveTuitionGrade_(student, context) {
   }
   if (code) return fromCode(code);
   const classRow = context.classes.find(row => String(row.MaLop || '').trim() === String(student.Lop || '').trim());
-  return classRow ? fromCode(classRow.Khoi) : null;
+  if (classRow) return String(classRow.Khoi || '').trim() ? fromCode(classRow.Khoi) : normalizeTuitionGrade_(classRow.TenLop);
+  return normalizeTuitionGrade_(student.Lop);
 }
 function studentTuitionState_(relation, student, term, context) {
   const grade = resolveTuitionGrade_(student, context);

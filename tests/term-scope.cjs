@@ -178,6 +178,16 @@ ctx.saveTermTuition('parent',{maKyHoc:'A',cap1:555,cap2:666,overrides:[{maHocSin
 assert.equal(link('missing','A').HocPhi,0,'Explicit custom rate remains available without grade');
 for(const value of ['',null,'10','3A','Lớp 3A','-1']) assert.equal(ctx.normalizeTuitionGrade_(value),null);
 assert.equal(ctx.normalizeTuitionGrade_('Khối 9'),9);
+// All nine explicit class labels select and persist the term's two rates.
+const classStudents = Array.from({length:9}, (_,i)=>({MaHocSinh:'class-label-'+(i+1),HoTen:'Class '+(i+1),Khoi:'',Lop:'Lớp '+(i+1)}));
+rows.HocSinh.push(...classStudents);
+rows.HocSinhKyHoc.push(...classStudents.map(s=>({MaHocSinh:s.MaHocSinh,MaKyHoc:'A',HocPhiMode:'AUTO',HocPhi:'',TrangThai:'ACTIVE'})));
+ctx.saveTermTuition('parent',{maKyHoc:'A',cap1:123,cap2:456,overrides:[]});
+classStudents.forEach((s,i)=>assert.equal(link(s.MaHocSinh,'A').HocPhi,i<5?123:456));
+ctx.saveTermTuition('parent',{maKyHoc:'A',cap1:234,cap2:567,overrides:[{maHocSinh:'class-label-6',mode:'CUSTOM',amount:99}]});
+assert.equal(link('class-label-6','A').HocPhi,99);
+assert.equal(link('class-label-7','A').HocPhi,567);
+assert.equal(ctx.resolveTuitionGrade_({Lop:'L9'},{grades:[],classes:[{MaLop:'L9',TenLop:'Lớp 9',Khoi:''}]}),9);
 console.log('Invalid-grade regression passed: page availability, explicit normalization, class lookup, warnings and no guessed tuition.');
 ctx.logout('parent');
 assert.equal(ctx.SecurityService.getSession(a).valid, false);
