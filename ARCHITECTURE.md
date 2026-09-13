@@ -75,7 +75,7 @@ Chốt phân bổ hũ khác với khóa sổ: chốt phân bổ chỉ khóa họ
 ## Phạm vi tất cả kỳ học
 
 - Lựa chọn đăng nhập `__ALL_TERMS__` là phạm vi hiển thị, không phải mã kỳ học trong dữ liệu.
-- `AllTerms.js` và `AllTerms.html` hiển thị màn hình hiện tại theo từng kỳ học chưa xóa, kể cả kỳ đã ngừng hoạt động. Mỗi nhóm dùng iframe với phiên gắn đúng kỳ học và cùng tài khoản/quyền; dữ liệu và bộ lọc ngày/tháng giữ riêng từng nhóm. Không cộng gộp số dư hay loại bỏ học sinh xuất hiện ở nhiều kỳ.
+- `AllTermsService.js` và `AllTerms.html` hiển thị màn hình hiện tại theo từng kỳ học chưa xóa, kể cả kỳ đã ngừng hoạt động. Mỗi nhóm dùng iframe với phiên gắn đúng kỳ học và cùng tài khoản/quyền; dữ liệu và bộ lọc ngày/tháng giữ riêng từng nhóm. Không cộng gộp số dư hay loại bỏ học sinh xuất hiện ở nhiều kỳ.
 - Chọn một kỳ cụ thể vẫn dùng luồng hiện có. Các RPC nghiệp vụ không nhận phiên tổng hợp để tránh ghi dữ liệu dưới mã giả.
 - Các phiên con phụ thuộc phiên tổng hợp; đăng xuất phiên tổng hợp hoặc một phiên con thu hồi quyền sử dụng toàn bộ nhóm phiên.
 - Kiểm tra cục bộ: `node tests/term-scope.cjs`. Chưa thay thế kiểm thử tích hợp trên Google Apps Script.

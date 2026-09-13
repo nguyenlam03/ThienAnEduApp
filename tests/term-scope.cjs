@@ -33,6 +33,13 @@ const ctx = {
   SpreadsheetApp: { getActiveSpreadsheet: () => ({}) }
 };
 vm.createContext(ctx);
+// Apps Script names are shared by server scripts and HTML templates.
+const scriptNames = new Map();
+for (const file of fs.readdirSync('.').filter(file => /\.(js|gs|html)$/.test(file))) {
+  const name = file.replace(/\.[^.]+$/, '');
+  assert.ok(!scriptNames.has(name), 'Duplicate Apps Script name: ' + name + ' (' + scriptNames.get(name) + ', ' + file + ')');
+  scriptNames.set(name, file);
+}
 let syntaxBlocks = 0;
 for (const file of fs.readdirSync('.').filter(file => /\.(js|html)$/.test(file))) {
   const source = fs.readFileSync(file, 'utf8');

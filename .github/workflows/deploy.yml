@@ -31,6 +31,9 @@ jobs:
           node-version: "20"
           package-manager-cache: false
 
+      - name: Validate Apps Script names and run regression tests
+        run: node tests/term-scope.cjs
+
       - name: Install clasp
         run: npm install --global @google/clasp@3.3.0
 
