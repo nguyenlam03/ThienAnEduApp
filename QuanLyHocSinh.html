@@ -621,7 +621,9 @@
           </div>
 
           <div class="student-header-actions">
-            <button class="secondary-button" onclick="openTermModal()">Kỳ học</button>
+            <button class="secondary-button" onclick="goPage('PhanKyHocSinh')">Phân kỳ học sinh</button>
+              <button class="secondary-button" onclick="goPage('HocPhiKyHoc')">Học phí theo kỳ</button>
+              <button class="secondary-button" onclick="openTermModal()">Kỳ học</button>
             <button class="primary-button" onclick="openAddForm()">+ Thêm học sinh</button>
           </div>
         </div>
@@ -776,14 +778,10 @@
               oninput="formatHocPhiInput()"
             >
 
-            <datalist id="hocPhiOptions">
-              <option value="1800000">1.800.000</option>
-              <option value="2000000">2.000.000</option>
-              <option value="2400000">2.400.000</option>
-            </datalist>
+            <select id="formHocPhiMode" aria-label="Chế độ học phí" onchange="applyDefaultHocPhiByKhoi()"><option value="AUTO">Theo cấp của kỳ học</option><option value="CUSTOM">Mức riêng cho học sinh</option></select>
 
             <div class="money-help">
-              Cấp 1 mặc định 1.800.000, cấp 2 mặc định 2.000.000. Vẫn có thể nhập số khác.
+              Mức riêng áp dụng cho kỳ đang đăng nhập (hoặc kỳ đầu tiên được chọn). Các kỳ khác giữ mức phí riêng của kỳ đó.
             </div>
           </div>
 
@@ -1159,19 +1157,17 @@
     }
 
     function applyDefaultHocPhiByKhoi() {
-      const maHocSinh = document.getElementById('formMaHocSinh').value;
+      const mode = document.getElementById('formHocPhiMode');
+      if (!mode) return;
+      const input = document.getElementById('formHocPhi');
+      input.disabled = mode.value === 'AUTO' || document.getElementById('formKhongThuPhi').checked;
+      if (mode.value !== 'AUTO') return;
       const khoi = Number(document.getElementById('formKhoi').value);
-
-      if (maHocSinh) return;
-
-      if (khoi >= 1 && khoi <= 5) {
-        document.getElementById('formHocPhi').value = '1.800.000';
-        return;
-      }
-
-      if (khoi >= 6 && khoi <= 9) {
-        document.getElementById('formHocPhi').value = '2.000.000';
-      }
+      const ids = getSelectedKyHocIds();
+      const termId = ids.includes(APP_MAKYHOC) ? APP_MAKYHOC : ids[0];
+      const term = kyHocList.find(item => item.maKyHoc === termId);
+      if (!term || khoi < 1 || khoi > 9) { input.value = ''; return; }
+      input.value = formatMoneyInputValue(khoi <= 5 ? term.hocPhiCap1 : term.hocPhiCap2);
     }
 
     function toggleKyHocDropdown() {
@@ -1213,6 +1209,7 @@
     function updateKyHocDisplay() {
       const display = document.getElementById('kyHocDisplay');
       const selectedIds = getSelectedKyHocIds();
+      applyDefaultHocPhiByKhoi();
 
       if (!selectedIds.length) {
         display.innerHTML = '<span class="multi-placeholder">Chọn kỳ học</span>';
@@ -1860,6 +1857,7 @@
     function openAddForm() {
       document.getElementById('modalTitle').textContent = 'Thêm học sinh';
       document.getElementById('formMaHocSinh').value = '';
+      document.getElementById('formHocPhiMode').value = 'AUTO';
       document.getElementById('formDiaChi').value = '';
 
       renderKyHocDropdown([APP_MAKYHOC]);
@@ -1910,7 +1908,8 @@
       applySapXepRangeByLop();
 
       document.getElementById('formSapXep').value = item.sapXep || '';
-      document.getElementById('formHocPhi').value = item.hocPhi ? formatMoneyInputValue(item.hocPhi) : '';
+      document.getElementById('formHocPhiMode').value = item.hocPhiMode || 'CUSTOM';
+      document.getElementById('formHocPhi').value = item.hocPhi !== '' && item.hocPhi != null ? formatMoneyInputValue(item.hocPhi) : '';
       document.getElementById('formKhongThuPhi').checked = item.khongThuPhi === true;
       document.getElementById('formHoTen').value = item.hoTen || '';
       document.getElementById('formNgaySinh').value = item.ngaySinh || '';
@@ -1941,6 +1940,7 @@
         khoi: document.getElementById('formKhoi').value,
         lop: document.getElementById('formLop').value,
         hocPhi: getHocPhiRawValue(),
+        hocPhiMode: document.getElementById('formHocPhiMode').value,
         khongThuPhi: document.getElementById('formKhongThuPhi').checked,
         hoTen: document.getElementById('formHoTen').value.trim(),
         ngaySinh: document.getElementById('formNgaySinh').value,
@@ -2018,7 +2018,7 @@
       const khongThuPhi = document.getElementById('formKhongThuPhi').checked;
       const hocPhiInput = document.getElementById('formHocPhi');
       const capNhatThuPhiInput = document.getElementById('formCapNhatThuPhi');
-      hocPhiInput.disabled = khongThuPhi;
+      hocPhiInput.disabled = khongThuPhi || document.getElementById('formHocPhiMode').value === 'AUTO';
       capNhatThuPhiInput.disabled = khongThuPhi;
       if (khongThuPhi) capNhatThuPhiInput.checked = false;
     }
@@ -2046,7 +2046,7 @@
         savedStudent.hoTen + ' ' + savedStudent.truong + ' ' +
         savedStudent.sdtPhuHuynh + ' ' + savedStudent.ghiChu
       );
-      const matchesCurrentFilter = (!filterKhoi || savedStudent.khoi === filterKhoi) &&
+      const matchesCurrentFilter = hocSinh.kyHocIds.includes(APP_MAKYHOC) && (!filterKhoi || savedStudent.khoi === filterKhoi) &&
         (!filterLop || savedStudent.lop === filterLop) &&
         (!keyword || haystack.indexOf(keyword) !== -1);
 
@@ -2135,7 +2135,7 @@
     }
 
     function formatMoneyInputValue(value) {
-      const raw = String(value || '').replace(/[^\d]/g, '');
+      const raw = String(value == null ? '' : value).replace(/[^\d]/g, '');
 
       if (!raw) return '';
 

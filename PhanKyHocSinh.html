@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <base target="_top"><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <?!= include('AppStyles'); ?>
+  <?!= include('AppTheme'); ?>
+  <style>
+    .matrix-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:20px 0}
+    .matrix-toolbar input[type=search]{min-width:220px;flex:1;padding:11px 14px;border:1px solid #cbd5e1;border-radius:10px}
+    .matrix-toolbar label{display:flex;align-items:center;gap:8px;font-size:13px;color:#475569}
+    .matrix-scroll{overflow:auto;max-height:65vh;border:1px solid #d8e3ef;border-radius:14px}
+    .matrix-table{border-collapse:separate;border-spacing:0;width:100%;min-width:600px}
+    .matrix-table th,.matrix-table td{padding:12px 16px;border-bottom:1px solid #e2e8f0;border-right:1px solid #edf2f7;text-align:center;min-width:145px}
+    .matrix-table th{position:sticky;top:0;z-index:3;background:#edf4fc;color:#17345f;white-space:normal;font-size:13px}
+    .matrix-table th:first-child,.matrix-table td:first-child{position:sticky;left:0;text-align:left;min-width:250px;z-index:2;background:#fff}
+    .matrix-table th:first-child{z-index:4;background:#edf4fc}
+    .matrix-table tbody tr:hover td{background:#f5faff}
+    .matrix-table td.changed{background:#fff5d6!important}
+    .matrix-table input{width:20px;height:20px;accent-color:#087f8c;cursor:pointer}
+    .matrix-table input:focus-visible{outline:3px solid #38bdf8;outline-offset:4px}
+    .matrix-meta{font-size:12px;color:#64748b;margin-top:5px}
+    .matrix-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:16px}
+    .matrix-pager{display:flex;align-items:center;gap:10px}
+    #matrixStatus{margin:12px 0;color:#475569;line-height:1.5}
+    #matrixStatus.error{color:#b91c1c}
+    #matrixStatus.success{color:#047857}
+    .matrix-help{color:#64748b;font-size:13px;line-height:1.6;margin-top:8px}
+    @media(max-width:640px){.matrix-table th:first-child,.matrix-table td:first-child{min-width:150px;width:150px;max-width:150px;overflow-wrap:anywhere}}
+    #quickStudentModal .modal{max-height:calc(100dvh - 32px);overflow:auto}#quickStudentModal .modal-header{position:sticky;top:0;z-index:2}#quickStudentModal .modal-footer{position:sticky;bottom:0;background:white}
+    .quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.quick-grid .full{grid-column:1/-1}.quick-grid label{display:block;margin-bottom:6px}.quick-grid input,.quick-grid select{width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:9px}.quick-terms{display:flex;flex-wrap:wrap;gap:12px}.quick-terms label{display:flex;align-items:center;gap:7px}.quick-terms input{width:auto}.quick-error{color:#b91c1c;margin-top:12px}@media(max-width:640px){.quick-grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar"><div class="brand-title"><?= brandName ?></div><div class="session-box">Phân kỳ học sinh · Toàn bộ danh sách</div></header>
+  <?!= include('AppNavigation'); ?>
+  <main class="main"><section class="page-card"><div class="content">
+    <h1 class="page-title">Phân kỳ học sinh</h1>
+    <p class="matrix-help">Mỗi dòng là một học sinh, mỗi cột là một kỳ học. Tick các kỳ học sinh tham gia rồi bấm Lưu thay đổi.</p>
+    <p class="matrix-help">Bỏ tick chỉ gỡ học sinh khỏi danh sách kỳ đó. Hồ sơ, điểm danh và lịch sử thu phí đã ghi vẫn được giữ lại.</p>
+    <div class="matrix-toolbar">
+      <input type="search" id="matrixSearch" aria-label="Tìm học sinh" placeholder="Tìm tên, mã học sinh, khối hoặc lớp…">
+      <label><input type="checkbox" id="unassignedOnly"> Chưa thuộc kỳ nào</label>
+      <button class="primary-button" id="quickAddOpen" disabled>+ Thêm nhanh học sinh</button>
+      <button class="secondary-button" id="reloadMatrix">Tải lại</button>
+      <button class="primary-button" id="saveMatrix" disabled>Lưu thay đổi</button>
+    </div>
+    <div id="matrixStatus" role="status" aria-live="polite">Đang tải danh sách…</div>
+    <div class="matrix-scroll" tabindex="0" aria-label="Bảng phân kỳ học sinh"><table class="matrix-table"><thead id="matrixHead"></thead><tbody id="matrixBody"></tbody></table></div>
+    <div class="matrix-footer"><span id="matrixCount"></span><div class="matrix-pager"><button class="secondary-button" id="prevPage">Trước</button><span id="pageInfo"></span><button class="secondary-button" id="nextPage">Sau</button></div></div>
+  </div></section></main>
+</div>
+<div class="modal-backdrop" id="quickStudentModal"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="quickTitle"><div class="modal-header"><div class="modal-title" id="quickTitle">Thêm nhanh học sinh</div><button class="close-button" type="button" onclick="closeQuickStudent()" aria-label="Đóng">×</button></div><form id="quickStudentForm"><div class="modal-body"><div class="quick-grid"><div class="full"><label for="quickName">Họ tên *</label><input id="quickName" required maxlength="200" autocomplete="off"></div><div><label for="quickGrade">Khối *</label><select id="quickGrade" required></select></div><div><label for="quickClass">Lớp *</label><select id="quickClass" required></select></div><div class="full"><label for="quickPhone">Số điện thoại phụ huynh</label><input id="quickPhone" type="tel" pattern="0[0-9]{9}" placeholder="Có thể để trống"></div><div class="full"><label>Kỳ học tham gia</label><div class="quick-terms" id="quickTerms"></div><p class="matrix-help">Học phí được lưu tự động theo cấp của từng kỳ đã tick. Có thể để học sinh chưa thuộc kỳ nào.</p></div></div><div class="quick-error" id="quickError" role="alert"></div></div><div class="modal-footer"><button class="secondary-button" type="button" onclick="closeQuickStudent()">Hủy</button><button class="primary-button" type="submit" id="quickSave">Thêm học sinh</button></div></form></div></div>
+<script>
+window.APP_CURRENT_PAGE = 'PhanKyHocSinh';
+const APP_URL = <?!= inlineScriptJson_(appUrl) ?>;
+const APP_TOKEN = <?!= inlineScriptJson_(token) ?>;
+let model={students:[],terms:[],canWrite:false}, pending=new Map(), pageIndex=0, busy=false;
+const PAGE_SIZE=50;
+const $=id=>document.getElementById(id);
+const esc=value=>String(value==null?'':value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const keyOf=(id,term)=>JSON.stringify([id,term]);
+const normalize=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').toLowerCase();
+function status(message,type){$('matrixStatus').textContent=message;$('matrixStatus').className=type||'';}
+function selected(student,term){const edit=pending.get(keyOf(student.maHocSinh,term));return edit?edit.selected:student.kyHocIds.includes(term);}
+function render(){
+  const query=normalize($('matrixSearch').value);
+  const students=model.students.filter(s=>normalize([s.hoTen,s.maHocSinh,s.khoi,s.lop].join(' ')).includes(query)&&(!$('unassignedOnly').checked||!model.terms.some(t=>selected(s,t.maKyHoc))));
+  const pageCount=Math.max(1,Math.ceil(students.length/PAGE_SIZE));pageIndex=Math.min(pageIndex,pageCount-1);
+  $('matrixHead').innerHTML='<tr><th>Học sinh</th>'+model.terms.map(t=>'<th>'+esc(t.tenKyHoc)+'</th>').join('')+'</tr>';
+  $('matrixBody').innerHTML=students.slice(pageIndex*PAGE_SIZE,(pageIndex+1)*PAGE_SIZE).map(s=>'<tr><td><strong>'+esc(s.hoTen)+'</strong><div class="matrix-meta">'+esc(s.maHocSinh)+' · '+esc(s.lop||s.khoi)+'</div></td>'+model.terms.map(t=>{
+    const changed=pending.has(keyOf(s.maHocSinh,t.maKyHoc));
+    return '<td class="'+(changed?'changed':'')+'"><input type="checkbox" data-student="'+esc(s.maHocSinh)+'" data-term="'+esc(t.maKyHoc)+'" aria-label="'+esc(s.hoTen+' — '+t.tenKyHoc)+'" '+(selected(s,t.maKyHoc)?'checked ':'')+(!model.canWrite||busy?'disabled':'')+'></td>';
+  }).join('')+'</tr>').join('')||'<tr><td colspan="'+(model.terms.length+1)+'">Không có học sinh phù hợp.</td></tr>';
+  $('matrixCount').textContent=students.length+' / '+model.students.length+' học sinh · '+model.terms.length+' kỳ học · '+pending.size+' ô thay đổi';
+  $('pageInfo').textContent=(pageIndex+1)+' / '+pageCount;
+  $('prevPage').disabled=busy||pageIndex===0;$('nextPage').disabled=busy||pageIndex>=pageCount-1;
+  $('quickAddOpen').disabled=busy||!model.canWrite;
+  $('saveMatrix').disabled=busy||!model.canWrite||pending.size===0;$('reloadMatrix').disabled=busy;
+}
+function load(){
+  if(pending.size&&!confirm('Bỏ các thay đổi chưa lưu và tải lại?'))return;
+  busy=true;render();status('Đang tải danh sách…');
+  google.script.run.withSuccessHandler(result=>{model=typeof result==='string'?JSON.parse(result):result;pending.clear();pageIndex=0;busy=false;render();status(model.canWrite?'Tick hoặc bỏ tick, sau đó bấm Lưu thay đổi.':'Tài khoản hiện tại chỉ có quyền xem.');}).withFailureHandler(failure).getStudentTermMatrix(APP_TOKEN);
+}
+function failure(error){busy=false;render();status(error&&error.message?error.message:String(error),'error');}
+function save(){
+  if(busy||!pending.size)return;const changes=Array.from(pending.values());busy=true;render();status('Đang lưu phân kỳ học…');
+  google.script.run.withSuccessHandler(()=>{
+    changes.forEach(c=>{const student=model.students.find(s=>s.maHocSinh===c.maHocSinh);student.kyHocIds=student.kyHocIds.filter(id=>id!==c.maKyHoc);if(c.selected)student.kyHocIds.push(c.maKyHoc);});
+    pending.clear();busy=false;render();status('Đã lưu. Danh sách theo kỳ học sẽ dùng các lựa chọn này.','success');
+  }).withFailureHandler(failure).saveStudentTermMatrix(APP_TOKEN,changes);
+}
+function goPage(page){if(pending.size&&!confirm('Rời trang và bỏ các thay đổi chưa lưu?'))return;window.top.location.href=APP_URL+'?page='+encodeURIComponent(page)+'&token='+encodeURIComponent(APP_TOKEN);}
+$('matrixBody').addEventListener('change',event=>{const input=event.target;if(!input.matches('input[data-student]')||busy)return;const student=model.students.find(s=>s.maHocSinh===input.dataset.student),term=input.dataset.term,expected=student.kyHocIds.includes(term),key=keyOf(student.maHocSinh,term);if(input.checked===expected)pending.delete(key);else pending.set(key,{maHocSinh:student.maHocSinh,maKyHoc:term,selected:input.checked,expected:expected});render();status(pending.size?pending.size+' ô thay đổi chưa lưu.':'Chưa có thay đổi cần lưu.');const focus=Array.from($('matrixBody').querySelectorAll('input[data-student]')).find(e=>e.dataset.student===student.maHocSinh&&e.dataset.term===term);if(focus)focus.focus();});
+$('matrixSearch').addEventListener('input',()=>{pageIndex=0;render();});$('unassignedOnly').addEventListener('change',()=>{pageIndex=0;render();});
+$('prevPage').onclick=()=>{pageIndex--;render();};$('nextPage').onclick=()=>{pageIndex++;render();};$('reloadMatrix').onclick=load;$('saveMatrix').onclick=save;
+window.addEventListener('beforeunload',event=>{if(pending.size){event.preventDefault();event.returnValue='';}});
+let quickRequestId='';
+function openQuickStudent(){
+  if(busy||!model.canWrite)return;
+  $('quickStudentForm').reset();$('quickError').textContent='';
+  quickRequestId=Date.now().toString(36)+'_'+Math.random().toString(36).slice(2);
+  $('quickGrade').innerHTML='<option value="">Chọn khối</option>'+(model.khoiList||[]).map(k=>'<option value="'+esc(k.khoi)+'">'+esc(k.tenKhoi)+'</option>').join('');
+  $('quickClass').innerHTML='<option value="">Chọn lớp</option>';
+  $('quickTerms').innerHTML=model.terms.map(t=>'<label><input type="checkbox" name="quickTerm" value="'+esc(t.maKyHoc)+'">'+esc(t.tenKyHoc)+'</label>').join('');
+  $('quickStudentModal').classList.add('show');$('quickName').focus();
+}
+function closeQuickStudent(){if(!busy){$('quickStudentModal').classList.remove('show');$('quickAddOpen').focus();}}
+$('quickGrade').onchange=()=>{$('quickClass').innerHTML='<option value="">Chọn lớp</option>'+(model.lopList||[]).filter(c=>c.khoi===$('quickGrade').value).map(c=>'<option value="'+esc(c.maLop)+'">'+esc(c.tenLop)+'</option>').join('');};
+$('quickAddOpen').onclick=openQuickStudent;
+$('quickStudentModal').addEventListener('keydown',event=>{if(event.key==='Escape')closeQuickStudent();});
+$('quickStudentForm').onsubmit=event=>{
+  event.preventDefault();if(busy||!$('quickStudentForm').reportValidity())return;
+  const payload={requestId:quickRequestId,hoTen:$('quickName').value.trim(),khoi:$('quickGrade').value,lop:$('quickClass').value,sdtPhuHuynh:$('quickPhone').value.trim(),kyHocIds:Array.from(document.querySelectorAll('input[name="quickTerm"]:checked')).map(e=>e.value)};
+  busy=true;render();$('quickSave').disabled=true;$('quickError').textContent='';
+  google.script.run.withSuccessHandler(result=>{const response=typeof result==='string'?JSON.parse(result):result;busy=false;$('quickSave').disabled=false;closeQuickStudent();if(!model.students.some(s=>s.maHocSinh===response.student.maHocSinh))model.students.push(response.student);$('matrixSearch').value=response.student.maHocSinh;$('unassignedOnly').checked=false;pageIndex=0;render();status(response.message,'success');})
+    .withFailureHandler(error=>{busy=false;render();$('quickSave').disabled=false;$('quickError').textContent=error.message||String(error);}).quickAddStudent(APP_TOKEN,payload);
+};
+document.addEventListener('DOMContentLoaded',load);
+</script>
+</body>
+</html>

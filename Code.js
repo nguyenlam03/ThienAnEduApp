@@ -71,6 +71,8 @@ function doGet(e) {
   const protectedPages = [
     'Index',
     'QuanLyHocSinh',
+    'PhanKyHocSinh',
+    'HocPhiKyHoc',
     'QuanLyDiemDanh',
     'QuanLyNhacViec',
     'QuanLyThuPhu',
@@ -93,7 +95,7 @@ function doGet(e) {
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
     }
 
-    if (session.maKyHoc === ALL_TERMS_CODE_) return renderAllTermsPage_(page, token, session, brand);
+    if (session.maKyHoc === ALL_TERMS_CODE_ && !['PhanKyHocSinh', 'HocPhiKyHoc'].includes(page)) return renderAllTermsPage_(page, token, session, brand);
 
     const template = HtmlService.createTemplateFromFile(page);
 
@@ -358,6 +360,8 @@ function getKyHocArray_() {
     .map(row => ({
       maKyHoc: String(row.MaKyHoc || '').trim(),
       tenKyHoc: String(row.TenKyHoc || '').trim(),
+      hocPhiCap1: termTuitionConfig_(row).cap1,
+      hocPhiCap2: termTuitionConfig_(row).cap2,
       macDinh: row.MacDinh === true || String(row.MacDinh).toUpperCase() === 'TRUE'
     }));
 }
@@ -454,7 +458,8 @@ function transferHocSinhToKyHoc(token, targetKyHocId) {
       newRows.push({
         MaHocSinh: student.maHocSinh,
         MaKyHoc: targetId,
-        HocPhi: number_(student.hocPhi),
+        HocPhi: getTermDefaultTuition_(targetId, student.khoi),
+        HocPhiMode: 'AUTO',
         TrangThaiHocPhi: '',
         GhiChuHocPhi: '',
         TrangThai: 'ACTIVE',
@@ -692,7 +697,7 @@ function getHocSinhList(token, filters) {
   filters = filters || {};
 
   const cacheKey = buildCacheKey_(
-    'hocsinh_list_' +
+    'hocsinh_list_v3_' +
     session.maKyHoc + '_' +
     hashString_(JSON.stringify(filters))
   );
@@ -706,7 +711,7 @@ function getHocSinhList(token, filters) {
 
   const hocSinhRows = readObjects_(SHEET_HOCSINH);
   const hocSinhKyHocMap = getHocSinhKyHocMap_();
-  const hasCurrentKyHocMapping = hasMappingForKyHoc_(session.maKyHoc);
+  const tuitionConfig = termTuitionConfig_(readObjects_(SHEET_KYHOC).find(row => String(row.MaKyHoc || '').trim() === session.maKyHoc));
 
   let result = hocSinhRows
     .filter(row => String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED')
@@ -724,9 +729,7 @@ function getHocSinhList(token, filters) {
       const rowMaKyHoc = String(row.MaKyHoc || '').trim();
 
       const belongsToCurrentKyHoc =
-        mapping.kyHocIds.indexOf(session.maKyHoc) !== -1 ||
-        rowMaKyHoc === session.maKyHoc ||
-        (!hasCurrentKyHocMapping && !rowMaKyHoc);
+        mapping.kyHocIds.indexOf(session.maKyHoc) !== -1;
 
       if (!belongsToCurrentKyHoc) return null;
 
@@ -751,7 +754,8 @@ function getHocSinhList(token, filters) {
 
         kyHocIds: mapping.kyHocIds,
         kyHocNames: mapping.kyHocNames,
-        hocPhi: currentFee.hocPhi || '',
+        hocPhi: currentFee.hocPhiMode === 'AUTO' ? tuitionForGrade_(row.Khoi, tuitionConfig) : (currentFee.hocPhi == null ? '' : currentFee.hocPhi),
+        hocPhiMode: currentFee.hocPhiMode || 'AUTO',
         trangThaiHocPhi: currentFee.trangThaiHocPhi || '',
         ghiChuHocPhi: currentFee.ghiChuHocPhi || ''
       };
@@ -1057,22 +1061,16 @@ function saveHocSinhOrder(token, orderedStudentIds) {
       }
     });
 
-    const hasCurrentMapping = Object.keys(mappedIds).length > 0;
     const currentStudentIds = values.slice(1).reduce((ids, row) => {
       const id = String(row[index.MaHocSinh] || '').trim();
       const status = index.TrangThai === undefined
         ? 'ACTIVE'
         : String(row[index.TrangThai] || '').trim().toUpperCase();
-      const rowKyHoc = index.MaKyHoc === undefined
-        ? ''
-        : String(row[index.MaKyHoc] || '').trim();
 
       if (!id || status === 'DELETED') return ids;
 
       const belongsToCurrentKyHoc =
-        !!mappedIds[id] ||
-        rowKyHoc === session.maKyHoc ||
-        (!hasCurrentMapping && !rowKyHoc);
+        !!mappedIds[id];
 
       if (belongsToCurrentKyHoc) ids.push(id);
       return ids;
@@ -1205,11 +1203,14 @@ function saveHocSinh(token, hocSinh) {
   const sdtPhuHuynh = String(hocSinh.sdtPhuHuynh || '').trim();
   const diaChi = String(hocSinh.diaChi || '').trim();
   const ghiChu = String(hocSinh.ghiChu || '').trim();
-  const hocPhi = String(hocSinh.hocPhi || '').replace(/[^\d]/g, '');
+  const hocPhiMode = hocSinh.hocPhiMode === 'AUTO' ? 'AUTO' : 'CUSTOM';
+  let hocPhi = hocPhiMode === 'CUSTOM' ? tuitionAmount_(hocSinh.hocPhi) : getTermDefaultTuition_(kyHocIds.includes(session.maKyHoc) ? session.maKyHoc : kyHocIds[0], khoi);
   const khongThuPhi = toBoolean_(hocSinh.khongThuPhi);
   const capNhatThuPhi = !khongThuPhi && toBoolean_(hocSinh.capNhatThuPhi);
   const thuPhiYearMonth = String(hocSinh.thuPhiYearMonth || '').trim();
 
+  const validTermIds = new Set(getAllTerms_().map(term => term.maKyHoc));
+  if (kyHocIds.some(id => !validTermIds.has(id))) throw new Error('Kỳ học không hợp lệ.');
   if (kyHocIds.length === 0) {
     throw new Error('Vui lòng chọn ít nhất một kỳ học.');
   }
@@ -1348,13 +1349,13 @@ function saveHocSinh(token, hocSinh) {
     const studentSheet = ensureSheet_(studentSpreadsheet, SHEET_HOCSINH, getHocSinhHeaders_());
     appendObjectsToSheet_(studentSheet, [savedStudentRow], getHocSinhHeaders_());
   }
-  saveHocSinhKyHoc_(newId, kyHocIds, hocPhi);
+  hocPhi = saveHocSinhKyHoc_(newId, kyHocIds, hocPhi, { maKyHoc: kyHocIds.includes(session.maKyHoc) ? session.maKyHoc : kyHocIds[0], khoi: khoi, mode: hocPhiMode });
   } finally {
     lock.releaseLock();
   }
 
   let thuPhiSyncResult = null;
-  if (existed && /^\d{4}-\d{2}$/.test(thuPhiYearMonth)) {
+  if (existed && kyHocIds.includes(session.maKyHoc) && /^\d{4}-\d{2}$/.test(thuPhiYearMonth)) {
     thuPhiSyncResult = syncHocSinhToThuPhiMonth_(
       session.maKyHoc,
       thuPhiYearMonth,
@@ -1473,55 +1474,26 @@ function getHocSinhHeaders_() {
   ];
 }
 
-function saveHocSinhKyHoc_(maHocSinh, kyHocIds, hocPhi) {
-  const now = new Date();
-  const oldRows = readObjectsNoCache_(SHEET_HOCSINH_KYHOC);
-
-  const activeRows = oldRows.filter(row => {
-    return String(row.MaHocSinh || '').trim() === maHocSinh &&
-      String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED';
+function saveHocSinhKyHoc_(maHocSinh, kyHocIds, hocPhi, options) {
+  const rows = readObjectsNoCache_(SHEET_HOCSINH_KYHOC);
+  const terms = readObjectsNoCache_(SHEET_KYHOC).filter(row => String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED');
+  const termIds = new Set(terms.map(row => String(row.MaKyHoc || '').trim()));
+  const requested = new Set(kyHocIds.map(id => String(id || '').trim()));
+  requested.forEach(id => { if (!termIds.has(id)) throw new Error('Kỳ học không hợp lệ.'); });
+  const active = new Set(rows.filter(row => String(row.MaHocSinh || '').trim() === maHocSinh && String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED').map(row => String(row.MaKyHoc || '').trim()));
+  const changes = Array.from(new Set([...active, ...requested])).filter(id => termIds.has(id)).map(id => ({ maHocSinh: maHocSinh, maKyHoc: id, expected: active.has(id), selected: requested.has(id) }));
+  let next = applyStudentTermChanges_(rows, changes, new Set([maHocSinh]), termIds, new Date());
+  next = next.map(row => {
+    if (String(row.MaHocSinh || '').trim() !== maHocSinh || String(row.TrangThai || '').trim().toUpperCase() === 'DELETED') return row;
+    const copy = Object.assign({}, row);
+    if (String(row.MaKyHoc).trim() === options.maKyHoc) { copy.HocPhiMode = options.mode; copy.HocPhi = hocPhi; }
+    copy.UpdatedAt = new Date();
+    return copy;
   });
-  const activeKyHocIds = activeRows
-    .map(row => String(row.MaKyHoc || '').trim())
-    .filter(id => id)
-    .sort();
-  const requestedKyHocIds = kyHocIds.map(id => String(id || '').trim()).filter(id => id).sort();
-  const mappingUnchanged = activeKyHocIds.length === requestedKyHocIds.length &&
-    activeKyHocIds.every((id, index) => id === requestedKyHocIds[index]) &&
-    activeRows.every(row => String(number_(row.HocPhi)) === String(number_(hocPhi)));
-
-  if (mappingUnchanged) return;
-
-  const keptRows = oldRows.map(row => {
-    if (
-      String(row.MaHocSinh || '').trim() === maHocSinh &&
-      String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED'
-    ) {
-      return Object.assign({}, row, {
-        TrangThai: 'DELETED',
-        UpdatedAt: now
-      });
-    }
-
-    return row;
-  });
-
-  const newRows = kyHocIds.map(maKyHoc => ({
-    MaHocSinh: maHocSinh,
-    MaKyHoc: maKyHoc,
-    HocPhi: hocPhi,
-    TrangThaiHocPhi: '',
-    GhiChuHocPhi: '',
-    TrangThai: 'ACTIVE',
-    CreatedAt: now,
-    UpdatedAt: now
-  }));
-
-  writeObjectsToSheet_(
-    SHEET_HOCSINH_KYHOC,
-    keptRows.concat(newRows),
-    getHocSinhKyHocHeaders_()
-  );
+  next = fillAutomaticTuition_(next, [{ MaHocSinh: maHocSinh, Khoi: options.khoi }], terms);
+  writeObjectsToSheet_(SHEET_HOCSINH_KYHOC, next, getHocSinhKyHocHeaders_());
+  const saved = next.find(row => String(row.MaHocSinh || '').trim() === maHocSinh && String(row.MaKyHoc || '').trim() === options.maKyHoc && String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED');
+  return saved ? saved.HocPhi : hocPhi;
 }
 
 function markHocSinhKyHocDeleted_(maHocSinh) {
@@ -1547,6 +1519,7 @@ function getHocSinhKyHocHeaders_() {
     'MaKyHoc',
     'HocPhi',
     'TrangThaiHocPhi',
+    'HocPhiMode',
     'GhiChuHocPhi',
     'TrangThai',
     'CreatedAt',
@@ -1581,7 +1554,8 @@ function getHocSinhKyHocMap_() {
       map[maHocSinh].kyHocIds.push(maKyHoc);
       map[maHocSinh].kyHocNames.push(kyHocNameMap[maKyHoc] || maKyHoc);
       map[maHocSinh].byKyHoc[maKyHoc] = {
-        hocPhi: row.HocPhi || '',
+        hocPhi: row.HocPhi == null ? '' : row.HocPhi,
+        hocPhiMode: tuitionMode_(row),
         trangThaiHocPhi: row.TrangThaiHocPhi || '',
         ghiChuHocPhi: row.GhiChuHocPhi || ''
       };
@@ -2669,7 +2643,7 @@ function ensureThuPhiMonthSnapshot_(maKyHoc, year, month, options) {
     const students = getHocSinhTheoKyHocForThuPhi_(maKyHoc);
 
     const snapshotRows = students.map(student => {
-      const hocPhi = number_(student.hocPhi || defaultHocPhiByKhoi_(student.khoi));
+      const hocPhi = number_(student.hocPhi === '' || student.hocPhi == null ? getTermDefaultTuition_(maKyHoc, student.khoi) : student.hocPhi);
 
       return {
         MaHocSinh: student.maHocSinh,
@@ -2868,7 +2842,7 @@ function addHocSinhToThuPhiMonth_(maKyHoc, yearMonth, maHocSinh) {
       throw new Error('Không tìm thấy học sinh vừa thêm trong kỳ học hiện tại.');
     }
 
-    const hocPhi = number_(student.hocPhi || defaultHocPhiByKhoi_(student.khoi));
+    const hocPhi = number_(student.hocPhi === '' || student.hocPhi == null ? getTermDefaultTuition_(maKyHoc, student.khoi) : student.hocPhi);
     const now = new Date();
 
     appendObjectsToSheet_(sheet, [{
@@ -3003,6 +2977,7 @@ function appendObjectsToSheet_(sheet, objects, requiredHeaders) {
 function getHocSinhTheoKyHocForThuPhi_(maKyHoc) {
   const hocSinhRows = readObjects_(SHEET_HOCSINH);
   const relationRows = readObjects_(SHEET_HOCSINH_KYHOC);
+  const tuitionConfig = termTuitionConfig_(readObjects_(SHEET_KYHOC).find(row => String(row.MaKyHoc || '').trim() === maKyHoc));
   const lopRows = readObjects_(SHEET_LOP);
   const khoiRows = readObjects_(SHEET_KHOI);
 
@@ -3026,14 +3001,12 @@ function getHocSinhTheoKyHocForThuPhi_(maKyHoc) {
 
       if (maHocSinh) {
         map[maHocSinh] = {
-          hocPhi: row.HocPhi
+          hocPhi: row.HocPhi, mode: tuitionMode_(row)
         };
       }
 
       return map;
     }, {});
-
-  const hasKyHocMapping = Object.keys(kyHocMap).length > 0;
 
   return hocSinhRows
     .filter(row => String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED')
@@ -3043,10 +3016,8 @@ function getHocSinhTheoKyHocForThuPhi_(maKyHoc) {
 
       if (!maHocSinh) return null;
 
-      const rowMaKyHoc = String(row.MaKyHoc || '').trim();
 
-      if (hasKyHocMapping && !kyHocMap[maHocSinh]) return null;
-      if (!hasKyHocMapping && rowMaKyHoc && rowMaKyHoc !== maKyHoc) return null;
+      if (!kyHocMap[maHocSinh]) return null;
 
       const khoi = String(row.Khoi || '').trim();
       const lop = String(row.Lop || '').trim();
@@ -3062,7 +3033,7 @@ function getHocSinhTheoKyHocForThuPhi_(maKyHoc) {
         truong: String(row.Truong || '').trim() || 'THCS Long Phước',
         gioiTinh: String(row.GioiTinh || '').trim(),
         sdtPhuHuynh: String(row.SDTPhuHuynh || '').trim(),
-        hocPhi: kyHocMap[maHocSinh] ? kyHocMap[maHocSinh].hocPhi : '',
+        hocPhi: kyHocMap[maHocSinh].mode === 'AUTO' ? tuitionForGrade_(khoi, tuitionConfig) : kyHocMap[maHocSinh].hocPhi,
         ngayVaoRaw: row.NgayVao || row.NgaySinh || row.CreatedAt || '',
         createdAt: row.CreatedAt || ''
       };

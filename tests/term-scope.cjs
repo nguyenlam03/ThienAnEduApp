@@ -14,7 +14,8 @@ const rows = {
     { MaKyHoc: 'D', TenKyHoc: 'Đã xóa', TrangThai: 'DELETED' }
   ],
   NguoiDung: [{ MaNguoiDung: 'u1', TenDangNhap: 'teacher', HoTen: 'Teacher', VaiTro: 'TEACHER', TrangThai: 'ACTIVE' }],
-  HocSinh: [{ MaHocSinh: 's1', HoTen: 'Student A', MaKyHoc: 'A' }, { MaHocSinh: 's2', HoTen: 'Student B', MaKyHoc: 'B' }]
+  HocSinhKyHoc: [{ MaHocSinh: 's1', MaKyHoc: 'A', TrangThai: 'ACTIVE', HocPhi: 1200000, GhiChuHocPhi: 'Giữ ghi chú' }, { MaHocSinh: 's2', MaKyHoc: 'B', TrangThai: 'ACTIVE' }],
+  HocSinh: [{ MaHocSinh: 's1', HoTen: 'Student A', MaKyHoc: 'A', Khoi: '3' }, { MaHocSinh: 's2', HoTen: 'Student B', MaKyHoc: 'B', Khoi: '7' }]
 };
 const ctx = {
   console,
@@ -48,12 +49,14 @@ for (const file of fs.readdirSync('.').filter(file => /\.(js|html)$/.test(file))
     new vm.Script(match[1].replace(/<\?[\s\S]*?\?>/g, 'null'), { filename: file }); syntaxBlocks++;
   }
 }
+const feeFormatter = fs.readFileSync('QuanLyHocSinh.html','utf8').match(/function formatMoneyInputValue\(value\) \{[\s\S]*?\n    \}/)[0];
+assert.equal(vm.runInNewContext(feeFormatter + ';formatMoneyInputValue(0)'), '0', 'Student editor preserves a zero rate');
 const baseline = JSON.parse(ctx.runArchitectureUnitTests());
 assert.equal(baseline.failed, 0, JSON.stringify(baseline.results.filter(item => !item.passed)));
 Object.assign(ctx, {
   readObjects_: name => rows[name] || [], readObjectsNoCache_: name => rows[name] || [],
   ensureSheet_: () => ({}), cacheGetString_: () => null, cachePutString_: () => {},
-  buildCacheKey_: value => value, getHocSinhKyHocMap_: () => ({}), hasMappingForKyHoc_: () => true,
+  buildCacheKey_: value => value,
   safeWriteAuditLog_: () => {}
 });
 const options = JSON.parse(ctx.getKyHocList());
@@ -76,6 +79,77 @@ assert.throws(() => ctx.SecurityService.createTermSession(a, 'B'));
 assert.throws(() => ctx.SecurityService.createTermSession('parent', 'D'));
 assert.deepEqual(JSON.parse(ctx.getHocSinhList(a, {})).map(item => item.maHocSinh), ['s1']);
 assert.deepEqual(JSON.parse(ctx.getHocSinhList(b, {})).map(item => item.maHocSinh), ['s2']);
+// The matrix reads all students, but only writers can alter membership.
+assert.equal(JSON.parse(ctx.getStudentTermMatrix('parent')).students.length, 2);
+assert.equal(JSON.parse(ctx.getStudentTermMatrix(a)).canWrite, false);
+assert.throws(() => ctx.saveStudentTermMatrix('parent', []));
+rows.NguoiDung[0].VaiTro = 'ADMIN';
+let released = 0, writes = 0;
+ctx.LockService = { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => released++ }) };
+ctx.writeObjectsToSheet_ = (name, value) => { rows[name] = value; writes++; };
+ctx.bumpDataVersion_ = () => {};
+ctx.saveStudentTermMatrix('parent', [{ maHocSinh: 's1', maKyHoc: 'A', selected: false, expected: true }]);
+assert.equal(JSON.parse(ctx.getHocSinhList(a, {})).length, 0, 'Legacy MaKyHoc must not restore an unchecked student');
+assert.equal(ctx.getHocSinhTheoKyHocForThuPhi_('A').length, 0, 'Empty membership must not include unassigned students');
+assert.deepEqual(JSON.parse(ctx.getHocSinhList(b, {})).map(item => item.maHocSinh), ['s2']);
+ctx.saveStudentTermMatrix('parent', [{ maHocSinh: 's1', maKyHoc: 'A', selected: true, expected: false }]);
+assert.equal(rows.HocSinhKyHoc[0].HocPhi, 1200000);
+assert.equal(rows.HocSinhKyHoc[0].GhiChuHocPhi, 'Giữ ghi chú');
+assert.equal(rows.HocSinhKyHoc.length, 2, 'Reactivation must not duplicate links');
+const beforeInvalid = JSON.stringify(rows.HocSinhKyHoc);
+assert.throws(() => ctx.saveStudentTermMatrix('parent', [
+  { maHocSinh: 's1', maKyHoc: 'A', selected: false, expected: true },
+  { maHocSinh: 's1', maKyHoc: 'D', selected: true, expected: false }
+]));
+assert.equal(JSON.stringify(rows.HocSinhKyHoc), beforeInvalid, 'Validate complete batch before writing');
+assert.equal(writes, 2); assert.equal(released, 3, 'Always release the lock');
+rows.HocSinh.push({ MaHocSinh: 's3', HoTen: 'Unassigned', MaKyHoc: 'A', Khoi: '5' });
+assert.deepEqual(JSON.parse(ctx.getHocSinhList(a, {})).map(item => item.maHocSinh), ['s1']);
+assert.deepEqual(JSON.parse(ctx.getStudentTermMatrix(a)).students.find(item => item.maHocSinh === 's3').kyHocIds, []);
+console.log('Matrix tests passed: read/write roles, check/uncheck, strict membership, fee preservation, validation and locking.');
+// Tuition is stored per term, with explicit automatic or individual mode.
+rows.HocSinhKyHoc.push({ MaHocSinh: 's2', MaKyHoc: 'A', TrangThai: 'ACTIVE', HocPhiMode: 'AUTO', HocPhi: '' });
+rows.HocSinhKyHoc.push({ MaHocSinh: 's1', MaKyHoc: 'B', TrangThai: 'ACTIVE', HocPhiMode: 'AUTO', HocPhi: '' });
+ctx.saveTermTuition('parent', { maKyHoc: 'A', cap1: 100, cap2: 200, overrides: [] });
+const link = (id, term) => rows.HocSinhKyHoc.find(r => r.MaHocSinh === id && r.MaKyHoc === term && r.TrangThai !== 'DELETED');
+assert.equal(link('s1','A').HocPhi, 1200000, 'Keep legacy individual fees');
+assert.equal(link('s2','A').HocPhi, 200, 'Secondary school rate');
+ctx.saveTermTuition('parent', { maKyHoc: 'B', cap1: 300, cap2: 400, overrides: [] });
+assert.equal(link('s1','B').HocPhi, 300, 'Primary school rate in another term');
+assert.equal(link('s2','A').HocPhi, 200, 'Other terms unchanged');
+ctx.saveTermTuition('parent', { maKyHoc: 'A', cap1: 111, cap2: 222, overrides: [{ maHocSinh:'s2', mode:'CUSTOM', amount:0 }] });
+assert.equal(link('s2','A').HocPhi, 0);
+ctx.saveTermTuition('parent', { maKyHoc: 'A', cap1: 111, cap2: 999, overrides: [] });
+assert.equal(link('s2','A').HocPhi, 0, 'Zero custom fee survives default rate changes');
+assert.equal(ctx.getHocSinhTheoKyHocForThuPhi_('A').find(s => s.maHocSinh === 's2').hocPhi, 0, 'Monthly roster must preserve zero');
+ctx.saveTermTuition('parent', { maKyHoc: 'A', cap1: 111, cap2: 222, overrides: [{ maHocSinh:'s2', mode:'AUTO' }] });
+assert.equal(link('s2','A').HocPhi, 222, 'Return to automatic rate');
+ctx.saveHocSinhKyHoc_('s1', ['A','B'], 333, { maKyHoc:'B', khoi:'3', mode:'CUSTOM' });
+assert.equal(link('s1','A').HocPhi,1200000,'Editing one term must preserve other term fees');
+assert.equal(link('s1','B').HocPhi,333);
+assert.throws(() => ctx.saveTermTuition('parent', {maKyHoc:'A',cap1:-1,cap2:200,overrides:[]}));
+assert.throws(() => ctx.tuitionAmount_(Infinity));
+assert.throws(() => ctx.tuitionAmount_(''));
+assert.equal(ctx.tuitionForGrade_(5,{cap1:10,cap2:20}),10);
+assert.equal(ctx.tuitionForGrade_(6,{cap1:10,cap2:20}),20);
+// Quick add validates class, creates automatic fees in each selected term, and is retry-safe.
+rows.Khoi=[{Khoi:'3',TenKhoi:'Khối 3',TrangThai:'ACTIVE',ThuTu:3}];
+rows.Lop=[{MaLop:'L3',TenLop:'Lớp 3',Khoi:'3',TrangThai:'ACTIVE',ThuTu:3}];
+ctx.ensureSheet_=(ss,name)=>({name});
+ctx.appendObjectsToSheet_=(sheet,items)=>{if(!rows[sheet.name])rows[sheet.name]=[];rows[sheet.name].push(...items);};
+const quick={requestId:'quick_test_001',hoTen:'New student',khoi:'3',lop:'L3',sdtPhuHuynh:'',kyHocIds:['A','B']};
+const added=JSON.parse(ctx.quickAddStudent('parent',quick));
+assert.equal(link(added.student.maHocSinh,'A').HocPhi,111);
+assert.equal(link(added.student.maHocSinh,'B').HocPhi,300);
+assert.equal(link(added.student.maHocSinh,'B').HocPhiMode,'AUTO');
+const count=rows.HocSinh.length;
+assert.equal(JSON.parse(ctx.quickAddStudent('parent',quick)).student.maHocSinh,added.student.maHocSinh);
+assert.equal(rows.HocSinh.length,count,'Retry must not add a duplicate student');
+assert.throws(()=>ctx.quickAddStudent('parent',{...quick,requestId:'quick_test_002',lop:'WRONG'}));
+assert.equal(rows.HocSinh.length,count);
+const unassigned=JSON.parse(ctx.quickAddStudent('parent',{...quick,requestId:'quick_test_003',kyHocIds:[]}));
+assert.equal(unassigned.student.kyHocIds.length,0);
+console.log('Tuition and quick-add tests passed: tier boundaries, term isolation, legacy/custom/zero rates, automatic restoration, validation and retry safety.');
 ctx.logout('parent');
 assert.equal(ctx.SecurityService.getSession(a).valid, false);
 assert.equal(ctx.SecurityService.getSession(b).valid, false);

@@ -79,3 +79,19 @@ Chốt phân bổ hũ khác với khóa sổ: chốt phân bổ chỉ khóa họ
 - Chọn một kỳ cụ thể vẫn dùng luồng hiện có. Các RPC nghiệp vụ không nhận phiên tổng hợp để tránh ghi dữ liệu dưới mã giả.
 - Các phiên con phụ thuộc phiên tổng hợp; đăng xuất phiên tổng hợp hoặc một phiên con thu hồi quyền sử dụng toàn bộ nhóm phiên.
 - Kiểm tra cục bộ: `node tests/term-scope.cjs`. Chưa thay thế kiểm thử tích hợp trên Google Apps Script.
+
+## Phân kỳ học sinh
+
+- `PhanKyHocSinh.html` là bảng toàn bộ học sinh × kỳ học, truy cập từ nhóm Học sinh. Màn hình này hiển thị một lần ngay cả khi đăng nhập Tất cả kỳ học.
+- `StudentTermService.js` đọc và cập nhật `HocSinhKyHoc`; quyền `student.read` để xem, `student.write` để lưu. Chỉ gửi các ô đã thay đổi và đọc lại dữ liệu dưới khóa trước khi ghi.
+- Danh sách học sinh, điểm danh, sắp xếp và danh sách nguồn tạo học phí tháng chỉ nhận học sinh có liên kết chưa xóa trong `HocSinhKyHoc`. Không suy đoán từ `HocSinh.MaKyHoc` hoặc tự lấy học sinh khi kỳ chưa có liên kết.
+- Bỏ tick gỡ liên kết bằng trạng thái DELETED; tick lại khôi phục liên kết và giữ học phí/ghi chú cũ. Học sinh có thể chưa thuộc kỳ nào và vẫn hiện trong bảng quản trị. Dữ liệu chỉ có mã kỳ cũ ở hồ sơ, chưa có liên kết, cần được tick trong bảng để xuất hiện trong danh sách theo kỳ.
+- Thao tác phân kỳ không sửa snapshot học phí tháng, phiếu thu chi hay lịch sử điểm danh đã phát sinh.
+
+## Học phí theo kỳ và thêm nhanh
+
+- `HocPhiKyHoc.html` / `TermTuitionService.js`: cấu hình `KyHoc.HocPhiCap1` (khối 1–5), `HocPhiCap2` (khối 6–9). Kỳ chưa cấu hình dùng mức khởi đầu cũ 1.800.000 / 2.000.000 đồng.
+- `HocSinhKyHoc.HocPhiMode`: AUTO nhận mức theo cấp, CUSTOM giữ mức riêng (bao gồm 0 đồng). Học phí cũ chưa có chế độ nhưng có số tiền được giữ như CUSTOM; có thể chuyển về AUTO trên màn hình học phí.
+- Lưu cấu hình áp dụng và lưu lại học phí AUTO trong kỳ đó; không thay đổi CUSTOM, kỳ khác, snapshot tháng hoặc giao dịch đã phát sinh. Sửa hồ sơ chỉ chỉnh mức riêng của kỳ hiện tại, giữ mức riêng của các kỳ còn lại.
+- Thêm mới, thêm nhanh, tick phân kỳ và chuyển tiếp sang kỳ khác đều lưu mức AUTO theo cấp và cấu hình kỳ đích.
+- Thêm nhanh ở bảng phân kỳ nhận tên, khối/lớp, điện thoại và các kỳ tham gia. Có thể chưa gán kỳ; không tạo snapshot học phí tháng. Request ID chống tạo trùng khi gửi lại cùng yêu cầu trong thời hạn cache.
