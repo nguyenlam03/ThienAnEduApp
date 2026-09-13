@@ -148,7 +148,7 @@ var SecurityService = (function () {
       return { success: false, message: 'Tên đăng nhập hoặc mật khẩu không đúng.' };
     }
 
-    var term = getKyHocArray_().find(function (item) { return item.maKyHoc === maKyHoc; });
+    var term = maKyHoc === ALL_TERMS_CODE_ ? { maKyHoc: ALL_TERMS_CODE_, tenKyHoc: 'Tất cả kỳ học' } : getKyHocArray_().find(function (item) { return item.maKyHoc === maKyHoc; });
     if (!term) return { success: false, message: 'Kỳ học không hợp lệ hoặc chưa được kích hoạt.' };
 
     var token = createSession(user, term);
@@ -170,7 +170,7 @@ var SecurityService = (function () {
     };
   }
 
-  function createSession(user, term) {
+  function createSession(user, term, parentToken) {
     var token = Utilities.getUuid();
     var payload = {
       maKyHoc: term.maKyHoc,
@@ -179,6 +179,7 @@ var SecurityService = (function () {
       tenDangNhap: user.tenDangNhap,
       hoTen: user.hoTen,
       vaiTro: user.vaiTro,
+      parentToken: parentToken || '',
       issuedAt: Date.now()
     };
     CacheService.getScriptCache().put(CACHE_LOGIN_PREFIX + token, JSON.stringify(payload), SESSION_SECONDS);
@@ -205,7 +206,9 @@ var SecurityService = (function () {
         maNguoiDung: 'USER_OWNER', tenDangNhap: 'admin', hoTen: 'Chủ cơ sở', vaiTro: 'OWNER'
       };
     }
-    var term = getKyHocArray_().find(function (item) { return item.maKyHoc === payload.maKyHoc; });
+    if (!payload) return { valid: false };
+    if (payload.parentToken && !CacheService.getScriptCache().get(CACHE_LOGIN_PREFIX + payload.parentToken)) return { valid: false };
+    var term = payload.maKyHoc === ALL_TERMS_CODE_ ? { maKyHoc: ALL_TERMS_CODE_, tenKyHoc: 'Tất cả kỳ học' } : (payload.parentToken ? getAllTerms_() : getKyHocArray_()).find(function (item) { return item.maKyHoc === payload.maKyHoc; });
     if (!term) return { valid: false };
 
     var user = getUsers().find(function (item) {
@@ -217,6 +220,7 @@ var SecurityService = (function () {
     if (!user) return { valid: false };
     return {
       valid: true,
+      parentToken: payload.parentToken || '',
       maKyHoc: term.maKyHoc,
       tenKyHoc: term.tenKyHoc,
       maNguoiDung: user.maNguoiDung,
@@ -235,6 +239,7 @@ var SecurityService = (function () {
   function requireSession(token, permission) {
     var session = getSession(token);
     if (!session.valid) throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+    if (permission && session.maKyHoc === ALL_TERMS_CODE_) throw new Error('Vui lòng thao tác trong nhóm kỳ học cụ thể.');
     if (!hasPermission(session.vaiTro, permission)) {
       throw new Error('Tài khoản không có quyền thực hiện thao tác này.');
     }
@@ -348,6 +353,13 @@ var SecurityService = (function () {
     getUsers: function (token) {
       requireSession(token, 'system.admin');
       return getUsers().map(stripPrivateUser);
+    },
+    createTermSession: function (token, termCode) {
+      var session = requireSession(token);
+      if (session.maKyHoc !== ALL_TERMS_CODE_) throw new Error('Phiên không có phạm vi tất cả kỳ học.');
+      var term = getAllTerms_().find(function (item) { return item.maKyHoc === termCode; });
+      if (!term) throw new Error('Kỳ học không hợp lệ.');
+      return createSession(session, term, token);
     },
     hashPassword: hashPassword
   };

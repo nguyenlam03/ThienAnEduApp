@@ -172,6 +172,14 @@
     overflow: visible;
   }
 
+  .app-navigation .ribbon-button { gap: 10px; border-radius: 14px; }
+  .app-navigation .nav-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 9px; background: rgba(100,116,139,.08); }
+  .app-navigation svg { display: block; width: 21px; height: 21px; flex-shrink: 0; }
+  .app-navigation .nav-chevron svg { width: 16px; height: 16px; }
+  .app-navigation .nav-dropdown-item > span:first-child { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 10px; background: #edf3f9; color: #286090; }
+  .app-navigation button:focus-visible { outline: 3px solid #38bdf8; outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) { .app-navigation * { transition: none !important; } }
+
   .app-navigation .nav-group {
     position: relative;
   }
@@ -182,8 +190,15 @@
   }
 
   .app-navigation .nav-chevron {
-    margin-left: 4px;
-    font-size: 16px;
+    margin-left: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 8px;
+    background: rgba(100, 116, 139, .09);
+    flex-shrink: 0;
     line-height: 1;
     transition: transform .18s ease;
   }

@@ -71,3 +71,11 @@ Chốt phân bổ hũ khác với khóa sổ: chốt phân bổ chỉ khóa họ
 - `TaiChinhGiaDinh.html`: hạn mức Hũ lương chủ trung tâm, các đợt rút tiền và ngân sách gia đình; chỉ gọi `getTaiChinhGiaDinhData`.
 - Ba màn hình dùng chung các Sheet, khóa sổ, nhật ký và hàm ghi nghiệp vụ hiện có. Không tạo bản sao giao dịch hoặc nguồn dữ liệu tài chính mới.
 - Sau thao tác ghi, giao diện chỉ tải lại module đang sử dụng; dữ liệu danh mục ít thay đổi dùng cache theo phiên bản và bị vô hiệu hóa khi `bumpDataVersion_` được gọi.
+
+## Phạm vi tất cả kỳ học
+
+- Lựa chọn đăng nhập `__ALL_TERMS__` là phạm vi hiển thị, không phải mã kỳ học trong dữ liệu.
+- `AllTerms.js` và `AllTerms.html` hiển thị màn hình hiện tại theo từng kỳ học chưa xóa, kể cả kỳ đã ngừng hoạt động. Mỗi nhóm dùng iframe với phiên gắn đúng kỳ học và cùng tài khoản/quyền; dữ liệu và bộ lọc ngày/tháng giữ riêng từng nhóm. Không cộng gộp số dư hay loại bỏ học sinh xuất hiện ở nhiều kỳ.
+- Chọn một kỳ cụ thể vẫn dùng luồng hiện có. Các RPC nghiệp vụ không nhận phiên tổng hợp để tránh ghi dữ liệu dưới mã giả.
+- Các phiên con phụ thuộc phiên tổng hợp; đăng xuất phiên tổng hợp hoặc một phiên con thu hồi quyền sử dụng toàn bộ nhóm phiên.
+- Kiểm tra cục bộ: `node tests/term-scope.cjs`. Chưa thay thế kiểm thử tích hợp trên Google Apps Script.

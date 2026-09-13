@@ -93,6 +93,8 @@ function doGet(e) {
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
     }
 
+    if (session.maKyHoc === ALL_TERMS_CODE_) return renderAllTermsPage_(page, token, session, brand);
+
     const template = HtmlService.createTemplateFromFile(page);
 
     template.token = token;
@@ -107,9 +109,12 @@ function doGet(e) {
     template.notificationDurationMs = notificationDurationMs;
     applyBrandToTemplate_(template, brand);
 
-    return template.evaluate()
-      .setTitle(brand.name)
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    const output = template.evaluate().setTitle(brand.name).setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    if (e.parameter.embedded === '1') {
+      output.append('<style>.topbar,.app-navigation{display:none!important}.main{padding:12px!important}body{min-height:0!important}</style>');
+      if (session.parentToken) output.append('<script>document.addEventListener("DOMContentLoaded",function(){window.goPage=function(page){window.top.location.href=' + inlineScriptJson_(ScriptApp.getService().getUrl()) + '+"?page="+encodeURIComponent(page)+"&token="+encodeURIComponent(' + inlineScriptJson_(session.parentToken) + ');};});</script>');
+    }
+    return output;
   }
 
   const loginTemplate = HtmlService.createTemplateFromFile('Login');
@@ -342,7 +347,7 @@ function getNotificationDurationMs_() {
 ========================================================= */
 
 function getKyHocList() {
-  return jsonResponse_(getKyHocArray_());
+  return jsonResponse_([{ maKyHoc: ALL_TERMS_CODE_, tenKyHoc: 'Tất cả kỳ học', macDinh: false }].concat(getKyHocArray_()));
 }
 
 function getKyHocArray_() {
@@ -526,6 +531,7 @@ function logout(token) {
   const session = getSessionFromToken_(token);
   if (token) {
     CacheService.getScriptCache().remove(CACHE_LOGIN_PREFIX + token);
+    if (session.parentToken) CacheService.getScriptCache().remove(CACHE_LOGIN_PREFIX + session.parentToken);
   }
   safeWriteAuditLog_(session, 'LOGOUT', 'PHIEN_DANG_NHAP', String(token || '').slice(0, 8), null, null);
 

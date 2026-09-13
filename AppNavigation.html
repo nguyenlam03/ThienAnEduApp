@@ -1,34 +1,34 @@
 <nav class="ribbon app-navigation" aria-label="Điều hướng chính">
   <button class="ribbon-button nav-direct" type="button" data-page="Index" onclick="goPage('Index')">
-    <span class="nav-icon" aria-hidden="true">🏠</span><span>Trang chính</span>
+    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg></span><span>Trang chính</span>
   </button>
 
   <div class="nav-group" data-pages="QuanLyHocSinh QuanLyDiemDanh">
     <button class="ribbon-button nav-group-toggle" type="button" aria-haspopup="true" aria-expanded="false">
-      <span class="nav-icon" aria-hidden="true">🎓</span><span>Học sinh</span><span class="nav-chevron">⌄</span>
+      <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 8 10-5 10 5-10 5zM6 10v6c3 3 9 3 12 0v-6M22 8v7"/></svg></span><span>Học sinh</span><span class="nav-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 10 5 5 5-5"/></svg></span>
     </button>
-    <div class="nav-dropdown" role="menu">
-      <button type="button" class="nav-dropdown-item" data-page="QuanLyHocSinh" onclick="goPage('QuanLyHocSinh')"><span>👨‍🎓</span><span><strong>Quản lý học sinh</strong><small>Hồ sơ, kỳ học và sắp xếp</small></span></button>
-      <button type="button" class="nav-dropdown-item" data-page="QuanLyDiemDanh" onclick="goPage('QuanLyDiemDanh')"><span>✅</span><span><strong>Điểm danh</strong><small>Điểm danh và theo dõi chuyên cần</small></span></button>
+    <div class="nav-dropdown">
+      <button type="button" class="nav-dropdown-item" data-page="QuanLyHocSinh" onclick="goPage('QuanLyHocSinh')"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 8 10-5 10 5-10 5zM6 10v6c3 3 9 3 12 0v-6M22 8v7"/></svg></span><span><strong>Quản lý học sinh</strong><small>Hồ sơ, kỳ học và sắp xếp</small></span></button>
+      <button type="button" class="nav-dropdown-item" data-page="QuanLyDiemDanh" onclick="goPage('QuanLyDiemDanh')"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="17" rx="3"/><path d="M8 2v4M16 2v4M8 13l3 3 5-6"/></svg></span><span><strong>Điểm danh</strong><small>Điểm danh và theo dõi chuyên cần</small></span></button>
     </div>
   </div>
 
   <button class="ribbon-button nav-direct" type="button" data-page="QuanLyNhacViec" onclick="goPage('QuanLyNhacViec')">
-    <span class="nav-icon" aria-hidden="true">📌</span><span>Chăm sóc</span>
+    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l-2 2V11.5a8.5 8.5 0 0 1 19 0Z"/><path d="M8 10h8M8 14h5"/></svg></span><span>Chăm sóc</span>
   </button>
 
   <div class="nav-group" data-pages="QuanLyThuPhu QuanLyThuChi QuanLyTaiChinh KeHoachTaiChinh TaiChinhGiaDinh">
     <button class="ribbon-button nav-group-toggle" type="button" aria-haspopup="true" aria-expanded="false">
-      <span class="nav-icon" aria-hidden="true">💼</span><span>Tài chính</span><span class="nav-chevron">⌄</span>
+      <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="14" rx="3"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18M10 12v3h4v-3"/></svg></span><span>Tài chính</span><span class="nav-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 10 5 5 5-5"/></svg></span>
     </button>
     <div class="nav-dropdown nav-dropdown-wide" role="menu">
       <div class="nav-dropdown-section">Nghiệp vụ</div>
-      <button type="button" class="nav-dropdown-item" data-page="QuanLyThuPhu" onclick="goPage('QuanLyThuPhu')"><span>💰</span><span><strong>Quản lý thu phí</strong><small>Học phí và các khoản thu</small></span></button>
-      <button type="button" class="nav-dropdown-item" data-page="QuanLyThuChi" onclick="goPage('QuanLyThuChi')"><span>🧾</span><span><strong>Quản lý thu chi</strong><small>Phiếu thu, phiếu chi và nguồn tiền</small></span></button>
+      <button type="button" class="nav-dropdown-item" data-page="QuanLyThuPhu" onclick="goPage('QuanLyThuPhu')"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M2 10h20M6 15h4"/></svg></span><span><strong>Quản lý thu phí</strong><small>Học phí và các khoản thu</small></span></button>
+      <button type="button" class="nav-dropdown-item" data-page="QuanLyThuChi" onclick="goPage('QuanLyThuChi')"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 7h6M9 11h6M9 15h3"/></svg></span><span><strong>Quản lý thu chi</strong><small>Phiếu thu, phiếu chi và nguồn tiền</small></span></button>
       <div class="nav-dropdown-section">Quản trị</div>
-      <button type="button" class="nav-dropdown-item" data-page="QuanLyTaiChinh" onclick="goPage('QuanLyTaiChinh')"><span>📊</span><span><strong>Tổng quan tài chính</strong><small>Dòng tiền và hiệu quả hoạt động</small></span></button>
-      <button type="button" class="nav-dropdown-item" data-page="KeHoachTaiChinh" onclick="goPage('KeHoachTaiChinh')"><span>🗓️</span><span><strong>Kế hoạch tài chính</strong><small>Hũ tài chính và nghĩa vụ tháng</small></span></button>
-      <button type="button" class="nav-dropdown-item" data-page="TaiChinhGiaDinh" onclick="goPage('TaiChinhGiaDinh')"><span>🏡</span><span><strong>Tài chính gia đình</strong><small>Thu nhập và ngân sách gia đình</small></span></button>
+      <button type="button" class="nav-dropdown-item" data-page="QuanLyTaiChinh" onclick="goPage('QuanLyTaiChinh')"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3v17h17M8 16v-5M13 16V6M18 16V9"/></svg></span><span><strong>Tổng quan tài chính</strong><small>Dòng tiền và hiệu quả hoạt động</small></span></button>
+      <button type="button" class="nav-dropdown-item" data-page="KeHoachTaiChinh" onclick="goPage('KeHoachTaiChinh')"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4M17 3v4M3 11h18M8 15h2M14 15h2"/></svg></span><span><strong>Kế hoạch tài chính</strong><small>Hũ tài chính và nghĩa vụ tháng</small></span></button>
+      <button type="button" class="nav-dropdown-item" data-page="TaiChinhGiaDinh" onclick="goPage('TaiChinhGiaDinh')"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg></span><span><strong>Tài chính gia đình</strong><small>Thu nhập và ngân sách gia đình</small></span></button>
     </div>
   </div>
 </nav>
@@ -49,7 +49,7 @@
     if (!navigation) return;
     var currentPage = String(window.APP_CURRENT_PAGE || 'Index');
     var currentItem = navigation.querySelector('[data-page="' + currentPage + '"]');
-    if (currentItem) currentItem.classList.add('active');
+    if (currentItem) { currentItem.classList.add('active'); currentItem.setAttribute('aria-current', 'page'); }
     navigation.querySelectorAll('.nav-group').forEach(function (group) {
       var pages = String(group.getAttribute('data-pages') || '').split(/\s+/);
       if (pages.indexOf(currentPage) !== -1) group.querySelector('.nav-group-toggle').classList.add('active');
@@ -58,13 +58,18 @@
         event.stopPropagation();
         var willOpen = !group.classList.contains('open');
         closeNavigationGroups(group);
-        if (willOpen && window.matchMedia('(max-width: 720px)').matches) {
+        if (willOpen && window.matchMedia('(max-width: 900px)').matches) {
           group.querySelector('.nav-dropdown').style.top = (toggle.getBoundingClientRect().bottom + 8) + 'px';
         }
         group.classList.toggle('open', willOpen);
         toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
       });
     });
+    window.addEventListener('resize', function () {
+      closeNavigationGroups();
+      navigation.querySelectorAll('.nav-dropdown').forEach(function (menu) { menu.style.top = ''; });
+    });
+    window.addEventListener('scroll', function () { closeNavigationGroups(); }, { passive: true });
     document.addEventListener('click', function (event) {
       if (!event.target.closest('.app-navigation')) closeNavigationGroups();
     });
