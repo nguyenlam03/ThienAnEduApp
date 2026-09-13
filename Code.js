@@ -697,7 +697,7 @@ function getHocSinhList(token, filters) {
   filters = filters || {};
 
   const cacheKey = buildCacheKey_(
-    'hocsinh_list_v3_' +
+    'hocsinh_list_v4_' +
     session.maKyHoc + '_' +
     hashString_(JSON.stringify(filters))
   );
@@ -711,7 +711,8 @@ function getHocSinhList(token, filters) {
 
   const hocSinhRows = readObjects_(SHEET_HOCSINH);
   const hocSinhKyHocMap = getHocSinhKyHocMap_();
-  const tuitionConfig = termTuitionConfig_(readObjects_(SHEET_KYHOC).find(row => String(row.MaKyHoc || '').trim() === session.maKyHoc));
+  const tuitionTerm = readObjects_(SHEET_KYHOC).find(row => String(row.MaKyHoc || '').trim() === session.maKyHoc);
+  const tuitionContext = tuitionGradeContext_();
 
   let result = hocSinhRows
     .filter(row => String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED')
@@ -734,6 +735,7 @@ function getHocSinhList(token, filters) {
       if (!belongsToCurrentKyHoc) return null;
 
       const currentFee = mapping.byKyHoc[session.maKyHoc] || {};
+      const tuitionState = studentTuitionState_({ HocPhi: currentFee.hocPhi, HocPhiMode: currentFee.hocPhiMode }, row, tuitionTerm, tuitionContext);
       const ngayVao = row.NgayVao || row.NgaySinh || '';
 
       return {
@@ -754,7 +756,8 @@ function getHocSinhList(token, filters) {
 
         kyHocIds: mapping.kyHocIds,
         kyHocNames: mapping.kyHocNames,
-        hocPhi: currentFee.hocPhiMode === 'AUTO' ? tuitionForGrade_(row.Khoi, tuitionConfig) : (currentFee.hocPhi == null ? '' : currentFee.hocPhi),
+        hocPhi: tuitionState.amount == null ? '' : tuitionState.amount,
+        hocPhiIssue: tuitionState.issue,
         hocPhiMode: currentFee.hocPhiMode || 'AUTO',
         trangThaiHocPhi: currentFee.trangThaiHocPhi || '',
         ghiChuHocPhi: currentFee.ghiChuHocPhi || ''

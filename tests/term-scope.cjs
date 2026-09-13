@@ -150,6 +150,35 @@ assert.equal(rows.HocSinh.length,count);
 const unassigned=JSON.parse(ctx.quickAddStudent('parent',{...quick,requestId:'quick_test_003',kyHocIds:[]}));
 assert.equal(unassigned.student.kyHocIds.length,0);
 console.log('Tuition and quick-add tests passed: tier boundaries, term isolation, legacy/custom/zero rates, automatic restoration, validation and retry safety.');
+// One unresolved grade must not take down either the tuition page or student editor.
+const badRows=[
+  {MaHocSinh:'missing',HoTen:'Missing grade',Khoi:'',Lop:''},
+  {MaHocSinh:'label',HoTen:'Grade label',Khoi:'Khối 3',Lop:''},
+  {MaHocSinh:'unsupported',HoTen:'Grade 10',Khoi:'10',Lop:'L3'},
+  {MaHocSinh:'classgrade',HoTen:'Class mapping',Khoi:'',Lop:'L3'}
+];
+rows.HocSinh.push(...badRows);
+rows.HocSinhKyHoc.push(...badRows.map(row=>({MaHocSinh:row.MaHocSinh,MaKyHoc:'A',HocPhiMode:'AUTO',HocPhi:row.MaHocSinh==='missing'?777:'',TrangThai:'ACTIVE'})));
+const tuitionPage=JSON.parse(ctx.getTermTuitionData('parent','A'));
+assert.equal(tuitionPage.maKyHoc,'A');
+assert.equal(tuitionPage.students.find(s=>s.maHocSinh==='missing').capHoc,null);
+assert.equal(tuitionPage.students.find(s=>s.maHocSinh==='missing').amount,777);
+assert.equal(tuitionPage.students.find(s=>s.maHocSinh==='unsupported').amount,null,'Unknown is not zero');
+assert.equal(tuitionPage.students.find(s=>s.maHocSinh==='unsupported').capHoc,null,'Do not override invalid explicit grade using class');
+assert.equal(tuitionPage.students.find(s=>s.maHocSinh==='label').capHoc,1);
+assert.equal(tuitionPage.students.find(s=>s.maHocSinh==='classgrade').capHoc,1);
+assert.equal(tuitionPage.unresolvedCount,2);
+assert.ok(JSON.parse(ctx.getHocSinhList(a,{})).find(s=>s.maHocSinh==='missing'),'Student can still be loaded for repair');
+ctx.saveTermTuition('parent',{maKyHoc:'A',cap1:555,cap2:666,overrides:[]});
+assert.equal(link('missing','A').HocPhi,777,'Keep stored amount when grade cannot be resolved');
+assert.equal(link('unsupported','A').HocPhi,'','Do not invent a fee');
+assert.equal(link('label','A').HocPhi,555);
+assert.throws(()=>ctx.saveTermTuition('parent',{maKyHoc:'A',cap1:555,cap2:666,overrides:[{maHocSinh:'missing',mode:'AUTO'}]}),/Missing grade/);
+ctx.saveTermTuition('parent',{maKyHoc:'A',cap1:555,cap2:666,overrides:[{maHocSinh:'missing',mode:'CUSTOM',amount:0}]});
+assert.equal(link('missing','A').HocPhi,0,'Explicit custom rate remains available without grade');
+for(const value of ['',null,'10','3A','Lớp 3A','-1']) assert.equal(ctx.normalizeTuitionGrade_(value),null);
+assert.equal(ctx.normalizeTuitionGrade_('Khối 9'),9);
+console.log('Invalid-grade regression passed: page availability, explicit normalization, class lookup, warnings and no guessed tuition.');
 ctx.logout('parent');
 assert.equal(ctx.SecurityService.getSession(a).valid, false);
 assert.equal(ctx.SecurityService.getSession(b).valid, false);
