@@ -59,6 +59,9 @@ assert.match(studentHtml, /tier === 1 \? '1\.800\.000' : \(tier === 2 \? '2\.400
 const tuitionHtml = fs.readFileSync('HocPhiKyHoc.html','utf8');
 assert.match(tuitionHtml, /Khối: Cấp 1 · Lớp 1, Lớp 2, Lớp 3, Lớp 4, Lớp 5/);
 assert.match(tuitionHtml, /const rawMoney=/);
+const financePlanHtml = fs.readFileSync('KeHoachTaiChinh.html','utf8');
+assert.match(financePlanHtml, /id="staffSyncRecurring" type="checkbox"/);
+assert.match(financePlanHtml, /dongBoChiDinhKy:document\.getElementById\('staffSyncRecurring'\)\.checked/);
 const baseline = JSON.parse(ctx.runArchitectureUnitTests());
 assert.equal(baseline.failed, 0, JSON.stringify(baseline.results.filter(item => !item.passed)));
 Object.assign(ctx, {
@@ -67,6 +70,15 @@ Object.assign(ctx, {
   buildCacheKey_: value => value,
   safeWriteAuditLog_: () => {}
 });
+assert.equal(ctx.getNhanSuRecurringExpenseId_('NS_ABC'), 'KCDK_NS_NS_ABC');
+assert.ok(ctx.getNhanSuTaiChinhHeaders_().includes('DongBoChiDinhKy'));
+const rosterDiff = ctx.diffTuitionRosterForTerm_([
+  {MaHocSinh:'summer',MaKyHoc:'SUMMER',TrangThai:'ACTIVE'},
+  {MaHocSinh:'old-year',MaKyHoc:'YEAR',TrangThai:'ACTIVE'}
+], 'YEAR', [{maHocSinh:'new-year'}]);
+assert.deepEqual(Array.from(rosterDiff.missingStudents, item=>item.maHocSinh), ['new-year']);
+assert.deepEqual(Array.from(rosterDiff.staleRows, item=>item.MaHocSinh), ['old-year']);
+assert.equal(rosterDiff.staleRows.some(item=>item.MaKyHoc==='SUMMER'), false, 'Do not alter another term roster');
 const options = JSON.parse(ctx.getKyHocList());
 assert.equal(options[0].maKyHoc, '__ALL_TERMS__');
 assert.deepEqual(options.slice(1).map(item => item.maKyHoc), ['A']);
