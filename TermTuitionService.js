@@ -16,15 +16,22 @@ function resolveTuitionGrade_(student, context) {
     const definition = context.grades.find(row => String(row.Khoi || '').trim() === String(value || '').trim());
     return definition ? normalizeTuitionGrade_(definition.TenKhoi) : null;
   }
-  if (code) return fromCode(code);
-  const classRow = context.classes.find(row => String(row.MaLop || '').trim() === String(student.Lop || '').trim());
-  if (classRow) return String(classRow.Khoi || '').trim() ? fromCode(classRow.Khoi) : normalizeTuitionGrade_(classRow.TenLop);
-  return normalizeTuitionGrade_(student.Lop);
+  const studentClass = String(student.Lop || '').trim();
+  const classRow = context.classes.find(row => String(row.MaLop || '').trim() === studentClass || String(row.TenLop || '').trim() === studentClass);
+  if (classRow) {
+    const classOrder = Number(classRow.ThuTu);
+    if (Number.isInteger(classOrder) && classOrder >= 1 && classOrder <= 9) return classOrder;
+    const classGrade = normalizeTuitionGrade_(classRow.TenLop) || normalizeTuitionGrade_(classRow.MaLop);
+    if (classGrade !== null) return classGrade;
+  }
+  const directClassGrade = normalizeTuitionGrade_(studentClass);
+  if (directClassGrade !== null) return directClassGrade;
+  return code ? fromCode(code) : null;
 }
 function studentTuitionState_(relation, student, term, context) {
   const grade = resolveTuitionGrade_(student, context);
   const mode = tuitionMode_(relation);
-  const issue = grade === null ? 'Chưa xác định khối 1–9. Vui lòng sửa khối/lớp trong hồ sơ học sinh.' : '';
+  const issue = grade === null ? 'Chưa xác định lớp 1–9. Vui lòng sửa Khối/Lớp trong hồ sơ học sinh.' : '';
   if (mode === 'CUSTOM') return { grade: grade, amount: tuitionAmount_(relation.HocPhi), issue: issue };
   if (grade !== null) return { grade: grade, amount: tuitionForGrade_(grade, termTuitionConfig_(term)), issue: '' };
   // An unresolved automatic rate is not zero and must not be assigned to either tier.
@@ -46,7 +53,7 @@ function tuitionMode_(row) {
 function termTuitionConfig_(term) {
   term = term || {};
   return { cap1: term.HocPhiCap1 === '' || term.HocPhiCap1 == null ? 1800000 : tuitionAmount_(term.HocPhiCap1),
-    cap2: term.HocPhiCap2 === '' || term.HocPhiCap2 == null ? 2000000 : tuitionAmount_(term.HocPhiCap2) };
+    cap2: term.HocPhiCap2 === '' || term.HocPhiCap2 == null ? 2400000 : tuitionAmount_(term.HocPhiCap2) };
 }
 function tuitionForGrade_(khoi, config) {
   const grade = normalizeTuitionGrade_(khoi);

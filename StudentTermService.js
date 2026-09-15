@@ -109,7 +109,7 @@ function quickAddStudent(token, data) {
     if (order > classOrder * 100 + 99) throw new Error('Lớp đã dùng hết dải thứ tự học sinh.');
     const id = 'HS_' + Utilities.getUuid().replace(/-/g, '').slice(0, 12).toUpperCase(), now = new Date();
     const student = { MaHocSinh: id, MaKyHoc: selected[0] || '', HoTen: name, Khoi: grade, Lop: classId, SapXep: order,
-      Truong: Number(grade) <= 5 ? 'TH Tam Thiện' : 'THCS Long Phước', SDTPhuHuynh: phone,
+      Truong: Number(grade) <= 5 ? 'TH Tam Thiện' : 'THCS Phước Thái', SDTPhuHuynh: phone,
       KhongThuPhi: 'Không', TrangThai: 'ACTIVE', CreatedAt: now, UpdatedAt: now };
     const links = selected.map(term => ({ MaHocSinh: id, MaKyHoc: term, HocPhi: '', HocPhiMode: 'AUTO', TrangThaiHocPhi: '', GhiChuHocPhi: '', TrangThai: 'ACTIVE', CreatedAt: now, UpdatedAt: now }));
     const priced = fillAutomaticTuition_(links, [student], terms);

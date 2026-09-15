@@ -51,6 +51,14 @@ for (const file of fs.readdirSync('.').filter(file => /\.(js|html)$/.test(file))
 }
 const feeFormatter = fs.readFileSync('QuanLyHocSinh.html','utf8').match(/function formatMoneyInputValue\(value\) \{[\s\S]*?\n    \}/)[0];
 assert.equal(vm.runInNewContext(feeFormatter + ';formatMoneyInputValue(0)'), '0', 'Student editor preserves a zero rate');
+const studentHtml = fs.readFileSync('QuanLyHocSinh.html','utf8');
+assert.ok(!studentHtml.includes('id="formHocPhiMode"'), 'Student form no longer exposes a tuition-mode selector');
+assert.match(studentHtml, /id="formCapNhatThuPhi" type="checkbox"/);
+assert.match(studentHtml, /formCapNhatThuPhi'\)\.checked = true/);
+assert.match(studentHtml, /tier === 1 \? '1\.800\.000' : \(tier === 2 \? '2\.400\.000'/);
+const tuitionHtml = fs.readFileSync('HocPhiKyHoc.html','utf8');
+assert.match(tuitionHtml, /Khối: Cấp 1 · Lớp 1, Lớp 2, Lớp 3, Lớp 4, Lớp 5/);
+assert.match(tuitionHtml, /const rawMoney=/);
 const baseline = JSON.parse(ctx.runArchitectureUnitTests());
 assert.equal(baseline.failed, 0, JSON.stringify(baseline.results.filter(item => !item.passed)));
 Object.assign(ctx, {
@@ -163,15 +171,15 @@ const tuitionPage=JSON.parse(ctx.getTermTuitionData('parent','A'));
 assert.equal(tuitionPage.maKyHoc,'A');
 assert.equal(tuitionPage.students.find(s=>s.maHocSinh==='missing').capHoc,null);
 assert.equal(tuitionPage.students.find(s=>s.maHocSinh==='missing').amount,777);
-assert.equal(tuitionPage.students.find(s=>s.maHocSinh==='unsupported').amount,null,'Unknown is not zero');
-assert.equal(tuitionPage.students.find(s=>s.maHocSinh==='unsupported').capHoc,null,'Do not override invalid explicit grade using class');
+assert.equal(tuitionPage.students.find(s=>s.maHocSinh==='unsupported').amount,111,'Use the selected class when the group field is not a numeric grade');
+assert.equal(tuitionPage.students.find(s=>s.maHocSinh==='unsupported').capHoc,1,'Class determines the fee tier');
 assert.equal(tuitionPage.students.find(s=>s.maHocSinh==='label').capHoc,1);
 assert.equal(tuitionPage.students.find(s=>s.maHocSinh==='classgrade').capHoc,1);
-assert.equal(tuitionPage.unresolvedCount,2);
+assert.equal(tuitionPage.unresolvedCount,1);
 assert.ok(JSON.parse(ctx.getHocSinhList(a,{})).find(s=>s.maHocSinh==='missing'),'Student can still be loaded for repair');
 ctx.saveTermTuition('parent',{maKyHoc:'A',cap1:555,cap2:666,overrides:[]});
 assert.equal(link('missing','A').HocPhi,777,'Keep stored amount when grade cannot be resolved');
-assert.equal(link('unsupported','A').HocPhi,'','Do not invent a fee');
+assert.equal(link('unsupported','A').HocPhi,555,'Persist the class-based fee');
 assert.equal(link('label','A').HocPhi,555);
 assert.throws(()=>ctx.saveTermTuition('parent',{maKyHoc:'A',cap1:555,cap2:666,overrides:[{maHocSinh:'missing',mode:'AUTO'}]}),/Missing grade/);
 ctx.saveTermTuition('parent',{maKyHoc:'A',cap1:555,cap2:666,overrides:[{maHocSinh:'missing',mode:'CUSTOM',amount:0}]});
@@ -188,6 +196,9 @@ ctx.saveTermTuition('parent',{maKyHoc:'A',cap1:234,cap2:567,overrides:[{maHocSin
 assert.equal(link('class-label-6','A').HocPhi,99);
 assert.equal(link('class-label-7','A').HocPhi,567);
 assert.equal(ctx.resolveTuitionGrade_({Lop:'L9'},{grades:[],classes:[{MaLop:'L9',TenLop:'Lớp 9',Khoi:''}]}),9);
+assert.equal(ctx.resolveTuitionGrade_({Khoi:'Cấp I',Lop:'M6'},{grades:[],classes:[{MaLop:'M6',TenLop:'Lớp 6',Khoi:'Cấp II',ThuTu:6}]}),6);
+assert.equal(ctx.defaultHocPhiByKhoi_('Cấp I'),1800000);
+assert.equal(ctx.defaultHocPhiByKhoi_('Cấp II'),2400000);
 console.log('Invalid-grade regression passed: page availability, explicit normalization, class lookup, warnings and no guessed tuition.');
 ctx.logout('parent');
 assert.equal(ctx.SecurityService.getSession(a).valid, false);

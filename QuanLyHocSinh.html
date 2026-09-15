@@ -778,10 +778,8 @@
               oninput="formatHocPhiInput()"
             >
 
-            <select id="formHocPhiMode" aria-label="Chế độ học phí" onchange="applyDefaultHocPhiByKhoi()"><option value="AUTO">Tự động theo lớp của kỳ học</option><option value="CUSTOM">Mức riêng cho học sinh</option></select>
-
             <div class="money-help">
-              Mức riêng áp dụng cho kỳ đang đăng nhập (hoặc kỳ đầu tiên được chọn). Các kỳ khác giữ mức phí riêng của kỳ đó.
+              Tự điền 1.800.000 đồng cho Cấp 1 và 2.400.000 đồng cho Cấp 2. Có thể sửa số tiền nếu cần.
             </div>
           </div>
 
@@ -886,6 +884,14 @@
       <div class="modal-footer">
         <button class="primary-button" onclick="closeTermModal()">Đóng</button>
       </div>
+    </div>
+  </div>
+
+  <div id="studentSuccessModal" class="modal-backdrop">
+    <div class="modal" style="max-width:440px">
+      <div class="modal-header"><div class="modal-title">Thêm học sinh thành công</div></div>
+      <div class="modal-body"><p id="studentSuccessMessage" style="margin:0;line-height:1.6"></p></div>
+      <div class="modal-footer"><button class="save-button" onclick="continueAddingStudent()">Nhập học sinh mới</button></div>
     </div>
   </div>
 
@@ -1076,8 +1082,9 @@
 
           renderKyHocDropdown([APP_MAKYHOC]);
 
+          studentList = data.studentList || [];
+          renderStudentTable();
           hideBusy();
-          loadHocSinh();
         })
         .withFailureHandler(function (error) {
           hideBusy();
@@ -1128,6 +1135,7 @@
       const khoi = document.getElementById('formKhoi').value;
       renderLopSelect('formLop', khoi, false, selectedLop);
       applyDefaultHocPhiByKhoi();
+      applyDefaultSchoolByKhoi();
       applySapXepRangeByLop();
     }
 
@@ -1157,17 +1165,25 @@
     }
 
     function applyDefaultHocPhiByKhoi() {
-      const mode = document.getElementById('formHocPhiMode');
-      if (!mode) return;
       const input = document.getElementById('formHocPhi');
-      input.disabled = mode.value === 'AUTO' || document.getElementById('formKhongThuPhi').checked;
-      if (mode.value !== 'AUTO') return;
-      const khoi = Number(document.getElementById('formKhoi').value);
-      const ids = getSelectedKyHocIds();
-      const termId = ids.includes(APP_MAKYHOC) ? APP_MAKYHOC : ids[0];
-      const term = kyHocList.find(item => item.maKyHoc === termId);
-      if (!term || khoi < 1 || khoi > 9) { input.value = ''; return; }
-      input.value = formatMoneyInputValue(khoi <= 5 ? term.hocPhiCap1 : term.hocPhiCap2);
+      const tier = getSelectedKhoiTier();
+      input.disabled = document.getElementById('formKhongThuPhi').checked;
+      input.value = tier === 1 ? '1.800.000' : (tier === 2 ? '2.400.000' : '');
+    }
+
+    function applyDefaultSchoolByKhoi() {
+      const tier = getSelectedKhoiTier();
+      if (tier === 1) document.getElementById('formTruong').value = 'TH Tam Thiện';
+      if (tier === 2) document.getElementById('formTruong').value = 'THCS Phước Thái';
+    }
+
+    function getSelectedKhoiTier() {
+      const value = document.getElementById('formKhoi').value;
+      const item = khoiList.find(function (row) { return row.khoi === value; });
+      const text = normalizeStudentText(value + ' ' + (item ? item.tenKhoi : '')).replace(/\s+/g, '');
+      if (/cap(?:1|i)(?!i)/.test(text)) return 1;
+      if (/cap(?:2|ii)/.test(text)) return 2;
+      return 0;
     }
 
     function toggleKyHocDropdown() {
@@ -1857,7 +1873,6 @@
     function openAddForm() {
       document.getElementById('modalTitle').textContent = 'Thêm học sinh';
       document.getElementById('formMaHocSinh').value = '';
-      document.getElementById('formHocPhiMode').value = 'AUTO';
       document.getElementById('formDiaChi').value = '';
 
       renderKyHocDropdown([APP_MAKYHOC]);
@@ -1871,12 +1886,12 @@
       document.getElementById('formHoTen').value = '';
       document.getElementById('formNgaySinh').value = '';
       document.getElementById('formGioiTinh').value = '';
-      document.getElementById('formTruong').value = 'THCS Long Phước';
+      document.getElementById('formTruong').value = 'THCS Phước Thái';
       document.getElementById('formSdtPhuHuynh').value = '';
       document.getElementById('formGhiChu').value = '';
 
       document.getElementById('thuPhiUpdateBox').hidden = false;
-      document.getElementById('formCapNhatThuPhi').checked = false;
+      document.getElementById('formCapNhatThuPhi').checked = true;
       document.getElementById('formThuPhiMonthLabel').textContent = getCurrentMonthDisplay();
       handleKhongThuPhiChange();
 
@@ -1908,7 +1923,6 @@
       applySapXepRangeByLop();
 
       document.getElementById('formSapXep').value = item.sapXep || '';
-      document.getElementById('formHocPhiMode').value = item.hocPhiMode || 'CUSTOM';
       document.getElementById('formHocPhi').value = item.hocPhi !== '' && item.hocPhi != null ? formatMoneyInputValue(item.hocPhi) : '';
       document.getElementById('formKhongThuPhi').checked = item.khongThuPhi === true;
       document.getElementById('formHoTen').value = item.hoTen || '';
@@ -1940,7 +1954,7 @@
         khoi: document.getElementById('formKhoi').value,
         lop: document.getElementById('formLop').value,
         hocPhi: getHocPhiRawValue(),
-        hocPhiMode: document.getElementById('formHocPhiMode').value,
+        hocPhiMode: 'CUSTOM',
         khongThuPhi: document.getElementById('formKhongThuPhi').checked,
         hoTen: document.getElementById('formHoTen').value.trim(),
         ngaySinh: document.getElementById('formNgaySinh').value,
@@ -1998,11 +2012,16 @@
           btnSave.disabled = false;
           btnSave.textContent = 'Lưu học sinh';
 
+          updateStudentListAfterSave(hocSinh, data);
           hideBusy();
           closeModal();
-
-          showMessage(data.message || 'Đã lưu dữ liệu.', 'success');
-          updateStudentListAfterSave(hocSinh, data);
+          if (!hocSinh.maHocSinh) {
+            openAddForm();
+            document.getElementById('studentSuccessMessage').textContent = data.message || 'Đã thêm học sinh mới.';
+            document.getElementById('studentSuccessModal').classList.add('show');
+          } else {
+            showMessage(data.message || 'Đã cập nhật học sinh.', 'success');
+          }
         })
         .withFailureHandler(function (error) {
           btnSave.disabled = false;
@@ -2018,9 +2037,14 @@
       const khongThuPhi = document.getElementById('formKhongThuPhi').checked;
       const hocPhiInput = document.getElementById('formHocPhi');
       const capNhatThuPhiInput = document.getElementById('formCapNhatThuPhi');
-      hocPhiInput.disabled = khongThuPhi || document.getElementById('formHocPhiMode').value === 'AUTO';
+      hocPhiInput.disabled = khongThuPhi;
       capNhatThuPhiInput.disabled = khongThuPhi;
       if (khongThuPhi) capNhatThuPhiInput.checked = false;
+    }
+
+    function continueAddingStudent() {
+      document.getElementById('studentSuccessModal').classList.remove('show');
+      document.getElementById('kyHocDisplay').focus();
     }
 
     function updateStudentListAfterSave(hocSinh, result) {

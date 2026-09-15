@@ -637,7 +637,7 @@ function requireSession_(token, permission) {
 
 function getInitialHocSinhData(token) {
   const session = requireSession_(token, 'student.read');
-  const cacheKey = buildCacheKey_('initial_hocsinh_' + session.maKyHoc);
+  const cacheKey = buildCacheKey_('initial_hocsinh_v2_' + session.maKyHoc);
 
   const cached = cacheGetString_(cacheKey);
   if (cached) return cached;
@@ -646,7 +646,8 @@ function getInitialHocSinhData(token) {
     session: session,
     kyHocList: getKyHocArray_(),
     khoiList: getKhoiList_(),
-    lopList: getLopList_()
+    lopList: getLopList_(),
+    studentList: JSON.parse(getHocSinhList(token, {}))
   };
 
   const json = jsonResponse_(data);
@@ -1200,14 +1201,14 @@ function saveHocSinh(token, hocSinh) {
   const khoi = String(hocSinh.khoi || '').trim();
   const lop = String(hocSinh.lop || '').trim();
   const hoTen = String(hocSinh.hoTen || '').trim();
-  const truong = String(hocSinh.truong || '').trim() || 'THCS Long Phước';
+  const truong = String(hocSinh.truong || '').trim() || 'THCS Phước Thái';
   const ngayVao = String(hocSinh.ngaySinh || '').trim();
   const gioiTinh = String(hocSinh.gioiTinh || '').trim();
   const sdtPhuHuynh = String(hocSinh.sdtPhuHuynh || '').trim();
   const diaChi = String(hocSinh.diaChi || '').trim();
   const ghiChu = String(hocSinh.ghiChu || '').trim();
-  const hocPhiMode = hocSinh.hocPhiMode === 'AUTO' ? 'AUTO' : 'CUSTOM';
-  let hocPhi = hocPhiMode === 'CUSTOM' ? tuitionAmount_(hocSinh.hocPhi) : getTermDefaultTuition_(kyHocIds.includes(session.maKyHoc) ? session.maKyHoc : kyHocIds[0], khoi);
+  const hocPhiMode = 'CUSTOM';
+  let hocPhi = tuitionAmount_(hocSinh.hocPhi);
   const khongThuPhi = toBoolean_(hocSinh.khongThuPhi);
   const capNhatThuPhi = !khongThuPhi && toBoolean_(hocSinh.capNhatThuPhi);
   const thuPhiYearMonth = String(hocSinh.thuPhiYearMonth || '').trim();
@@ -7860,11 +7861,11 @@ function toBoolean_(value) {
 }
 
 function defaultHocPhiByKhoi_(khoi) {
+  const normalized = normalizeText_(khoi).replace(/\s+/g, '');
+  if (normalized === 'cap1' || normalized === 'capi') return 1800000;
+  if (normalized === 'cap2' || normalized === 'capii') return 2400000;
   const numberKhoi = Number(khoi);
-
-  if (numberKhoi >= 1 && numberKhoi <= 5) return 1800000;
-
-  return 2000000;
+  return numberKhoi >= 1 && numberKhoi <= 5 ? 1800000 : 2400000;
 }
 
 function normalizeText_(value) {
@@ -7955,4 +7956,3 @@ function cacheGetString_(key) {
 
   return parts.join('');
 }
-
