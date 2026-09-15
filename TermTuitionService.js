@@ -66,7 +66,9 @@ function getTermDefaultTuition_(termId, khoi) {
   return tuitionForGrade_(resolveTuitionGrade_({ Khoi: khoi }, tuitionGradeContext_()), termTuitionConfig_(term));
 }
 function resolveStudentTermTuition_(relation, student, term) {
-  return tuitionMode_(relation) === 'CUSTOM' ? tuitionAmount_(relation.HocPhi) : tuitionForGrade_(student.Khoi, termTuitionConfig_(term));
+  const state = studentTuitionState_(relation, student, term, tuitionGradeContext_());
+  if (state.amount === null) throw new Error('Chưa xác định lớp 1–9 của học sinh để tính học phí.');
+  return state.amount;
 }
 function fillAutomaticTuition_(relations, students, terms) {
   const context = tuitionGradeContext_();

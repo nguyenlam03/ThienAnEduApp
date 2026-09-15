@@ -176,6 +176,7 @@ assert.equal(tuitionPage.students.find(s=>s.maHocSinh==='unsupported').capHoc,1,
 assert.equal(tuitionPage.students.find(s=>s.maHocSinh==='label').capHoc,1);
 assert.equal(tuitionPage.students.find(s=>s.maHocSinh==='classgrade').capHoc,1);
 assert.equal(tuitionPage.unresolvedCount,1);
+assert.equal(ctx.getHocSinhTheoKyHocForThuPhi_('A').find(s=>s.maHocSinh==='unsupported').hocPhi,111,'Monthly fee sync resolves the fee from Lớp instead of Cấp');
 assert.ok(JSON.parse(ctx.getHocSinhList(a,{})).find(s=>s.maHocSinh==='missing'),'Student can still be loaded for repair');
 ctx.saveTermTuition('parent',{maKyHoc:'A',cap1:555,cap2:666,overrides:[]});
 assert.equal(link('missing','A').HocPhi,777,'Keep stored amount when grade cannot be resolved');

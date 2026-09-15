@@ -2981,7 +2981,8 @@ function appendObjectsToSheet_(sheet, objects, requiredHeaders) {
 function getHocSinhTheoKyHocForThuPhi_(maKyHoc) {
   const hocSinhRows = readObjects_(SHEET_HOCSINH);
   const relationRows = readObjects_(SHEET_HOCSINH_KYHOC);
-  const tuitionConfig = termTuitionConfig_(readObjects_(SHEET_KYHOC).find(row => String(row.MaKyHoc || '').trim() === maKyHoc));
+  const tuitionTerm = readObjects_(SHEET_KYHOC).find(row => String(row.MaKyHoc || '').trim() === maKyHoc);
+  const tuitionContext = tuitionGradeContext_();
   const lopRows = readObjects_(SHEET_LOP);
   const khoiRows = readObjects_(SHEET_KHOI);
 
@@ -3025,6 +3026,10 @@ function getHocSinhTheoKyHocForThuPhi_(maKyHoc) {
 
       const khoi = String(row.Khoi || '').trim();
       const lop = String(row.Lop || '').trim();
+      const tuitionState = studentTuitionState_({
+        HocPhi: kyHocMap[maHocSinh].hocPhi,
+        HocPhiMode: kyHocMap[maHocSinh].mode
+      }, row, tuitionTerm, tuitionContext);
 
       return {
         maHocSinh: maHocSinh,
@@ -3037,7 +3042,7 @@ function getHocSinhTheoKyHocForThuPhi_(maKyHoc) {
         truong: String(row.Truong || '').trim() || 'THCS Long Phước',
         gioiTinh: String(row.GioiTinh || '').trim(),
         sdtPhuHuynh: String(row.SDTPhuHuynh || '').trim(),
-        hocPhi: kyHocMap[maHocSinh].mode === 'AUTO' ? tuitionForGrade_(khoi, tuitionConfig) : kyHocMap[maHocSinh].hocPhi,
+        hocPhi: tuitionState.amount,
         ngayVaoRaw: row.NgayVao || row.NgaySinh || row.CreatedAt || '',
         createdAt: row.CreatedAt || ''
       };
