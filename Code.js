@@ -4529,7 +4529,9 @@ function getKhoanChiDinhKyList_(maKyHoc, yearMonth) {
       return map;
     }, {});
   }
-  return readObjects_(SHEET_KHOANCHI_DINHKY).filter(row => String(row.MaKyHoc || '').trim() === maKyHoc).map(row => {
+  return readObjects_(SHEET_KHOANCHI_DINHKY).filter(row =>
+    String(row.MaKyHoc || '').trim() === maKyHoc && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED'
+  ).map(row => {
     const id = String(row.MaKhoanDinhKy || '').trim();
     const maNhanSu = String(row.MaNhanSu || '').trim();
     const plan = planMap[id] || null;
@@ -4690,7 +4692,7 @@ function saveKhoanChiDinhKy(token, data) {
   } finally { lock.releaseLock(); }
   let syncMessage = '';
   const syncMonth = String(data.thangKeHoach || '').trim();
-  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(syncMonth)) {
+  if (toBoolean_(data.dongBoKeHoachThang) && /^\d{4}-(0[1-9]|1[0-2])$/.test(syncMonth)) {
     try {
       const synced = syncKhoanChiDinhKyPlan_(session, id, syncMonth);
       syncMessage = synced.created ? ' Đã tạo kế hoạch chi tháng tương ứng.' : ' Đã cập nhật kế hoạch chi tháng tương ứng.';
@@ -4789,6 +4791,67 @@ function setTrangThaiKhoanChiDinhKy(token, id, enabled) {
   const lock = LockService.getScriptLock(); if (!lock.tryLock(30000)) throw new Error('Hệ thống đang cập nhật khoản chi.');
   try { upsertFinanceObject_(SHEET_KHOANCHI_DINHKY, getKhoanChiDinhKyHeaders_(), 'MaKhoanDinhKy', String(id), current); } finally { lock.releaseLock(); }
   bumpDataVersion_(); return jsonResponse_({ success: true, message: toBoolean_(enabled) ? 'Đã kích hoạt khoản chi.' : 'Đã ngừng khoản chi.' });
+}
+
+function deleteKhoanChiDinhKy(token, id, yearMonth) {
+  const session = requireSession_(token, 'finance.write');
+  return deleteKhoanChiDinhKyCore_(session, id, yearMonth);
+}
+
+function deleteKhoanChiDinhKyCore_(session, id, yearMonth) {
+  ensureThuChiSheets_(session.maKyHoc);
+  const recurringId = String(id || '').trim();
+  yearMonth = String(yearMonth || '').trim();
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(yearMonth)) throw new Error('Tháng kế hoạch không hợp lệ.');
+  assertFinancePeriodOpen_(session, yearMonth);
+  const current = readObjectsNoCache_(SHEET_KHOANCHI_DINHKY).find(row =>
+    String(row.MaKhoanDinhKy || '').trim() === recurringId && String(row.MaKyHoc || '').trim() === session.maKyHoc
+  );
+  if (!current || String(current.TrangThai || '').trim().toUpperCase() === 'DELETED') throw new Error('Không tìm thấy khoản chi định kỳ cần xoá.');
+  if (String(current.LoaiKhoanNhanSu || '').trim().toUpperCase() === 'LUONG_CHINH') {
+    throw new Error('Lương chính được quản lý tại tab Nhân sự và không thể xoá tại đây.');
+  }
+  const reference = 'DINHKY|' + recurringId;
+  const linkedPlans = readObjectsNoCache_(SHEET_KEHOACH_CHI_THANG).filter(row =>
+    String(row.MaKyHoc || '').trim() === session.maKyHoc && financeYearMonthValue_(row.Thang) === yearMonth &&
+    String(row.MaThamChieu || '').trim() === reference && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED'
+  );
+  const linkedPlanIds = new Set(linkedPlans.map(row => String(row.MaKeHoachChi || '').trim()).filter(Boolean));
+  const hasLinkedPayment = linkedPlanIds.size && readObjectsNoCache_(SHEET_SOTHUCHI).some(row =>
+    String(row.MaKyHoc || '').trim() === session.maKyHoc && linkedPlanIds.has(String(row.MaKeHoachChi || '').trim()) &&
+    String(row.TrangThai || 'HOAT_DONG').trim().toUpperCase() === 'HOAT_DONG'
+  );
+  if (hasLinkedPayment) throw new Error('Kế hoạch tháng này đã có phiếu chi. Hãy huỷ phiếu chi liên quan trước khi xoá khoản định kỳ.');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('Hệ thống đang xoá khoản chi định kỳ.');
+  try {
+    const recurringSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_KHOANCHI_DINHKY);
+    const recurringRows = recurringSheet.getDataRange().getValues();
+    const recurringHeaders = recurringRows[0].map(item => String(item || '').trim());
+    const recurringIndex = buildHeaderIndex_(recurringHeaders);
+    for (let i = 1; i < recurringRows.length; i++) {
+      if (String(recurringRows[i][recurringIndex.MaKhoanDinhKy] || '').trim() !== recurringId || String(recurringRows[i][recurringIndex.MaKyHoc] || '').trim() !== session.maKyHoc) continue;
+      recurringRows[i][recurringIndex.TrangThai] = 'DELETED';
+      recurringRows[i][recurringIndex.UpdatedAt] = new Date();
+      recurringSheet.getRange(i + 1, 1, 1, recurringHeaders.length).setValues([recurringRows[i]]);
+      break;
+    }
+    if (linkedPlanIds.size) {
+      const planSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_KEHOACH_CHI_THANG);
+      const planRows = planSheet.getDataRange().getValues();
+      const planHeaders = planRows[0].map(item => String(item || '').trim());
+      const planIndex = buildHeaderIndex_(planHeaders);
+      for (let i = 1; i < planRows.length; i++) {
+        if (!linkedPlanIds.has(String(planRows[i][planIndex.MaKeHoachChi] || '').trim())) continue;
+        planRows[i][planIndex.TrangThai] = 'DELETED';
+        planRows[i][planIndex.UpdatedAt] = new Date();
+        planSheet.getRange(i + 1, 1, 1, planHeaders.length).setValues([planRows[i]]);
+      }
+    }
+  } finally { lock.releaseLock(); }
+  bumpDataVersion_();
+  safeWriteAuditLog_(session, 'DELETE', 'KHOAN_CHI_DINH_KY', recurringId, current, { thangDongBo: yearMonth, keHoachDaXoa: linkedPlanIds.size });
+  return jsonResponse_({ success: true, message: 'Đã xoá khoản chi định kỳ và ' + (linkedPlanIds.size ? 'kế hoạch liên kết của tháng ' + yearMonth + '.' : 'không có kế hoạch liên kết trong tháng ' + yearMonth + '.') });
 }
 
 function financeDueDate_(yearMonth, day) {
