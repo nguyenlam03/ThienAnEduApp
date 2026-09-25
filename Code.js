@@ -5744,6 +5744,20 @@ function getKeHoachTaiChinhData(token, yearMonth, section) {
     return jsonResponse_(base);
   }
   base.config = plan.config;
+  plan.feeSummary = context.fee;
+  const planIds = new Set(plan.items.map(item => item.maKeHoachChi).filter(Boolean));
+  plan.paymentDetails = context.transactions.filter(item =>
+    item.loai === 'CHI' && planIds.has(item.maKeHoachChi)
+  ).map(item => ({
+    maGiaoDich: item.maGiaoDich,
+    ngayGiaoDich: item.ngayGiaoDich,
+    soPhieu: item.soPhieu,
+    maKeHoachChi: item.maKeHoachChi,
+    noiDung: item.noiDung,
+    nguoiNhan: item.nguoiNopNhan,
+    tenNguonTien: item.tenNguonTien,
+    soTien: item.soTien
+  })).sort((a, b) => String(b.ngayGiaoDich || '').localeCompare(String(a.ngayGiaoDich || '')));
   base.plan = plan;
   base.categories = getFinanceExpenseCategories_();
   base.people = getFinanceReceivers_();
