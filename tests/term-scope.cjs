@@ -44,8 +44,14 @@ for (const file of fs.readdirSync('.').filter(file => /\.(js|gs|html)$/.test(fil
 const appRouter = fs.readFileSync('Code.js', 'utf8');
 const appNavigation = fs.readFileSync('AppNavigation.html', 'utf8');
 assert.match(appRouter, /'QuanLyDangKyNguVan'/, 'Literature registration page must be protected and routable');
-assert.match(appNavigation, /data-page="QuanLyDangKyNguVan"/, 'Literature registration page must appear in student navigation');
+assert.doesNotMatch(appNavigation, /data-page="QuanLyDangKyNguVan"/, 'Literature registration must open as a popup from tuition management, not a standalone navigation page');
 assert.ok(fs.existsSync('QuanLyDangKyNguVan.html'), 'Literature registration page template is missing');
+const feePage = fs.readFileSync('QuanLyThuPhu.html', 'utf8');
+const feeScript = fs.readFileSync('QuanLyThuPhuScript.html', 'utf8');
+assert.match(feePage, /id="openLiteratureTracker"/, 'Tuition screen must provide a button to open the literature popup');
+assert.match(feePage, /id="literatureTrackerModal"/, 'Literature tracking must be presented in a popup');
+assert.match(feeScript, /page=QuanLyDangKyNguVan&embedded=1/, 'Literature tracking popup must load in embedded mode');
+assert.match(fs.readFileSync('QuanLyDangKyNguVan.html', 'utf8'), /id="filterClass"[\s\S]*Tất cả lớp[\s\S]*id="filterPayment"[\s\S]*Chưa đóng/, 'Literature list must support class and unpaid filters');
 let syntaxBlocks = 0;
 for (const file of fs.readdirSync('.').filter(file => /\.(js|html)$/.test(file))) {
   const source = fs.readFileSync(file, 'utf8');

@@ -158,6 +158,11 @@
       background: #ffffff;
     }
 
+    .literature-modal { width:min(1240px, calc(100vw - 32px)); max-width:1240px; height:min(92vh, 900px); max-height:calc(100vh - 32px); display:flex; flex-direction:column; }
+    .literature-modal .modal-header { flex:0 0 auto; }
+    .literature-modal .modal-body { padding:0; overflow:hidden; flex:1 1 auto; }
+    .literature-modal iframe { display:block; width:100%; height:100%; border:0; background:#f8fafc; }
+
     .fee-action-note {
       margin-bottom: 16px;
       padding: 11px 14px;
@@ -368,6 +373,7 @@
               Theo dõi học phí và các khoản thu thêm theo tháng, điều chỉnh mức thu và in biên lai.
             </div>
             <div id="sheetNameNote" class="sheet-name-note"></div>
+            <button id="openLiteratureTracker" class="secondary-button" type="button" onclick="openLiteratureTracker()" style="margin-top:12px">📚 Theo dõi đăng ký Ngữ Văn</button>
           </div>
         </div>
 
@@ -529,6 +535,13 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <div id="literatureTrackerModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="literatureTrackerTitle" onclick="if(event.target===this)closeLiteratureTracker()">
+    <div class="modal literature-modal">
+      <div class="modal-header"><div id="literatureTrackerTitle" class="modal-title">Đăng ký và thu phí Ngữ Văn</div><button class="close-button" type="button" aria-label="Đóng" onclick="closeLiteratureTracker()">×</button></div>
+      <div class="modal-body"><iframe id="literatureTrackerFrame" title="Theo dõi đăng ký và học phí Ngữ Văn" loading="lazy"></iframe></div>
+    </div>
   </div>
 
   <div id="feeModal" class="modal-backdrop">

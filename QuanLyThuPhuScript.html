@@ -92,6 +92,27 @@
         + '&token=' + encodeURIComponent(APP_TOKEN);
     }
 
+    function openLiteratureTracker() {
+      const modal = document.getElementById('literatureTrackerModal');
+      const frame = document.getElementById('literatureTrackerFrame');
+      if (!modal || !frame) return;
+      frame.src = APP_URL + '?page=QuanLyDangKyNguVan&embedded=1&token=' + encodeURIComponent(APP_TOKEN);
+      modal.classList.add('show');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeLiteratureTracker() {
+      const modal = document.getElementById('literatureTrackerModal');
+      if (modal) modal.classList.remove('show');
+      document.body.style.overflow = '';
+    }
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && document.getElementById('literatureTrackerModal').classList.contains('show')) {
+        closeLiteratureTracker();
+      }
+    });
+
     function handleHeaderAction(select) {
       const action = select.value;
       select.value = '';
