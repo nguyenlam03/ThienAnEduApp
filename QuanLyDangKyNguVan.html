@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <base target="_top"><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <?!= include('AppStyles'); ?><?!= include('AppTheme'); ?>
+  <style>
+    .literature-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:18px 0}.literature-toolbar select,.literature-toolbar input{width:auto;min-width:180px;padding:11px 14px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc}.literature-toolbar .spacer{flex:1}
+    .semester-tabs{display:flex;gap:8px;border-bottom:1px solid #dbe4ef;margin:22px 0 18px}.semester-tab{border:0;background:transparent;padding:12px 18px;font-weight:800;color:#64748b;border-bottom:3px solid transparent;cursor:pointer}.semester-tab.active{color:#0b2f68;border-color:#e6a000}
+    .literature-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:18px 0}.literature-kpi{border:1px solid #dbe7f3;border-radius:16px;padding:18px;background:#f8fbff}.literature-kpi span{display:block;color:#64748b;font-size:13px;font-weight:700}.literature-kpi strong{display:block;color:#0b2f68;font-size:25px;margin:7px 0 2px}.literature-note{font-size:13px;color:#64748b;line-height:1.6}.literature-alert{padding:13px 16px;border-radius:12px;background:#fff8e5;border:1px solid #f4d782;color:#8a4b08;margin:14px 0}.literature-status{min-height:24px;margin:12px 0}.literature-status.error{color:#b91c1c}.literature-status.success{color:#047857}.literature-table-wrap{overflow:auto;max-height:62vh;border:1px solid #dbe4ef;border-radius:14px}.literature-table{width:100%;border-collapse:collapse;min-width:900px}.literature-table th,.literature-table td{padding:12px;text-align:left;border-bottom:1px solid #e7edf5;white-space:nowrap}.literature-table th{position:sticky;top:0;background:#edf4fc;color:#0b2f68;z-index:1}.literature-table td.money{text-align:right;font-weight:700}.status-pill{display:inline-flex;border-radius:999px;padding:5px 9px;font-size:12px;font-weight:800;background:#fff1d6;color:#9a5a00}.status-pill.paid{background:#dcfce7;color:#166534}.table-button{padding:7px 10px;border:1px solid #fecaca;border-radius:8px;background:#fff7f7;color:#b91c1c;font-weight:700;cursor:pointer}.table-button.restore{border-color:#bae6fd;background:#f0f9ff;color:#0369a1}.removed-panel{margin-top:24px}.empty-row{text-align:center!important;color:#64748b;padding:24px!important}
+    @media(max-width:900px){.literature-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:560px){.literature-kpis{grid-template-columns:1fr}.literature-toolbar>*{flex:1}.semester-tab{flex:1;padding:11px 7px}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar"><div class="brand-title"><?= brandName ?></div><div class="session-box"><?= currentUserName ?> · <?= tenKyHoc ?></div></header>
+  <?!= include('AppNavigation'); ?>
+  <main class="main"><section class="page-card"><div class="content">
+    <h1 class="page-title">Quản lý đăng ký Ngữ Văn</h1>
+    <p class="literature-note">Danh sách mặc định gồm học sinh lớp 6–9 thuộc kỳ học đang đăng nhập. Trạng thái thu được đồng bộ từ khoản thu thêm trong quản lý thu phí.</p>
+    <div class="literature-toolbar"><label for="schoolYear">Năm học</label><select id="schoolYear" aria-label="Năm học"></select><span class="spacer"></span><button class="secondary-button" id="syncButton">↻ Đồng bộ học phí</button></div>
+    <div class="semester-tabs" role="tablist" aria-label="Học kỳ"><button class="semester-tab active" id="tabHKI" role="tab" aria-selected="true" data-semester="HKI">Học kỳ 1 · Tháng 09–12</button><button class="semester-tab" id="tabHKII" role="tab" aria-selected="false" data-semester="HKII">Học kỳ 2 · Tháng 01–04</button></div>
+    <div id="summaryCards" class="literature-kpis"></div>
+    <div id="reminderBanner"></div>
+    <div id="pageStatus" class="literature-status" role="status" aria-live="polite">Đang tải…</div>
+    <div class="literature-toolbar"><input id="searchStudent" type="search" aria-label="Tìm học sinh" placeholder="Tìm học sinh hoặc lớp…"><span id="studentCount" class="literature-note"></span></div>
+    <div class="literature-table-wrap"><table class="literature-table"><thead id="tableHead"></thead><tbody id="studentRows"></tbody></table></div>
+    <section id="removedPanel" class="removed-panel" hidden><h2>Học sinh đã xóa khỏi danh sách</h2><div class="literature-table-wrap"><table class="literature-table"><thead><tr><th>Học sinh</th><th>Lớp</th><th>Thao tác</th></tr></thead><tbody id="removedRows"></tbody></table></div></section>
+    <p class="literature-note">Quy tắc: “Ngữ Văn HKI” được tính là gói đủ 4 tháng học kỳ 1. “Ngữ Văn theo tháng” được ghi nhận riêng từng tháng khi phiếu thu tháng đã thu đủ. Học kỳ 2 áp dụng theo tháng. Khoản thu thêm chỉ được xem là đã thu khi phiếu thu của học sinh đã thanh toán đủ.</p>
+  </div></section></main>
+</div>
+<script>
+window.APP_CURRENT_PAGE='QuanLyDangKyNguVan';
+const APP_URL=<?!= inlineScriptJson_(appUrl) ?>,APP_TOKEN=<?!= inlineScriptJson_(token) ?>,CAN_WRITE=<?!= inlineScriptJson_(['OWNER','ADMIN','FINANCE'].includes(String(currentUserRole || '').toUpperCase())) ?>;
+const $=id=>document.getElementById(id),esc=value=>String(value==null?'':value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let semester='HKI',data=null,busy=false;
+const money=value=>Number(value||0).toLocaleString('vi-VN')+'đ';
+function status(message,type){$('pageStatus').textContent=message||'';$('pageStatus').className='literature-status '+(type||'');}
+function initializeYears(){const now=new Date(),defaultYear=now.getMonth()<4?now.getFullYear()-1:now.getFullYear();$('schoolYear').innerHTML=Array.from({length:7},(_,i)=>defaultYear-i).map(year=>'<option value="'+year+'">'+year+' - '+(year+1)+'</option>').join('');$('schoolYear').value=String(defaultYear);}
+function render(){if(!data)return;const summary=data.summary||{};$('summaryCards').innerHTML=[['Học sinh đăng ký',summary.students||0,'học sinh'],['Học phí phải thu',money(summary.expected),'Theo học kỳ'],['Đã thu',money(summary.collected),'Đã ghi nhận'],['Còn phải thu',money(summary.remaining),'Chưa ghi nhận']].map(card=>'<div class="literature-kpi"><span>'+esc(card[0])+'</span><strong>'+esc(card[1])+'</strong><span>'+esc(card[2])+'</span></div>').join('');
+  const reminders=(data.items||[]).filter(item=>item.reminder);$('reminderBanner').innerHTML=reminders.length?'<div class="literature-alert"><strong>Nhắc thu từ ngày 25:</strong> '+reminders.map(item=>esc(item.hoTen)+' ('+esc(item.tenLop)+')').join(', ')+' chưa được ghi nhận đóng Ngữ Văn theo tháng.</div>':'';
+  $('tableHead').innerHTML='<tr><th>Học sinh</th><th>Lớp</th><th>Hình thức</th>'+data.months.map(month=>'<th>'+esc(month.label)+'</th>').join('')+'<th>Đã thu / Phải thu</th>'+(CAN_WRITE?'<th>Thao tác</th>':'')+'</tr>';
+  const query=$('searchStudent').value.trim().toLocaleLowerCase('vi'),items=(data.items||[]).filter(item=>(item.hoTen+' '+item.tenLop).toLocaleLowerCase('vi').includes(query));$('studentCount').textContent=items.length+' học sinh';
+  $('studentRows').innerHTML=items.map(item=>'<tr><td><strong>'+esc(item.hoTen)+'</strong></td><td>'+esc(item.tenLop)+'</td><td>'+ (item.plan==='HKI'?'<span class="status-pill paid">Gói HKI</span>':'Theo tháng')+'</td>'+item.months.map(month=>'<td><span class="status-pill '+(month.status==='DA_DONG'||month.status==='DA_DONG_HKI'?'paid':'')+'">'+(month.status==='DA_DONG_HKI'?'Đã đóng gói':month.status==='DA_DONG'?'Đã đóng':item.plan==='HKI'?'Chưa đóng gói':'Chưa đóng')+'</span></td>').join('')+'<td class="money">'+money(item.collected)+' / '+money(item.expected)+'</td>'+(CAN_WRITE?'<td><button class="table-button" data-action="remove" data-id="'+esc(item.maHocSinh)+'">Xóa</button></td>':'')+'</tr>').join('')||'<tr><td class="empty-row" colspan="'+(4+data.months.length+(CAN_WRITE?1:0))+'">Không có học sinh phù hợp trong danh sách đăng ký.</td></tr>';
+  const removed=data.removed||[];$('removedPanel').hidden=!CAN_WRITE||removed.length===0;$('removedRows').innerHTML=removed.map(item=>'<tr><td><strong>'+esc(item.hoTen)+'</strong></td><td>'+esc(item.tenLop)+'</td><td><button class="table-button restore" data-action="restore" data-id="'+esc(item.maHocSinh)+'">Thêm lại</button></td></tr>').join('');
+}
+function load(showSyncMessage){busy=true;$('syncButton').disabled=true;status(showSyncMessage?'Đang đồng bộ trạng thái học phí từ các tháng…':'Đang tải danh sách đăng ký…');google.script.run.withSuccessHandler(result=>{try{data=typeof result==='string'?JSON.parse(result):result;busy=false;$('syncButton').disabled=false;render();status(data.categoriesReady?'Đã cập nhật dữ liệu đăng ký và học phí.':'Chưa tìm thấy đủ danh mục “Ngữ Văn HKI” và “Ngữ Văn theo tháng”; hãy kiểm tra danh mục khoản thu thêm.',''+(data.categoriesReady?'success':'error'));}catch(error){busy=false;$('syncButton').disabled=false;status(error.message||String(error),'error');}}).withFailureHandler(error=>{busy=false;$('syncButton').disabled=false;status(error.message||String(error),'error');}).getDangKyNguVanData(APP_TOKEN,Number($('schoolYear').value),semester);}
+function changeStatus(id,registered){if(busy)return;const item=(data.items||[]).concat(data.removed||[]).find(row=>row.maHocSinh===id);if(!registered&&!confirm('Xóa '+(item?item.hoTen:'học sinh')+' khỏi danh sách đăng ký Ngữ Văn của kỳ học này?'))return;busy=true;status(registered?'Đang thêm lại học sinh…':'Đang xóa học sinh…');google.script.run.withSuccessHandler(()=>load(false)).withFailureHandler(error=>{busy=false;status(error.message||String(error),'error');}).setDangKyNguVanStatus(APP_TOKEN,id,registered);}
+document.querySelectorAll('.semester-tab').forEach(button=>button.addEventListener('click',()=>{if(semester===button.dataset.semester||busy)return;semester=button.dataset.semester;document.querySelectorAll('.semester-tab').forEach(tab=>{const active=tab===button;tab.classList.toggle('active',active);tab.setAttribute('aria-selected',String(active));});load(false);}));
+$('schoolYear').addEventListener('change',()=>load(false));$('syncButton').addEventListener('click',()=>load(true));$('searchStudent').addEventListener('input',render);$('studentRows').addEventListener('click',event=>{const button=event.target.closest('button[data-action]');if(button)changeStatus(button.dataset.id,false);});$('removedRows').addEventListener('click',event=>{const button=event.target.closest('button[data-action]');if(button)changeStatus(button.dataset.id,true);});
+function goPage(page){window.top.location.href=APP_URL+'?page='+encodeURIComponent(page)+'&token='+encodeURIComponent(APP_TOKEN);}
+document.addEventListener('DOMContentLoaded',()=>{initializeYears();load(false);});
+</script>
+</body>
+</html>

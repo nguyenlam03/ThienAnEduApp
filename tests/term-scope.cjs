@@ -41,6 +41,11 @@ for (const file of fs.readdirSync('.').filter(file => /\.(js|gs|html)$/.test(fil
   assert.ok(!scriptNames.has(name), 'Duplicate Apps Script name: ' + name + ' (' + scriptNames.get(name) + ', ' + file + ')');
   scriptNames.set(name, file);
 }
+const appRouter = fs.readFileSync('Code.js', 'utf8');
+const appNavigation = fs.readFileSync('AppNavigation.html', 'utf8');
+assert.match(appRouter, /'QuanLyDangKyNguVan'/, 'Literature registration page must be protected and routable');
+assert.match(appNavigation, /data-page="QuanLyDangKyNguVan"/, 'Literature registration page must appear in student navigation');
+assert.ok(fs.existsSync('QuanLyDangKyNguVan.html'), 'Literature registration page template is missing');
 let syntaxBlocks = 0;
 for (const file of fs.readdirSync('.').filter(file => /\.(js|html)$/.test(file))) {
   const source = fs.readFileSync(file, 'utf8');

@@ -214,6 +214,43 @@ function runArchitectureUnitTests() {
     equal(mapNhacViec_(Object.assign({}, base, { HanXuLy: '2026-08-27', TrangThai: 'DA_HUY' }), '2026-08-28').nhomThoiGian, 'DA_HUY', 'Việc đã hủy vẫn bị báo trễ');
   });
 
+  test('Ngữ Văn HKI được tính là một gói bốn tháng và chỉ thu một lần', function () {
+    equal(getNguVanClassGrade_('Lớp 6'), 6, 'Không đọc đúng tên lớp 6');
+    equal(getNguVanClassGrade_('Lớp 9'), 9, 'Không đọc đúng tên lớp 9');
+    equal(getNguVanClassGrade_('Cấp 2'), 0, 'Nhầm cấp học thành lớp cụ thể');
+    var student = { maHocSinh: 'S6', hoTen: 'Học sinh 6', tenLop: 'Lớp 6' };
+    var categories = { hki: { maKhoanThu: 'NV_HKI' }, monthly: { maKhoanThu: 'NV_THANG' } };
+    var months = [9, 10, 11, 12].map(function (month) { return { year: 2026, month: month }; });
+    var rows = [
+      { KhoanThuThemJson: '[{"maKhoanThu":"NV_HKI","tenKhoanThu":"Ngữ Văn HKI","soTien":1600000}]', HocPhi: 3400000, SoTienDaThu: 3400000 },
+      null, null, null
+    ];
+    var result = buildNguVanStudentSemesterSummary_(student, 'HKI', months, rows, categories, { hki: 1600000, monthly: 400000 }, { year: 2026, month: 9, day: 25 });
+    equal(result.plan, 'HKI', 'Không nhận ra gói Ngữ Văn HKI');
+    equal(result.expected, 1600000, 'Gói HKI bị tính lặp theo tháng');
+    equal(result.collected, 1600000, 'Gói HKI đã thu chưa được ghi nhận');
+    equal(result.months.filter(function (item) { return item.status === 'DA_DONG_HKI'; }).length, 4, 'Gói HKI chưa phủ đủ bốn tháng');
+    equal(result.reminder, false, 'Gói HKI bị đưa vào nhắc đóng theo tháng');
+  });
+
+  test('Ngữ Văn theo tháng chỉ ghi nhận tháng đã thu đủ và nhắc từ ngày 25', function () {
+    var student = { maHocSinh: 'S7', hoTen: 'Học sinh 7', tenLop: 'Lớp 7' };
+    var categories = { hki: { maKhoanThu: 'NV_HKI' }, monthly: { maKhoanThu: 'NV_THANG' } };
+    var months = [9, 10, 11, 12].map(function (month) { return { year: 2026, month: month }; });
+    var selected = { KhoanThuThemJson: '[{"maKhoanThu":"NV_THANG","tenKhoanThu":"Ngữ Văn theo tháng","soTien":400000}]', HocPhi: 2200000, SoTienDaThu: 2200000 };
+    var unpaid = { KhoanThuThemJson: '[]', HocPhi: 1800000, SoTienDaThu: 1800000 };
+    var result = buildNguVanStudentSemesterSummary_(student, 'HKI', months, [selected, unpaid, null, null], categories, { hki: 1600000, monthly: 400000 }, { year: 2026, month: 10, day: 25 });
+    equal(result.plan, 'THEO_THANG', 'Không nhận ra hình thức theo tháng');
+    equal(result.expected, 1600000, 'Sai tổng phải thu theo tháng');
+    equal(result.collected, 400000, 'Nhầm học phí chính thành khoản Ngữ Văn đã thu');
+    equal(result.reminder, true, 'Không nhắc học sinh còn thiếu từ ngày 25');
+    var partial = Object.assign({}, selected, { SoTienDaThu: 2000000 });
+    var partiallyPaid = buildNguVanStudentSemesterSummary_(student, 'HKI', months, [partial, unpaid, null, null], categories, { hki: 1600000, monthly: 400000 }, { year: 2026, month: 9, day: 25 });
+    equal(partiallyPaid.collected, 0, 'Phiếu thu còn thiếu tiền bị đánh dấu đã đóng Ngữ Văn');
+    var early = buildNguVanStudentSemesterSummary_(student, 'HKI', months, [selected, unpaid, null, null], categories, { hki: 1600000, monthly: 400000 }, { year: 2026, month: 10, day: 24 });
+    equal(early.reminder, false, 'Nhắc trước ngày 25');
+  });
+
   var failed = results.filter(function (item) { return !item.passed; }).length;
   return jsonResponse_({ passed: results.length - failed, failed: failed, total: results.length, results: results });
 }

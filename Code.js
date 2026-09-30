@@ -25,6 +25,7 @@ const SHEET_MAUTIN_PHUHUYNH = 'MauTinPhuHuynh';
 const SHEET_LICHSU_LIENHE = 'LichSuLienHePhuHuynh';
 const SHEET_CAUHINH = 'CauHinh';
 const SHEET_DANHMUC_KHOANTHU_PHI = 'DanhMucKhoanThuPhi';
+const SHEET_DANGKY_NGUVAN = 'DangKyNguVan';
 const CONFIG_NOTIFICATION_DURATION = 'NOTIFICATION_DURATION_SECONDS';
 const CONFIG_BRAND_NAME = 'APP_BRAND_NAME';
 const CONFIG_BRAND_TAGLINE = 'APP_BRAND_TAGLINE';
@@ -73,6 +74,7 @@ function doGet(e) {
     'QuanLyHocSinh',
     'PhanKyHocSinh',
     'HocPhiKyHoc',
+    'QuanLyDangKyNguVan',
     'QuanLyDiemDanh',
     'QuanLyNhacViec',
     'QuanLyThuPhu',
@@ -161,6 +163,7 @@ function setupDatabase() {
   ensureSheet_(ss, SHEET_DIEMDANH, getDiemDanhHeaders_());
   ensureNhacViecSheets_();
   ensureDanhMucKhoanThuPhiSheet_();
+  ensureDangKyNguVanSheet_();
   ensureAppConfigSheet_();
 
   // Dữ liệu thu phí được lưu theo từng sheet tháng, ví dụ: Thang07.2026.
@@ -2041,6 +2044,182 @@ function getDanhMucKhoanThuPhiList_() {
 function getDanhMucKhoanThuPhi(token) {
   requireSession_(token, 'tuition.read');
   return jsonResponse_({ categories: getDanhMucKhoanThuPhiList_() });
+}
+
+function getDangKyNguVanHeaders_() {
+  return ['MaKyHoc', 'MaHocSinh', 'TrangThai', 'NgayCapNhat', 'NguoiCapNhat'];
+}
+
+function ensureDangKyNguVanSheet_() {
+  return ensureSheet_(SpreadsheetApp.getActiveSpreadsheet(), SHEET_DANGKY_NGUVAN, getDangKyNguVanHeaders_());
+}
+
+function getNguVanClassGrade_(className) {
+  const text = normalizeText_(className);
+  const match = text.match(/(?:^|[^a-z0-9])(?:lop\s*)?([6-9])(?:$|[^0-9])/);
+  if (match) return Number(match[1]);
+  return /^\s*[6-9]\s*$/.test(String(className || '')) ? Number(String(className).trim()) : 0;
+}
+
+function getNguVanEligibleStudents_(maKyHoc) {
+  const term = String(maKyHoc || '').trim();
+  const classNames = readObjects_(SHEET_LOP).reduce((map, row) => {
+    const id = String(row.MaLop || '').trim();
+    if (id) map[id] = String(row.TenLop || '').trim();
+    return map;
+  }, {});
+  const linked = readObjects_(SHEET_HOCSINH_KYHOC).reduce((map, row) => {
+    const id = String(row.MaHocSinh || '').trim();
+    if (id && String(row.MaKyHoc || '').trim() === term && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED') map[id] = true;
+    return map;
+  }, {});
+  return readObjects_(SHEET_HOCSINH).filter(row => {
+    const id = String(row.MaHocSinh || '').trim();
+    if (!id || !linked[id] || String(row.TrangThai || 'ACTIVE').trim().toUpperCase() === 'DELETED') return false;
+    const className = classNames[String(row.Lop || '').trim()] || String(row.Lop || '').trim();
+    return getNguVanClassGrade_(className) >= 6 && getNguVanClassGrade_(className) <= 9;
+  }).map(row => {
+    const className = classNames[String(row.Lop || '').trim()] || String(row.Lop || '').trim();
+    return {
+      maHocSinh: String(row.MaHocSinh || '').trim(), hoTen: String(row.HoTen || '').trim(),
+      lop: String(row.Lop || '').trim(), tenLop: className,
+      grade: getNguVanClassGrade_(className), sapXep: number_(row.SapXep),
+      gioiTinh: String(row.GioiTinh || '').trim()
+    };
+  }).sort((a, b) => a.grade - b.grade || a.sapXep - b.sapXep || a.hoTen.localeCompare(b.hoTen, 'vi'));
+}
+
+function getNguVanFeeCategoryMap_() {
+  const categories = getDanhMucKhoanThuPhiList_().filter(item => item.trangThai === 'ACTIVE');
+  return {
+    hki: categories.find(item => normalizeText_(item.tenKhoanThu) === 'ngu van hki') || null,
+    monthly: categories.find(item => normalizeText_(item.tenKhoanThu) === 'ngu van theo thang') || null
+  };
+}
+
+function getNguVanSelectedItem_(row, category) {
+  if (!row || !category || toBoolean_(row.TamNghi)) return null;
+  return parseKhoanThuThem_(row.KhoanThuThemJson).find(item => item.maKhoanThu === category.maKhoanThu) || null;
+}
+
+function isNguVanFeeRowPaid_(row) {
+  return !!row && !toBoolean_(row.TamNghi) &&
+    String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED' &&
+    number_(row.SoTienDaThu) >= number_(row.HocPhi) && number_(row.HocPhi) > 0;
+}
+
+function buildNguVanStudentSemesterSummary_(student, semester, monthSpecs, feeRows, categories, rates, current) {
+  const hkiEntries = feeRows.map(row => ({ row, item: getNguVanSelectedItem_(row, categories.hki) })).filter(entry => entry.item);
+  const monthlyEntries = feeRows.map((row, index) => ({ row, index, item: getNguVanSelectedItem_(row, categories.monthly) }));
+  const hkiPlan = semester === 'HKI' && hkiEntries.length > 0;
+  const hkiAmount = hkiPlan ? number_(hkiEntries[0].item.soTien) || rates.hki : rates.hki;
+  const hkiPaid = hkiPlan && hkiEntries.some(entry => isNguVanFeeRowPaid_(entry.row));
+  const monthItems = monthSpecs.map((spec, index) => {
+    const entry = monthlyEntries[index];
+    const amount = entry.item ? (number_(entry.item.soTien) || rates.monthly) : rates.monthly;
+    const paidMonthly = !!entry.item && isNguVanFeeRowPaid_(entry.row);
+    return {
+      year: spec.year, month: spec.month, monthLabel: String(spec.month).padStart(2, '0') + '/' + spec.year,
+      selected: !!entry.item, expected: hkiPlan ? 0 : amount,
+      paid: hkiPlan ? 0 : (paidMonthly ? amount : 0),
+      status: hkiPlan ? (hkiPaid ? 'DA_DONG_HKI' : 'GOI_HKI') : (paidMonthly ? 'DA_DONG' : 'CHUA_DONG')
+    };
+  });
+  const expected = hkiPlan ? hkiAmount : monthItems.reduce((sum, item) => sum + item.expected, 0);
+  const collected = hkiPlan ? (hkiPaid ? hkiAmount : 0) : monthItems.reduce((sum, item) => sum + item.paid, 0);
+  const reminderItem = monthItems.find(item => item.year === current.year && item.month === current.month);
+  const reminder = current.day >= 25 && !hkiPlan && reminderItem && reminderItem.status === 'CHUA_DONG';
+  return { ...student, plan: hkiPlan ? 'HKI' : 'THEO_THANG', expected, collected, remaining: Math.max(expected - collected, 0), months: monthItems, reminder: !!reminder };
+}
+
+function getNguVanMonthRows_(maKyHoc, year, month, createSnapshot) {
+  const name = getThuPhiMonthSheetName_(year, month);
+  if (createSnapshot) ensureThuPhiMonthSnapshot_(maKyHoc, year, month, { includeRows: false });
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  return sheet ? readObjectsNoCache_(name).filter(row => String(row.MaKyHoc || '').trim() === maKyHoc && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED') : [];
+}
+
+function getDangKyNguVanData(token, schoolYearStart, semester) {
+  const session = requireSession_(token, 'tuition.read');
+  const startYear = Number(schoolYearStart);
+  const selectedSemester = String(semester || '').toUpperCase();
+  if (!Number.isInteger(startYear) || startYear < 2000 || startYear > 2100 || !['HKI', 'HKII'].includes(selectedSemester)) throw new Error('Năm học hoặc học kỳ không hợp lệ.');
+  ensureDangKyNguVanSheet_();
+  const eligible = getNguVanEligibleStudents_(session.maKyHoc);
+  const registrationRows = readObjectsNoCache_(SHEET_DANGKY_NGUVAN).filter(row => String(row.MaKyHoc || '').trim() === session.maKyHoc);
+  const removedIds = new Set(registrationRows.filter(row => String(row.TrangThai || '').toUpperCase() === 'REMOVED').map(row => String(row.MaHocSinh || '').trim()));
+  const registered = eligible.filter(student => !removedIds.has(student.maHocSinh));
+  const removed = eligible.filter(student => removedIds.has(student.maHocSinh));
+  const monthSpecs = selectedSemester === 'HKI'
+    ? [9, 10, 11, 12].map(month => ({ year: startYear, month }))
+    : [1, 2, 3, 4].map(month => ({ year: startYear + 1, month }));
+  const categories = getNguVanFeeCategoryMap_();
+  const hkiDefault = categories.hki && categories.hki.soTienMacDinh > 0 ? categories.hki.soTienMacDinh : 1600000;
+  const monthlyDefault = categories.monthly && categories.monthly.soTienMacDinh > 0 ? categories.monthly.soTienMacDinh : 400000;
+  const rowsByMonth = monthSpecs.map(spec => {
+    const rows = getNguVanMonthRows_(session.maKyHoc, spec.year, spec.month, false);
+    const byStudent = new Map();
+    rows.forEach(row => { const id = String(row.MaHocSinh || '').trim(); if (id && !byStudent.has(id)) byStudent.set(id, row); });
+    return { ...spec, rows: byStudent };
+  });
+  const now = new Date();
+  const current = {
+    year: Number(Utilities.formatDate(now, 'Asia/Ho_Chi_Minh', 'yyyy')),
+    month: Number(Utilities.formatDate(now, 'Asia/Ho_Chi_Minh', 'M')),
+    day: Number(Utilities.formatDate(now, 'Asia/Ho_Chi_Minh', 'd'))
+  };
+  const items = registered.map(student => buildNguVanStudentSemesterSummary_(
+    student, selectedSemester, monthSpecs,
+    rowsByMonth.map(spec => spec.rows.get(student.maHocSinh) || null), categories,
+    { hki: hkiDefault, monthly: monthlyDefault }, current
+  ));
+  const summary = {
+    students: items.length,
+    expected: items.reduce((sum, item) => sum + item.expected, 0),
+    collected: items.reduce((sum, item) => sum + item.collected, 0),
+    remaining: items.reduce((sum, item) => sum + item.remaining, 0),
+    reminders: items.filter(item => item.reminder).length
+  };
+  return jsonResponse_({
+    schoolYearStart: startYear, schoolYearLabel: startYear + ' - ' + (startYear + 1), semester: selectedSemester,
+    months: monthSpecs.map(spec => ({ year: spec.year, month: spec.month, label: String(spec.month).padStart(2, '0') + '/' + spec.year })),
+    categoriesReady: !!(categories.hki && categories.monthly),
+    categories: { hki: categories.hki ? categories.hki.tenKhoanThu : 'Ngữ Văn HKI', monthly: categories.monthly ? categories.monthly.tenKhoanThu : 'Ngữ Văn theo tháng' },
+    rates: { hki: hkiDefault, monthly: monthlyDefault }, items, removed, summary, generatedAt: now.toISOString()
+  });
+}
+
+function setDangKyNguVanStatus(token, maHocSinh, registered) {
+  const session = requireSession_(token, 'tuition.write');
+  const studentId = String(maHocSinh || '').trim();
+  if (!studentId) throw new Error('Thiếu mã học sinh.');
+  if (!getNguVanEligibleStudents_(session.maKyHoc).some(student => student.maHocSinh === studentId)) throw new Error('Học sinh không thuộc lớp 6–9 trong kỳ học đang chọn.');
+  const sheet = ensureDangKyNguVanSheet_();
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('Hệ thống đang cập nhật danh sách đăng ký Ngữ Văn.');
+  try {
+    const values = sheet.getDataRange().getValues();
+    const headers = values[0].map(value => String(value || '').trim());
+    const index = buildHeaderIndex_(headers);
+    let rowIndex = -1;
+    for (let i = 1; i < values.length; i++) {
+      if (String(values[i][index.MaKyHoc] || '').trim() === session.maKyHoc && String(values[i][index.MaHocSinh] || '').trim() === studentId) { rowIndex = i; break; }
+    }
+    const now = new Date();
+    const status = registered ? 'ACTIVE' : 'REMOVED';
+    const actor = session.tenDangNhap || session.hoTen || session.maNguoiDung;
+    if (rowIndex >= 0) {
+      values[rowIndex][index.TrangThai] = status;
+      values[rowIndex][index.NgayCapNhat] = now;
+      values[rowIndex][index.NguoiCapNhat] = actor;
+      sheet.getRange(rowIndex + 1, 1, 1, headers.length).setValues([values[rowIndex]]);
+    } else {
+      appendObjectsToSheet_(sheet, [{ MaKyHoc: session.maKyHoc, MaHocSinh: studentId, TrangThai: status, NgayCapNhat: now, NguoiCapNhat: actor }], headers);
+    }
+  } finally { lock.releaseLock(); }
+  bumpDataVersion_();
+  safeWriteAuditLog_(session, registered ? 'RESTORE' : 'REMOVE', 'DANG_KY_NGU_VAN', studentId, null, { maKyHoc: session.maKyHoc });
+  return jsonResponse_({ success: true, message: registered ? 'Đã thêm lại học sinh vào danh sách đăng ký Ngữ Văn.' : 'Đã xóa học sinh khỏi danh sách đăng ký Ngữ Văn.' });
 }
 
 function saveDanhMucKhoanThuPhi(token, data) {
@@ -4564,7 +4743,7 @@ function getKhoanChiDinhKyList_(maKyHoc, yearMonth) {
  */
 function getStartupReminders(token) {
   const session = requireSession_(token);
-  if (!SecurityService.hasPermission(session.vaiTro, 'finance.read')) {
+  if (!SecurityService.hasPermission(session.vaiTro, 'finance.read') && !SecurityService.hasPermission(session.vaiTro, 'tuition.read')) {
     return jsonResponse_({ items: [], generatedAt: new Date().toISOString() });
   }
 
@@ -4584,7 +4763,7 @@ function getStartupReminders(token) {
 }
 
 function buildStartupReminderItems_(context) {
-  const providers = [buildRecurringExpenseReminderItems_];
+  const providers = [buildRecurringExpenseReminderItems_, buildNguVanMonthlyReminderItems_];
   const seen = {};
   return providers.reduce((items, provider) => {
     return items.concat(provider(context) || []);
@@ -4597,6 +4776,47 @@ function buildStartupReminderItems_(context) {
     if (a.level !== b.level) return a.level === 'OVERDUE' ? -1 : 1;
     return String(a.dueDate || '').localeCompare(String(b.dueDate || ''));
   });
+}
+
+function buildNguVanMonthlyReminderItems_(context) {
+  const today = String(context && context.today || '').trim();
+  const term = String(context && context.maKyHoc || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(today) || Number(today.slice(8, 10)) < 25 || !term) return [];
+  const year = Number(today.slice(0, 4));
+  const month = Number(today.slice(5, 7));
+  const semester = month >= 9 && month <= 12 ? 'HKI' : (month >= 1 && month <= 4 ? 'HKII' : '');
+  if (!semester) return [];
+  const specs = semester === 'HKI'
+    ? [9, 10, 11, 12].map(value => ({ year, month: value }))
+    : [1, 2, 3, 4].map(value => ({ year, month: value }));
+  const currentIndex = specs.findIndex(item => item.year === year && item.month === month);
+  if (currentIndex < 0) return [];
+  ensureDangKyNguVanSheet_();
+  const removed = new Set(readObjectsNoCache_(SHEET_DANGKY_NGUVAN)
+    .filter(row => String(row.MaKyHoc || '').trim() === term && String(row.TrangThai || '').toUpperCase() === 'REMOVED')
+    .map(row => String(row.MaHocSinh || '').trim()));
+  const students = getNguVanEligibleStudents_(term).filter(student => !removed.has(student.maHocSinh));
+  const categories = getNguVanFeeCategoryMap_();
+  if (!categories.monthly) return [];
+  const rowsByMonth = specs.map(spec => {
+    const byStudent = new Map();
+    getNguVanMonthRows_(term, spec.year, spec.month, false).forEach(row => {
+      const id = String(row.MaHocSinh || '').trim();
+      if (id && !byStudent.has(id)) byStudent.set(id, row);
+    });
+    return byStudent;
+  });
+  const current = { year, month, day: Number(today.slice(8, 10)) };
+  const monthlyDefault = categories.monthly.soTienMacDinh > 0 ? categories.monthly.soTienMacDinh : 400000;
+  const hkiDefault = categories.hki && categories.hki.soTienMacDinh > 0 ? categories.hki.soTienMacDinh : 1600000;
+  return students.map(student => buildNguVanStudentSemesterSummary_(
+    student, semester, specs, rowsByMonth.map(rows => rows.get(student.maHocSinh) || null), categories,
+    { hki: hkiDefault, monthly: monthlyDefault }, current
+  )).filter(item => item.reminder).map(item => ({
+    id: 'NGUVAN|' + term + '|' + String(year) + '-' + String(month).padStart(2, '0') + '|' + item.maHocSinh,
+    level: 'DUE_SOON', dueDate: today.slice(0, 8) + '25', page: 'QuanLyDangKyNguVan',
+    message: 'Ngữ Văn theo tháng: ' + item.hoTen + ' (' + item.tenLop + ') chưa được ghi nhận đóng tháng ' + String(month).padStart(2, '0') + '/' + year + '.'
+  }));
 }
 
 function buildRecurringExpenseReminderItems_(context) {
