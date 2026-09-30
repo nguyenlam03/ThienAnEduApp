@@ -51,6 +51,19 @@ function runArchitectureUnitTests() {
     equal(result.summary.allocatedTotal, 100000000, 'Tổng tiền phân bổ sai');
     equal(result.items[0].remaining, 25000000, 'Số dư hũ vận hành sai');
   });
+  test('Cơ sở phân bổ hũ loại trừ khoản thu thêm', function () {
+    equal(getHocPhiCoBanSnapshotRow_({ HocPhi: 3400000, HocPhiGoc: 3400000, HocPhiCoBan: 1800000, TongKhoanThuThem: 1600000 }), 1800000, 'Không dùng học phí cơ bản tách riêng');
+    equal(getHocPhiCoBanSnapshotRow_({ HocPhi: 3400000, HocPhiGoc: 3400000, TongKhoanThuThem: 1600000 }), 1800000, 'Không trừ khoản thu thêm từ dữ liệu cũ');
+    equal(getHocPhiCoBanSnapshotRow_({ HocPhi: 3400000, KhoanThuThemJson: '[{"maKhoanThu":"K1","tenKhoanThu":"Thu hộ","soTien":1600000}]' }), 1800000, 'Không khôi phục học phí cơ bản từ JSON khoản thu thêm');
+    var summary = buildFinanceFeeSummaryForRoster_([
+      { MaKyHoc: 'TERM_A', MaHocSinh: 'S1', HocPhi: 3400000, HocPhiCoBan: 1800000, SoTienDaThu: 3400000, Lop: 'L1' },
+      { MaKyHoc: 'TERM_A', MaHocSinh: 'S1', HocPhi: 3400000, HocPhiCoBan: 1800000, SoTienDaThu: 3400000, Lop: 'L1' },
+      { MaKyHoc: 'TERM_A', MaHocSinh: 'S_OLD', HocPhi: 9000000, HocPhiCoBan: 9000000, SoTienDaThu: 0 },
+      { MaKyHoc: 'TERM_B', MaHocSinh: 'S2', HocPhi: 5000000, HocPhiCoBan: 5000000, SoTienDaThu: 0 }
+    ], 'TERM_A', new Set(['S1']));
+    equal(summary.expected, 1800000, 'Cơ sở phải khớp một lần với đúng học sinh trong kỳ');
+    equal(summary.collected, 1800000, 'Khoản thu thêm không được tính thành học phí đã thu');
+  });
   test('Hũ tài chính của mỗi tháng không mang số dư tháng trước', function () {
     var result = FinanceDomain.calculateJars({
       revenue: 10000000,

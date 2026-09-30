@@ -43,7 +43,8 @@
 - `DanhMucThuChi.MaHuMacDinh` xác định hũ mặc định của từng danh mục chi.
 - `SoThuChi.MaHuTaiChinh` lưu hũ thực tế được chọn trên phiếu chi; người dùng có thể đổi so với mặc định.
 - Không tạo sổ giao dịch hũ riêng. Báo cáo hũ đọc trực tiếp các phiếu đang hoạt động trong `SoThuChi`, nên sửa hoặc huỷ phiếu không tạo dữ liệu trùng.
-- Ngân sách hũ của tháng được phân bổ từ tổng học phí phải thu trong sheet tháng. Học phí `THU_HOC_PHI` đã ghi vào `SoThuChi` chỉ dùng để hiển thị tỷ lệ thu và cảnh báo dòng tiền.
+- Ngân sách hũ của tháng chỉ được phân bổ từ `HocPhiCoBan` của danh sách học sinh đúng kỳ học trong snapshot tháng; không gồm khoản thu thêm thu hộ. Mỗi mã học sinh chỉ tính một lần, học sinh tạm nghỉ, đã xóa hoặc không còn thuộc kỳ bị loại trừ. Dữ liệu snapshot cũ không có `HocPhiCoBan` được khôi phục bằng cách lấy tổng học phí trừ khoản thu thêm.
+- Số đã thu để đo tỷ lệ thu được giới hạn tối đa bằng học phí cơ bản từng học sinh; tổng thu trên sổ vẫn được đối chiếu riêng vì có thể gồm khoản thu thêm.
 - Mỗi tháng là một kế hoạch ngân sách độc lập, không mang số dư hũ từ tháng trước. Hạn mức còn lại bằng ngân sách kế hoạch trừ các phiếu chi đang hoạt động của chính tháng đó.
 - Trước khi chốt, ngân sách dùng học phí phải thu hiện tại. Sau khi chốt, học phí nền và tỷ lệ hũ được giữ nguyên; phần tăng sau chốt chỉ hiển thị là doanh thu chưa phân bổ.
 - `DanhMucHuTaiChinh.VaiTroHeThong = OWNER_COMPENSATION` xác định duy nhất Hũ lương chủ trung tâm. Không nhận diện hũ bằng tên hiển thị.

@@ -5180,11 +5180,63 @@ function getHocPhiPhaiThuThang_(maKyHoc, month) {
   if (parts.length === 2) ensureThuPhiMonthSnapshot_(maKyHoc, Number(parts[0]), Number(parts[1]), { includeRows: false });
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(getThuPhiMonthSheetName_(Number(parts[0]), Number(parts[1])));
   if (!sheet) return 0;
-  return readObjectsNoCache_(sheet.getName()).filter(row =>
-    String(row.MaKyHoc || '').trim() === String(maKyHoc || '').trim() &&
-    String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED' &&
-    !toBoolean_(row.TamNghi)
-  ).reduce((sum, row) => sum + Math.max(0, number_(row.HocPhi)), 0);
+  return buildFinanceFeeSummaryFromRows_(readObjectsNoCache_(sheet.getName()), maKyHoc).expected;
+}
+
+/**
+ * Học phí làm cơ sở phân bổ chỉ gồm học phí cơ bản của danh sách học sinh
+ * đúng kỳ học. Cột HocPhi có thể bao gồm cả các khoản thu thêm thu hộ.
+ */
+function getHocPhiCoBanSnapshotRow_(row) {
+  if (row && row.HocPhiCoBan !== undefined && String(row.HocPhiCoBan).trim() !== '') {
+    return Math.max(0, number_(row.HocPhiCoBan));
+  }
+  const total = number_(row && (row.HocPhiGoc !== undefined && String(row.HocPhiGoc).trim() !== '' ? row.HocPhiGoc : row.HocPhi));
+  const extra = row && row.TongKhoanThuThem !== undefined && String(row.TongKhoanThuThem).trim() !== ''
+    ? Math.max(0, number_(row.TongKhoanThuThem))
+    : parseKhoanThuThem_(row && row.KhoanThuThemJson).reduce((sum, item) => sum + number_(item.soTien), 0);
+  return Math.max(0, total - extra);
+}
+
+function buildFinanceFeeSummaryFromRows_(rows, maKyHoc) {
+  const term = String(maKyHoc || '').trim();
+  const roster = getHocSinhTheoKyHocForThuPhi_(term);
+  const rosterIds = roster.reduce((set, student) => {
+    const id = String(student.maHocSinh || '').trim();
+    if (id) set.add(id);
+    return set;
+  }, new Set());
+  return buildFinanceFeeSummaryForRoster_(rows, term, rosterIds);
+}
+
+function buildFinanceFeeSummaryForRoster_(rows, term, rosterIds) {
+  const summary = { totalStudents: 0, payingStudents: 0, expected: 0, collected: 0, grossCollected: 0, remaining: 0, classes: [] };
+  const classMap = {};
+  const seen = new Set();
+  (rows || []).forEach(row => {
+    const id = String(row.MaHocSinh || '').trim();
+    if (!id || seen.has(id) || String(row.MaKyHoc || '').trim() !== term ||
+        String(row.TrangThai || 'ACTIVE').trim().toUpperCase() === 'DELETED' || !rosterIds.has(id)) return;
+    seen.add(id);
+    const paused = toBoolean_(row.TamNghi) || String(row.TrangThaiThu || '').trim() === 'Tạm nghỉ';
+    const fee = paused ? 0 : getHocPhiCoBanSnapshotRow_(row);
+    if (fee <= 0) return;
+    const grossCollected = paused ? 0 : Math.max(0, number_(row.SoTienDaThu));
+    const collected = Math.min(fee, grossCollected);
+    summary.totalStudents++;
+    summary.payingStudents++;
+    summary.expected += fee;
+    summary.collected += collected;
+    summary.grossCollected += grossCollected;
+    summary.remaining += Math.max(fee - collected, 0);
+    const key = String(row.Lop || row.TenLop || 'Chưa xếp lớp').trim();
+    if (!classMap[key]) classMap[key] = { lop: key, tenLop: String(row.TenLop || key).trim(), students: 0, expected: 0, collected: 0 };
+    classMap[key].students++;
+    classMap[key].expected += fee;
+    classMap[key].collected += collected;
+  });
+  summary.classes = Object.keys(classMap).map(key => classMap[key]).sort((a, b) => String(a.lop).localeCompare(String(b.lop), 'vi', { numeric: true }));
+  return summary;
 }
 
 function lockPhanBoHuTaiChinh(token, month) {
@@ -5414,14 +5466,14 @@ function buildHuTaiChinhData_(maKyHoc, month, feeSummary, allTransactions, planD
   }, {});
   const actualByJar = {};
   const actualDetailsByJar = {};
-  let currentTuitionRevenue = 0;
+  let currentTuitionCashRevenue = 0;
   (allTransactions || []).forEach(transaction => {
     if (transaction.nguonDuLieu === 'CHUYEN_NOI_BO' || !transaction.ngayGiaoDich) return;
     const transactionMonth = transaction.ngayGiaoDich.slice(0, 7);
     if (transactionMonth !== month) return;
     const isTuition = transaction.loai === 'THU' && transaction.maDanhMuc === 'THU_HOC_PHI';
     if (isTuition) {
-      currentTuitionRevenue += number_(transaction.soTien);
+      currentTuitionCashRevenue += number_(transaction.soTien);
       return;
     }
     if (transaction.loai !== 'CHI') return;
@@ -5473,8 +5525,8 @@ function buildHuTaiChinhData_(maKyHoc, month, feeSummary, allTransactions, planD
   if (allocationStatus.locked && currentExpectedRevenue < plannedTuitionRevenue) warnings.push({ level: 'warning', message: 'Học phí phải thu hiện thấp hơn số đã chốt ' + formatMoneyText_(plannedTuitionRevenue - currentExpectedRevenue) + '. Hãy kiểm tra học sinh nghỉ hoặc điều chỉnh học phí.' });
   if (Math.abs(result.summary.ratioTotal - 100) > 0.01) warnings.push({ level: 'danger', message: 'Tổng tỷ lệ các hũ đang là ' + result.summary.ratioTotal.toFixed(1) + '%, cần điều chỉnh về 100%.' });
   if (!plannedTuitionRevenue) warnings.push({ level: 'warning', message: 'Tháng này chưa có dữ liệu học phí phải thu nên chưa thể lập ngân sách cho các hũ.' });
-  if (Math.abs(number_(feeSummary.collected) - currentTuitionRevenue) > 1) warnings.push({ level: 'warning', message: 'Học phí đã thu trên danh sách (' + formatMoneyText_(feeSummary.collected) + ') chưa khớp Sổ thu chi (' + formatMoneyText_(currentTuitionRevenue) + '). Hãy đồng bộ học phí trước khi sử dụng báo cáo hũ.' });
-  if (result.summary.actualTotal > currentTuitionRevenue && result.summary.actualTotal > 0) warnings.push({ level: 'warning', message: 'Tổng chi theo hũ đang lớn hơn học phí đã ghi sổ trong tháng. Đây là cảnh báo dòng tiền, không làm thay đổi ngân sách kế hoạch.' });
+  if (Math.abs(number_(feeSummary.grossCollected) - currentTuitionCashRevenue) > 1) warnings.push({ level: 'warning', message: 'Tổng tiền thu trên danh sách (' + formatMoneyText_(feeSummary.grossCollected) + ') chưa khớp Sổ thu chi (' + formatMoneyText_(currentTuitionCashRevenue) + '). Tổng này có thể gồm các khoản thu thêm; chỉ phần học phí cơ bản được tính vào hạn mức phân bổ.' });
+  if (result.summary.actualTotal > number_(feeSummary.collected) && result.summary.actualTotal > 0) warnings.push({ level: 'warning', message: 'Tổng chi theo hũ đang lớn hơn học phí cơ bản đã thu trong tháng. Khoản thu thêm không được dùng làm nguồn phân bổ.' });
   result.items.forEach(item => {
     const definition = jars.find(jar => jar.code === item.code) || {};
     item.systemRole = definition.systemRole || '';
@@ -5496,8 +5548,8 @@ function buildHuTaiChinhData_(maKyHoc, month, feeSummary, allTransactions, planD
   result.currentExpectedRevenue = currentExpectedRevenue;
   result.postLockRevenue = allocationStatus.locked ? Math.max(currentExpectedRevenue - plannedTuitionRevenue, 0) : 0;
   result.revenueReductionAfterLock = allocationStatus.locked ? Math.max(plannedTuitionRevenue - currentExpectedRevenue, 0) : 0;
-  result.actualCollected = currentTuitionRevenue;
-  result.collectionRate = plannedTuitionRevenue > 0 ? currentTuitionRevenue * 100 / plannedTuitionRevenue : 0;
+  result.actualCollected = number_(feeSummary.collected);
+  result.collectionRate = plannedTuitionRevenue > 0 ? number_(feeSummary.collected) * 100 / plannedTuitionRevenue : 0;
   result.catalog = getDanhMucHuTaiChinhList_(false);
   result.allocationStatus = allocationStatus;
   result.warnings = warnings;
@@ -5599,29 +5651,9 @@ function cancelRutTienChuSoHuu(token, transactionId) {
 function buildFinanceFeeSummary_(maKyHoc, ym) {
   ensureThuPhiMonthSnapshot_(maKyHoc, ym.year, ym.month, { includeRows: false });
   const feeSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(getThuPhiMonthSheetName_(ym.year, ym.month));
-  const rows = feeSheet ? readObjectsNoCache_(feeSheet.getName()).filter(row =>
-    String(row.MaKyHoc || '').trim() === String(maKyHoc || '').trim() &&
-    String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED'
-  ) : [];
-  const summary = { totalStudents: 0, payingStudents: 0, expected: 0, collected: 0, remaining: 0, classes: [] };
-  const classMap = {};
-  rows.forEach(row => {
-    const fee = toBoolean_(row.TamNghi) ? 0 : number_(row.HocPhi);
-    const collected = toBoolean_(row.TamNghi) ? 0 : number_(row.SoTienDaThu);
-    if (fee <= 0) return;
-    summary.totalStudents++;
-    summary.payingStudents++;
-    summary.expected += fee;
-    summary.collected += collected;
-    summary.remaining += Math.max(fee - collected, 0);
-    const key = String(row.Lop || row.TenLop || 'Chưa xếp lớp').trim();
-    if (!classMap[key]) classMap[key] = { lop: key, tenLop: String(row.TenLop || key).trim(), students: 0, expected: 0, collected: 0 };
-    classMap[key].students++;
-    classMap[key].expected += fee;
-    classMap[key].collected += collected;
-  });
-  summary.classes = Object.keys(classMap).map(key => classMap[key]).sort((a, b) => String(a.lop).localeCompare(String(b.lop), 'vi', { numeric: true }));
-  return summary;
+  const rows = feeSheet ? readObjectsNoCache_(feeSheet.getName()) : [];
+  return buildFinanceFeeSummaryFromRows_(rows, maKyHoc);
+
 }
 
 function getActiveFinanceTransactions_(maKyHoc) {
@@ -5926,11 +5958,17 @@ function getQuanLyTaiChinhData(token, yearMonth) {
   ensureThuPhiMonthSnapshot_(session.maKyHoc, ym.year, ym.month, { includeRows: false });
   const feeSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(getThuPhiMonthSheetName_(ym.year, ym.month));
   const feeRows = feeSheet ? readObjectsNoCache_(feeSheet.getName()).filter(row => String(row.MaKyHoc || '').trim() === session.maKyHoc && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED') : [];
-  const feeSummary = { totalStudents: 0, payingStudents: 0, expected: 0, collected: 0, remaining: 0, classes: [] };
+  const rosterFeeIds = new Set(getHocSinhTheoKyHocForThuPhi_(session.maKyHoc).map(student => String(student.maHocSinh || '').trim()).filter(Boolean));
+  const seenFeeIds = new Set();
+  const feeSummary = { totalStudents: 0, payingStudents: 0, expected: 0, collected: 0, grossCollected: 0, remaining: 0, classes: [] };
   const classMap = {};
   feeRows.forEach(row => {
-    const fee = toBoolean_(row.TamNghi) ? 0 : number_(row.HocPhi); const collected = toBoolean_(row.TamNghi) ? 0 : number_(row.SoTienDaThu);
-    if (fee <= 0) return; feeSummary.totalStudents++; feeSummary.payingStudents++; feeSummary.expected += fee; feeSummary.collected += collected; feeSummary.remaining += Math.max(fee - collected, 0);
+    const studentId = String(row.MaHocSinh || '').trim();
+    if (!studentId || !rosterFeeIds.has(studentId) || seenFeeIds.has(studentId)) return;
+    seenFeeIds.add(studentId);
+    const paused = toBoolean_(row.TamNghi) || String(row.TrangThaiThu || '').trim() === 'Tạm nghỉ';
+    const fee = paused ? 0 : getHocPhiCoBanSnapshotRow_(row); const collected = paused ? 0 : Math.min(fee, Math.max(0, number_(row.SoTienDaThu)));
+    if (fee <= 0) return; feeSummary.totalStudents++; feeSummary.payingStudents++; feeSummary.expected += fee; feeSummary.collected += collected; feeSummary.grossCollected += paused ? 0 : Math.max(0, number_(row.SoTienDaThu)); feeSummary.remaining += Math.max(fee - collected, 0);
     const key = String(row.Lop || row.TenLop || 'Chưa xếp lớp').trim();
     if (!classMap[key]) classMap[key] = { lop: key, tenLop: String(row.TenLop || key).trim(), students: 0, expected: 0, collected: 0 };
     classMap[key].students++; classMap[key].expected += fee; classMap[key].collected += collected;
