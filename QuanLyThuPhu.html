@@ -162,6 +162,7 @@
     .literature-modal .modal-header { flex:0 0 auto; }
     .literature-modal .modal-body { padding:0; overflow:hidden; flex:1 1 auto; }
     .literature-modal iframe { display:block; width:100%; height:100%; border:0; background:#f8fafc; }
+    .leave-button { border-color:#fed7aa!important; color:#9a3412!important; background:#fff7ed!important; }
 
     .fee-action-note {
       margin-bottom: 16px;
@@ -637,6 +638,22 @@
         <button id="btnCollectFee" class="save-button" onclick="saveThuPhi(false, 'THU_PHI')">Xác nhận thu phí</button>
         <button id="btnCollectFeePrint" class="print-button" onclick="saveThuPhi(true, 'THU_PHI')">Thu phí & in biên lai</button>
       </div>
+    </div>
+  </div>
+
+  <div id="studentLeaveModal" class="modal-backdrop" onclick="if(event.target===this)closeStudentLeaveModal()">
+    <div class="modal fee-modal">
+      <div class="modal-header"><div class="modal-title">Xin nghỉ học</div><button class="close-button" type="button" aria-label="Đóng" onclick="closeStudentLeaveModal()">×</button></div>
+      <div class="modal-body">
+        <input id="leaveStudentId" type="hidden">
+        <div class="student-info-box"><div id="leaveStudentName" class="student-info-name">Học sinh</div><div id="leaveStudentClass" class="student-info-sub"></div></div>
+        <div class="fee-action-note">Học sinh sẽ không còn xuất hiện từ tháng có ngày bắt đầu nghỉ trở đi. Các tháng trước đó giữ nguyên lịch sử thu phí.</div>
+        <div class="fee-form-grid">
+          <div class="field"><label for="leaveStartDate">Ngày bắt đầu nghỉ *</label><input id="leaveStartDate" type="date"></div>
+          <div class="field full"><label for="leaveReason">Lý do xin nghỉ *</label><textarea id="leaveReason" rows="4" placeholder="Ghi rõ lý do xin nghỉ..."></textarea></div>
+        </div>
+      </div>
+      <div class="modal-footer"><button id="cancelLeaveButton" class="cancel-button" type="button" onclick="cancelStudentLeaveAction()" hidden>Hủy xin nghỉ</button><button class="cancel-button" type="button" onclick="closeStudentLeaveModal()">Đóng</button><button id="saveLeaveButton" class="save-button" type="button" onclick="saveStudentLeaveAction()">Lưu thông tin nghỉ</button></div>
     </div>
   </div>
 

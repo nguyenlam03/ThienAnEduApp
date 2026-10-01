@@ -251,6 +251,18 @@ function runArchitectureUnitTests() {
     equal(early.reminder, false, 'Nhắc trước ngày 25');
   });
 
+  test('Danh sách thu phí tuân theo tháng nhập học và tháng bắt đầu nghỉ', function () {
+    var student = { ngayVaoRaw: new Date(2026, 9, 1), ngayBatDauNghiRaw: '' };
+    equal(isStudentEligibleForFeeMonth_(student, 2026, 9), false, 'Học sinh vào tháng 10 vẫn xuất hiện ở tháng 9');
+    equal(isStudentEligibleForFeeMonth_(student, 2026, 10), true, 'Học sinh vào ngày đầu tháng 10 không xuất hiện ở tháng 10');
+    student.ngayVaoRaw = new Date(2026, 8, 1);
+    student.ngayBatDauNghiRaw = new Date(2026, 8, 15);
+    equal(isStudentEligibleForFeeMonth_(student, 2026, 9), false, 'Học sinh xin nghỉ giữa tháng 9 vẫn xuất hiện trong tháng 9');
+    equal(isStudentEligibleForFeeMonth_(student, 2026, 10), false, 'Học sinh xin nghỉ tháng 9 vẫn xuất hiện tháng 10');
+    student.ngayBatDauNghiRaw = new Date(2026, 9, 5);
+    equal(isStudentEligibleForFeeMonth_(student, 2026, 10), false, 'Ngày nghỉ 5/10 phải loại học sinh từ danh sách thu tháng 10');
+  });
+
   var failed = results.filter(function (item) { return !item.passed; }).length;
   return jsonResponse_({ passed: results.length - failed, failed: failed, total: results.length, results: results });
 }

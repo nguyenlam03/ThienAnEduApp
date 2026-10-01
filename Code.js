@@ -1397,6 +1397,8 @@ function saveHocSinh(token, hocSinh) {
     message += ' Đồng thời đã thêm học sinh vào ' + thuPhiResult.sheetName + '.';
   } else if (thuPhiResult && thuPhiResult.alreadyExists) {
     message += ' Học sinh đã có trong ' + thuPhiResult.sheetName + '.';
+  } else if (thuPhiResult && thuPhiResult.notEligible) {
+    message += ' Chưa thêm vào ' + thuPhiResult.sheetName + ' vì tháng này nằm ngoài thời gian đi học.';
   }
 
   if (thuPhiSyncResult && thuPhiSyncResult.updated) {
@@ -1419,6 +1421,54 @@ function saveHocSinh(token, hocSinh) {
       : (thuPhiSyncResult ? thuPhiSyncResult.sheetName : ''),
     message: message
   });
+}
+
+function saveStudentLeave(token, maHocSinh, data) {
+  const session = requireSession_(token, 'tuition.write');
+  const studentId = String(maHocSinh || '').trim();
+  data = data || {};
+  const leaveDateText = String(data.leaveDate || '').trim();
+  const reason = String(data.reason || '').trim();
+  if (!studentId) throw new Error('Thiếu mã học sinh.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(leaveDateText) || formatDateForInput_(leaveDateText) !== leaveDateText) throw new Error('Ngày bắt đầu nghỉ không hợp lệ.');
+  if (!reason) throw new Error('Vui lòng ghi rõ lý do xin nghỉ.');
+
+  const sheet = ensureSheet_(SpreadsheetApp.getActiveSpreadsheet(), SHEET_HOCSINH, getHocSinhHeaders_());
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('Hệ thống đang cập nhật thông tin học sinh. Vui lòng thử lại.');
+  try {
+    const student = readObjectsNoCache_(SHEET_HOCSINH).find(row => String(row.MaHocSinh || '').trim() === studentId && String(row.TrangThai || 'ACTIVE').toUpperCase() !== 'DELETED');
+    if (!student) throw new Error('Không tìm thấy học sinh đang hoạt động.');
+    const admissionDate = toDateOnly_(student.NgayVao || student.NgaySinh);
+    const leaveDate = toDateOnly_(leaveDateText);
+    if (admissionDate && leaveDate < admissionDate) throw new Error('Ngày xin nghỉ không được trước ngày vào học.');
+    updateObjectRowById_(SHEET_HOCSINH, 'MaHocSinh', studentId, Object.assign({}, student, {
+      NgayBatDauNghi: leaveDate,
+      LyDoXinNghi: reason,
+      UpdatedAt: new Date()
+    }), getHocSinhHeaders_());
+  } finally { lock.releaseLock(); }
+  bumpDataVersion_();
+  safeWriteAuditLog_(session, 'UPDATE', 'HOC_SINH_XIN_NGHI', studentId, null, { ngayBatDauNghi: leaveDateText, lyDo: reason });
+  return jsonResponse_({ success: true, message: 'Đã lưu ngày bắt đầu nghỉ và lý do xin nghỉ.' });
+}
+
+function cancelStudentLeave(token, maHocSinh) {
+  const session = requireSession_(token, 'tuition.write');
+  const studentId = String(maHocSinh || '').trim();
+  if (!studentId) throw new Error('Thiếu mã học sinh.');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error('Hệ thống đang cập nhật thông tin học sinh. Vui lòng thử lại.');
+  try {
+    const student = readObjectsNoCache_(SHEET_HOCSINH).find(row => String(row.MaHocSinh || '').trim() === studentId && String(row.TrangThai || 'ACTIVE').toUpperCase() !== 'DELETED');
+    if (!student) throw new Error('Không tìm thấy học sinh đang hoạt động.');
+    updateObjectRowById_(SHEET_HOCSINH, 'MaHocSinh', studentId, Object.assign({}, student, {
+      NgayBatDauNghi: '', LyDoXinNghi: '', UpdatedAt: new Date()
+    }), getHocSinhHeaders_());
+  } finally { lock.releaseLock(); }
+  bumpDataVersion_();
+  safeWriteAuditLog_(session, 'UPDATE', 'HOC_SINH_HUY_XIN_NGHI', studentId, null, null);
+  return jsonResponse_({ success: true, message: 'Đã hủy thông tin xin nghỉ.' });
 }
 
 function deleteHocSinh(token, maHocSinh) {
@@ -1477,7 +1527,9 @@ function getHocSinhHeaders_() {
     'GhiChu',
     'TrangThai',
     'CreatedAt',
-    'UpdatedAt'
+    'UpdatedAt',
+    'NgayBatDauNghi',
+    'LyDoXinNghi'
   ];
 }
 
@@ -2339,11 +2391,15 @@ function getQuanLyThuPhiData(token, yearMonth) {
   const sources = getNguonTienList_(session.maKyHoc)
     .filter(item => item.trangThai === 'ACTIVE');
   const feeCategories = getDanhMucKhoanThuPhiList_();
+  const feeRosterIds = new Set(getHocSinhTheoKyHocForThuPhi_(session.maKyHoc)
+    .filter(student => isStudentEligibleForFeeMonth_(student, ym.year, ym.month))
+    .map(student => student.maHocSinh));
 
   const rows = snapshot.rows
     .filter(row => {
       return String(row.MaKyHoc || '').trim() === session.maKyHoc &&
-        String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED';
+        String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED' &&
+        feeRosterIds.has(String(row.MaHocSinh || '').trim());
     });
 
   const studentMetaMap = readObjects_(SHEET_HOCSINH).reduce((map, row) => {
@@ -2352,7 +2408,9 @@ function getQuanLyThuPhiData(token, yearMonth) {
     map[id] = {
       truong: String(row.Truong || '').trim() || 'THCS Long Phước',
       gioiTinh: String(row.GioiTinh || '').trim(),
-      khongThuPhi: toBoolean_(row.KhongThuPhi)
+      khongThuPhi: toBoolean_(row.KhongThuPhi),
+      ngayBatDauNghi: formatDateForInput_(row.NgayBatDauNghi),
+      lyDoXinNghi: String(row.LyDoXinNghi || '').trim()
     };
     return map;
   }, {});
@@ -2402,6 +2460,8 @@ function getQuanLyThuPhiData(token, yearMonth) {
         conLai: conLai,
         tamNghi: tamNghi,
         trangThai: tamNghi ? 'Tạm nghỉ' : getTrangThaiThuPhi_(hocPhi, daThu),
+        ngayBatDauNghi: studentMeta.ngayBatDauNghi || '',
+        lyDoXinNghi: studentMeta.lyDoXinNghi || '',
 
         soPhieu: String(row.SoPhieu || '').trim(),
         ngayThu: tamNghi ? '' : formatDateForInput_(row.NgayDong),
@@ -2561,7 +2621,12 @@ function saveThuPhiHocSinh(token, data) {
   if (!yearMonth) {
     throw new Error('Vui lòng chọn tháng thu phí.');
   }
-  assertFinancePeriodOpen_(session, GovernanceService.validateMonth(yearMonth));
+  const feePeriod = GovernanceService.validateMonth(yearMonth);
+  const eligibleStudentIds = new Set(getHocSinhTheoKyHocForThuPhi_(session.maKyHoc, yearMonth).map(student => student.maHocSinh));
+  if (!eligibleStudentIds.has(maHocSinh)) {
+    throw new Error('Học sinh không thuộc danh sách thu phí của tháng này theo ngày vào học hoặc ngày xin nghỉ.');
+  }
+  assertFinancePeriodOpen_(session, feePeriod);
 
   if (!tamNghi && hocPhiCoBanInput < 0) {
     throw new Error('Học phí cơ bản không được nhỏ hơn 0.');
@@ -2789,6 +2854,18 @@ function diffTuitionRosterForTerm_(rows, maKyHoc, students) {
   };
 }
 
+/** Danh sách thu phí theo tháng: vào từ tháng đã nhập học; nghỉ từ tháng bắt đầu nghỉ. */
+function isStudentEligibleForFeeMonth_(student, year, month) {
+  const feeMonthStart = new Date(Number(year), Number(month) - 1, 1);
+  const admissionDate = toDateOnly_(student && student.ngayVaoRaw);
+  const leaveDate = toDateOnly_(student && student.ngayBatDauNghiRaw);
+  const admissionMonth = admissionDate ? new Date(admissionDate.getFullYear(), admissionDate.getMonth(), 1) : null;
+  const leaveMonth = leaveDate ? new Date(leaveDate.getFullYear(), leaveDate.getMonth(), 1) : null;
+  if (admissionMonth && feeMonthStart < admissionMonth) return false;
+  if (leaveMonth && feeMonthStart >= leaveMonth) return false;
+  return true;
+}
+
 /** Bảo đảm danh sách thu phí tháng khớp đúng học sinh của từng kỳ học. */
 function ensureThuPhiMonthSnapshot_(maKyHoc, year, month, options) {
   const includeRows = !options || options.includeRows !== false;
@@ -2807,8 +2884,12 @@ function ensureThuPhiMonthSnapshot_(maKyHoc, year, month, options) {
     const markerSheetId = marker ? String(marker).split('|')[0] : '';
     const markerMatchesSheet = markerSheetId === String(sheet.getSheetId());
     const rows = readObjectsNoCache_(sheetName);
-    const students = getHocSinhTheoKyHocForThuPhi_(maKyHoc);
+    const allStudents = getHocSinhTheoKyHocForThuPhi_(maKyHoc);
+    const students = allStudents.filter(student => isStudentEligibleForFeeMonth_(student, year, month));
+    const excludedByDate = new Set(allStudents.filter(student => !isStudentEligibleForFeeMonth_(student, year, month)).map(student => student.maHocSinh));
     const rosterDiff = diffTuitionRosterForTerm_(rows, maKyHoc, students);
+    // Giữ dòng thu đã tồn tại nhưng nằm ngoài khoảng đi học để không làm mất lịch sử thu.
+    rosterDiff.staleRows = rosterDiff.staleRows.filter(row => !excludedByDate.has(String(row.MaHocSinh || '').trim()));
     const desiredStudentMap = rosterDiff.desiredStudentMap;
     const missingStudents = rosterDiff.missingStudents;
     const staleRows = rosterDiff.staleRows;
@@ -3025,6 +3106,13 @@ function addHocSinhToThuPhiMonth_(maKyHoc, yearMonth, maHocSinh) {
       return map;
     }, {});
 
+    const student = getHocSinhTheoKyHocForThuPhi_(maKyHoc)
+      .find(item => item.maHocSinh === maHocSinh);
+    if (!student) throw new Error('Không tìm thấy học sinh vừa thêm trong kỳ học hiện tại.');
+    if (!isStudentEligibleForFeeMonth_(student, ym.year, ym.month)) {
+      return { added: false, alreadyExists: false, notEligible: true, sheetName: sheet.getName() };
+    }
+
     const alreadyExists = values.slice(1).some(row => {
       return String(row[headerIndex.MaHocSinh] || '').trim() === maHocSinh &&
         String(row[headerIndex.MaKyHoc] || '').trim() === maKyHoc &&
@@ -3037,13 +3125,6 @@ function addHocSinhToThuPhiMonth_(maKyHoc, yearMonth, maHocSinh) {
         alreadyExists: true,
         sheetName: sheet.getName()
       };
-    }
-
-    const student = getHocSinhTheoKyHocForThuPhi_(maKyHoc)
-      .find(item => item.maHocSinh === maHocSinh);
-
-    if (!student) {
-      throw new Error('Không tìm thấy học sinh vừa thêm trong kỳ học hiện tại.');
     }
 
     const hocPhi = number_(student.hocPhi === '' || student.hocPhi == null ? getTermDefaultTuition_(maKyHoc, student.khoi) : student.hocPhi);
@@ -3178,7 +3259,7 @@ function appendObjectsToSheet_(sheet, objects, requiredHeaders) {
     .setValues(values);
 }
 
-function getHocSinhTheoKyHocForThuPhi_(maKyHoc) {
+function getHocSinhTheoKyHocForThuPhi_(maKyHoc, yearMonth) {
   const hocSinhRows = readObjects_(SHEET_HOCSINH);
   const relationRows = readObjects_(SHEET_HOCSINH_KYHOC);
   const tuitionTerm = readObjects_(SHEET_KYHOC).find(row => String(row.MaKyHoc || '').trim() === maKyHoc);
@@ -3244,10 +3325,12 @@ function getHocSinhTheoKyHocForThuPhi_(maKyHoc) {
         sdtPhuHuynh: String(row.SDTPhuHuynh || '').trim(),
         hocPhi: tuitionState.amount,
         ngayVaoRaw: row.NgayVao || row.NgaySinh || row.CreatedAt || '',
+        ngayBatDauNghiRaw: row.NgayBatDauNghi || '',
+        lyDoXinNghi: String(row.LyDoXinNghi || '').trim(),
         createdAt: row.CreatedAt || ''
       };
     })
-    .filter(item => item !== null)
+    .filter(item => item !== null && (!yearMonth || isStudentEligibleForFeeMonth_(item, Number(String(yearMonth).slice(0, 4)), Number(String(yearMonth).slice(5, 7)))))
     .sort(compareStudentSort_);
 }
 
@@ -5400,7 +5483,7 @@ function getHocPhiPhaiThuThang_(maKyHoc, month) {
   if (parts.length === 2) ensureThuPhiMonthSnapshot_(maKyHoc, Number(parts[0]), Number(parts[1]), { includeRows: false });
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(getThuPhiMonthSheetName_(Number(parts[0]), Number(parts[1])));
   if (!sheet) return 0;
-  return buildFinanceFeeSummaryFromRows_(readObjectsNoCache_(sheet.getName()), maKyHoc).expected;
+  return buildFinanceFeeSummaryFromRows_(readObjectsNoCache_(sheet.getName()), maKyHoc, month).expected;
 }
 
 /**
@@ -5418,9 +5501,9 @@ function getHocPhiCoBanSnapshotRow_(row) {
   return Math.max(0, total - extra);
 }
 
-function buildFinanceFeeSummaryFromRows_(rows, maKyHoc) {
+function buildFinanceFeeSummaryFromRows_(rows, maKyHoc, yearMonth) {
   const term = String(maKyHoc || '').trim();
-  const roster = getHocSinhTheoKyHocForThuPhi_(term);
+  const roster = getHocSinhTheoKyHocForThuPhi_(term, yearMonth);
   const rosterIds = roster.reduce((set, student) => {
     const id = String(student.maHocSinh || '').trim();
     if (id) set.add(id);
@@ -5872,7 +5955,7 @@ function buildFinanceFeeSummary_(maKyHoc, ym) {
   ensureThuPhiMonthSnapshot_(maKyHoc, ym.year, ym.month, { includeRows: false });
   const feeSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(getThuPhiMonthSheetName_(ym.year, ym.month));
   const rows = feeSheet ? readObjectsNoCache_(feeSheet.getName()) : [];
-  return buildFinanceFeeSummaryFromRows_(rows, maKyHoc);
+  return buildFinanceFeeSummaryFromRows_(rows, maKyHoc, ym.year + '-' + String(ym.month).padStart(2, '0'));
 
 }
 
@@ -6178,7 +6261,7 @@ function getQuanLyTaiChinhData(token, yearMonth) {
   ensureThuPhiMonthSnapshot_(session.maKyHoc, ym.year, ym.month, { includeRows: false });
   const feeSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(getThuPhiMonthSheetName_(ym.year, ym.month));
   const feeRows = feeSheet ? readObjectsNoCache_(feeSheet.getName()).filter(row => String(row.MaKyHoc || '').trim() === session.maKyHoc && String(row.TrangThai || 'ACTIVE').trim().toUpperCase() !== 'DELETED') : [];
-  const rosterFeeIds = new Set(getHocSinhTheoKyHocForThuPhi_(session.maKyHoc).map(student => String(student.maHocSinh || '').trim()).filter(Boolean));
+  const rosterFeeIds = new Set(getHocSinhTheoKyHocForThuPhi_(session.maKyHoc, month).map(student => String(student.maHocSinh || '').trim()).filter(Boolean));
   const seenFeeIds = new Set();
   const feeSummary = { totalStudents: 0, payingStudents: 0, expected: 0, collected: 0, grossCollected: 0, remaining: 0, classes: [] };
   const classMap = {};
@@ -7488,6 +7571,7 @@ function syncHocPhiToThuChi(token, yearMonth) {
   const ym = parseYearMonth_(yearMonth);
   const monthKey = ym.year + '-' + String(ym.month).padStart(2, '0');
   assertFinancePeriodOpen_(session, monthKey);
+  const activeRosterIds = new Set(getHocSinhTheoKyHocForThuPhi_(session.maKyHoc, monthKey).map(student => student.maHocSinh));
   const feeSheetName = getThuPhiMonthSheetName_(ym.year, ym.month);
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const feeSheet = ss.getSheetByName(feeSheetName);
@@ -7541,6 +7625,7 @@ function syncHocPhiToThuChi(token, yearMonth) {
       const maHocSinh = String(feeRow[feeIndex.MaHocSinh] || '').trim();
 
       if (rowKyHoc !== session.maKyHoc || rowStatus === 'DELETED' || !maHocSinh) return;
+      if (!activeRosterIds.has(maHocSinh)) return;
 
       const amount = number_(feeRow[feeIndex.SoTienDaThu]);
       const tamNghi = toBoolean_(feeRow[feeIndex.TamNghi]);

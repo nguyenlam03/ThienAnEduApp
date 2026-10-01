@@ -500,6 +500,7 @@
                 <button class="mini-button edit" onclick="openFeeModal('${escapeAttribute(item.maHocSinh)}')">
                   ${item.tamNghi || Number(item.soTienDaThu || 0) > 0 ? 'Cập nhật' : 'Thu phí'}
                 </button>
+                <button class="mini-button leave-button" onclick="openStudentLeaveModal('${escapeAttribute(item.maHocSinh)}')">${item.ngayBatDauNghi ? 'Sửa xin nghỉ' : 'Xin nghỉ'}</button>
                 ${!item.tamNghi && Number(item.hocPhi || 0) > 0 && Number(item.soTienDaThu || 0) >= Number(item.hocPhi || 0)
                   ? `<button class="mini-button receipt-button" onclick="printTuitionReceipt('${escapeAttribute(item.maHocSinh)}')">In Biên Lai</button>`
                   : (!item.tamNghi && Number(item.conLai || 0) > 0
@@ -977,6 +978,64 @@
       applyTemporaryState(item.tamNghi === true, false);
       updateFeePreview();
       document.getElementById('feeModal').classList.add('show');
+    }
+
+    function openStudentLeaveModal(maHocSinh) {
+      const item = feeStudents.find(student => student.maHocSinh === maHocSinh);
+      if (!item) { showNotification('Không tìm thấy học sinh cần cập nhật nghỉ học.', 'error'); return; }
+      document.getElementById('leaveStudentId').value = item.maHocSinh;
+      document.getElementById('leaveStudentName').textContent = item.hoTen || 'Học sinh';
+      document.getElementById('leaveStudentClass').textContent = (item.tenKhoi || item.khoi || '') + ' - ' + (item.tenLop || item.lop || '');
+      document.getElementById('leaveStartDate').value = item.ngayBatDauNghi || getTodayInput();
+      document.getElementById('leaveReason').value = item.lyDoXinNghi || '';
+      document.getElementById('cancelLeaveButton').hidden = !item.ngayBatDauNghi;
+      document.getElementById('studentLeaveModal').classList.add('show');
+    }
+
+    function closeStudentLeaveModal() {
+      document.getElementById('studentLeaveModal').classList.remove('show');
+    }
+
+    function saveStudentLeaveAction() {
+      const studentId = document.getElementById('leaveStudentId').value;
+      const leaveDate = document.getElementById('leaveStartDate').value;
+      const reason = document.getElementById('leaveReason').value.trim();
+      if (!leaveDate) { showNotification('Vui lòng chọn ngày bắt đầu nghỉ.', 'warning'); return; }
+      if (!reason) { showNotification('Vui lòng ghi rõ lý do xin nghỉ.', 'warning'); return; }
+      const button = document.getElementById('saveLeaveButton');
+      button.disabled = true;
+      showBusy('Đang lưu thông tin xin nghỉ...');
+      google.script.run.withSuccessHandler(function (response) {
+        const result = parseServerJson(response) || {};
+        button.disabled = false;
+        hideBusy();
+        closeStudentLeaveModal();
+        showNotification(result.message || 'Đã lưu thông tin xin nghỉ.', 'success');
+        loadThuPhiData();
+      }).withFailureHandler(function (error) {
+        button.disabled = false;
+        hideBusy();
+        showNotification(getErrorMessage(error), 'error');
+      }).saveStudentLeave(APP_TOKEN, studentId, { leaveDate: leaveDate, reason: reason });
+    }
+
+    function cancelStudentLeaveAction() {
+      const studentId = document.getElementById('leaveStudentId').value;
+      const button = document.getElementById('cancelLeaveButton');
+      button.disabled = true;
+      showBusy('Đang hủy thông tin xin nghỉ...');
+      google.script.run.withSuccessHandler(function (response) {
+        const result = parseServerJson(response) || {};
+        button.disabled = false;
+        hideBusy();
+        closeStudentLeaveModal();
+        showNotification(result.message || 'Đã hủy thông tin xin nghỉ.', 'success');
+        loadThuPhiData();
+      }).withFailureHandler(function (error) {
+        button.disabled = false;
+        hideBusy();
+        showNotification(getErrorMessage(error), 'error');
+      }).cancelStudentLeave(APP_TOKEN, studentId);
     }
 
     function handleTamNghiChange() {
