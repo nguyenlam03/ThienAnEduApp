@@ -2391,17 +2391,6 @@ function getQuanLyThuPhiData(token, yearMonth) {
   const sources = getNguonTienList_(session.maKyHoc)
     .filter(item => item.trangThai === 'ACTIVE');
   const feeCategories = getDanhMucKhoanThuPhiList_();
-  const feeRosterIds = new Set(getHocSinhTheoKyHocForThuPhi_(session.maKyHoc)
-    .filter(student => isStudentEligibleForFeeMonth_(student, ym.year, ym.month))
-    .map(student => student.maHocSinh));
-
-  const rows = snapshot.rows
-    .filter(row => {
-      return String(row.MaKyHoc || '').trim() === session.maKyHoc &&
-        String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED' &&
-        feeRosterIds.has(String(row.MaHocSinh || '').trim());
-    });
-
   const studentMetaMap = readObjects_(SHEET_HOCSINH).reduce((map, row) => {
     const id = String(row.MaHocSinh || '').trim();
     if (!id || String(row.TrangThai || '').trim().toUpperCase() === 'DELETED') return map;
@@ -2409,11 +2398,29 @@ function getQuanLyThuPhiData(token, yearMonth) {
       truong: String(row.Truong || '').trim() || 'THCS Long Phước',
       gioiTinh: String(row.GioiTinh || '').trim(),
       khongThuPhi: toBoolean_(row.KhongThuPhi),
+      ngayVaoRaw: row.NgayVao || row.NgaySinh || row.CreatedAt || '',
       ngayBatDauNghi: formatDateForInput_(row.NgayBatDauNghi),
+      ngayBatDauNghiRaw: row.NgayBatDauNghi || '',
       lyDoXinNghi: String(row.LyDoXinNghi || '').trim()
     };
     return map;
   }, {});
+  const feeRosterIds = new Set(getHocSinhTheoKyHocForThuPhi_(session.maKyHoc)
+    .filter(student => isStudentEligibleForFeeMonth_(student, ym.year, ym.month))
+    .map(student => student.maHocSinh));
+
+  const rows = snapshot.rows
+    .filter(row => {
+      const studentId = String(row.MaHocSinh || '').trim();
+      const studentMeta = studentMetaMap[studentId] || {};
+      return String(row.MaKyHoc || '').trim() === session.maKyHoc &&
+        String(row.TrangThai || '').trim().toUpperCase() !== 'DELETED' &&
+        feeRosterIds.has(studentId) &&
+        isStudentEligibleForFeeMonth_({
+          ngayVaoRaw: row.NgayVao || studentMeta.ngayVaoRaw,
+          ngayBatDauNghiRaw: studentMeta.ngayBatDauNghiRaw
+        }, ym.year, ym.month);
+    });
 
   const resultStudents = rows
     .map(row => {

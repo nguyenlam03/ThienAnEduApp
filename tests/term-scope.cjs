@@ -42,6 +42,7 @@ for (const file of fs.readdirSync('.').filter(file => /\.(js|gs|html)$/.test(fil
   scriptNames.set(name, file);
 }
 const appRouter = fs.readFileSync('Code.js', 'utf8');
+assert.match(appRouter, /ngayVaoRaw:\s*row\.NgayVao\s*\|\|\s*studentMeta\.ngayVaoRaw/, 'Monthly tuition output must verify admission date from its snapshot row as well as the current student record');
 const appNavigation = fs.readFileSync('AppNavigation.html', 'utf8');
 assert.match(appRouter, /'QuanLyDangKyNguVan'/, 'Literature registration page must be protected and routable');
 assert.doesNotMatch(appNavigation, /data-page="QuanLyDangKyNguVan"/, 'Literature registration must open as a popup from tuition management, not a standalone navigation page');
