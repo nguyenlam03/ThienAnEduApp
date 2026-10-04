@@ -50,6 +50,10 @@ assert.ok(fs.existsSync('QuanLyDangKyNguVan.html'), 'Literature registration pag
 const feePage = fs.readFileSync('QuanLyThuPhu.html', 'utf8');
 const feeScript = fs.readFileSync('QuanLyThuPhuScript.html', 'utf8');
 assert.match(feePage, /id="tuitionClassTabs"[^>]*role="tablist"/, 'Tuition list must provide a class-tab strip');
+assert.match(feePage, /\.tuition-class-tab \{[^}]*clip-path:polygon\(/, 'Class tabs should use the slanted tab shape from the reference');
+assert.ok(feePage.indexOf('id="countText"') < feePage.indexOf('id="tuitionClassTabs"'), 'Student count and column controls should appear before the class tabs');
+assert.ok(feePage.indexOf('id="tuitionClassTabs"') < feePage.indexOf('id="feeTableWrap"'), 'Class tabs should sit immediately above the tuition table');
+assert.match(feePage, /class="tuition-list-toolbar"[\s\S]*id="countText"[\s\S]*id="feeColumnButton"/, 'Student count and column picker should be grouped on the left');
 assert.match(feeScript, /for \(let classNumber = 1; classNumber <= 9; classNumber\+\+\)/, 'Tuition list must create tabs for classes 1 through 9');
 assert.match(feeScript, /Chưa thu phí \(\$\{allPaidCount\}\/\$\{feeStudents\.length\}\)/, 'Unpaid tab must show collected students over total students');
 assert.match(feeScript, /if \(nextTab === 'UNPAID' && !unpaidTuitionTabLoaded\)/, 'Unpaid list must be initialized only when its tab is opened');

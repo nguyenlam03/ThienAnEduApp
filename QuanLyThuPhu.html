@@ -57,12 +57,16 @@
     .fee-view-tab { border:1px solid #bae6fd; background:#f8fafc; color:#475569; border-radius:12px; padding:10px 16px; font-weight:800; cursor:pointer; }
     .fee-view-tab.active { background:#0284c7; border-color:#0284c7; color:#fff; box-shadow:0 8px 20px rgba(2,132,199,.22); }
     .fee-tab-panel[hidden] { display:none !important; }
-    .tuition-class-tabs { display:flex; gap:8px; overflow-x:auto; padding:4px 0 12px; margin:4px 0 6px; scrollbar-width:thin; }
-    .tuition-class-tab { flex:0 0 auto; border:1px solid #cbd5e1; border-radius:999px; padding:9px 14px; background:#fff; color:#334155; font-weight:800; cursor:pointer; white-space:nowrap; }
-    .tuition-class-tab:hover { border-color:#38bdf8; color:#0369a1; }
-    .tuition-class-tab.active { border-color:#075985; background:#082f6b; color:#fff; box-shadow:0 6px 16px rgba(8,47,107,.18); }
-    .tuition-class-tab.unpaid { border-color:#fdba74; color:#9a3412; background:#fff7ed; }
-    .tuition-class-tab.unpaid.active { border-color:#c2410c; background:#c2410c; color:#fff; }
+    .tuition-class-tabs { display:flex; gap:3px; overflow-x:auto; padding:8px 8px 0; margin:10px 0 0; border-bottom:1px solid #cbd8e8; scrollbar-width:thin; }
+    .tuition-class-tab { position:relative; flex:0 0 auto; min-height:44px; border:0; padding:10px 27px 11px 17px; background:#e8eef7; color:#334a68; font-weight:800; cursor:pointer; white-space:nowrap; clip-path:polygon(0 0,calc(100% - 16px) 0,100% 100%,0 100%); transition:background-color .16s ease,color .16s ease,transform .16s ease; }
+    .tuition-class-tab:hover { background:#dce7f4; color:#082f6b; }
+    .tuition-class-tab.active { z-index:1; background:#082f6b; color:#fff; box-shadow:0 6px 16px rgba(8,47,107,.18); }
+    .tuition-class-tab.unpaid { background:#fff3d4; color:#8a4b08; }
+    .tuition-class-tab.unpaid:hover { background:#ffe8ae; }
+    .tuition-class-tab.unpaid.active { background:#d99a13; color:#132b4d; }
+    .tuition-list-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .tuition-list-toolbar .pill-badge { background:#fff0c2; color:#082f6b; }
+    .tuition-list-tabs-row { display:flex; flex-direction:column; }
     .fee-chart-card,.fee-assessment-card { border:1px solid #dbeafe; border-radius:20px; background:#fff; padding:20px; box-shadow:0 10px 28px rgba(15,23,42,.06); }
     .fee-chart-title { font-size:18px; font-weight:900; color:#0f172a; }
     .fee-chart-subtitle { margin-top:5px; color:#64748b; font-size:13px; }
@@ -455,20 +459,18 @@
           </div>
 
           <div id="feeListTabPanel" class="fee-tab-panel">
-          <div id="tuitionClassTabs" class="tuition-class-tabs" role="tablist" aria-label="Lọc danh sách thu phí theo lớp" hidden></div>
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin:14px 0 16px;">
-            <div class="pill-badge">
-              <span>💰</span>
-              <span id="countText">0 học sinh</span>
-            </div>
-          </div>
-
           <div class="grid-toolbar">
             <div class="grid-toolbar-left">
-              <button id="feeColumnButton" class="column-config-button" type="button" onclick="openFeeColumnConfig()">
-                <span aria-hidden="true">⚙</span>
-                <span>Cấu hình cột</span>
-              </button>
+              <div class="tuition-list-toolbar">
+                <div class="pill-badge">
+                  <span>💰</span>
+                  <span id="countText">0 học sinh</span>
+                </div>
+                <button id="feeColumnButton" class="column-config-button" type="button" onclick="openFeeColumnConfig()">
+                  <span aria-hidden="true">⚙</span>
+                  <span>Cột</span>
+                </button>
+              </div>
             </div>
 
             <div class="grid-toolbar-right">
@@ -481,6 +483,8 @@
               </select>
             </div>
           </div>
+
+          <div id="tuitionClassTabs" class="tuition-class-tabs" role="tablist" aria-label="Lọc danh sách thu phí theo lớp" hidden></div>
 
           <div id="feeTableWrap" class="table-wrap">
             <table id="feeDataGrid" data-grid-title="Danh sách thu phí theo tháng">
