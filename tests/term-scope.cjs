@@ -49,6 +49,10 @@ assert.doesNotMatch(appNavigation, /data-page="QuanLyDangKyNguVan"/, 'Literature
 assert.ok(fs.existsSync('QuanLyDangKyNguVan.html'), 'Literature registration page template is missing');
 const feePage = fs.readFileSync('QuanLyThuPhu.html', 'utf8');
 const feeScript = fs.readFileSync('QuanLyThuPhuScript.html', 'utf8');
+assert.match(feePage, /id="tuitionClassTabs"[^>]*role="tablist"/, 'Tuition list must provide a class-tab strip');
+assert.match(feeScript, /for \(let classNumber = 1; classNumber <= 9; classNumber\+\+\)/, 'Tuition list must create tabs for classes 1 through 9');
+assert.match(feeScript, /Chưa thu phí \(\$\{allPaidCount\}\/\$\{feeStudents\.length\}\)/, 'Unpaid tab must show collected students over total students');
+assert.match(feeScript, /if \(nextTab === 'UNPAID' && !unpaidTuitionTabLoaded\)/, 'Unpaid list must be initialized only when its tab is opened');
 assert.match(feePage, /id="openLiteratureTracker"/, 'Tuition screen must provide a button to open the literature popup');
 assert.match(feePage, /id="literatureTrackerModal"/, 'Literature tracking must be presented in a popup');
 assert.match(feeScript, /page=QuanLyDangKyNguVan&embedded=1/, 'Literature tracking popup must load in embedded mode');

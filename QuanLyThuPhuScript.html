@@ -21,6 +21,8 @@
     let feeLoadRequestId = 0;
     let feeLoadTimeoutId = null;
     let currentFeeTab = 'LIST';
+    let activeTuitionClassTab = '1';
+    let unpaidTuitionTabLoaded = false;
     let autoFillCollectedAmount = true;
     let collectedAmountFloor = 0;
     let feePageInitialized = false;
@@ -223,10 +225,12 @@
             }
 
             feeStudents = data.students;
+            unpaidTuitionTabLoaded = activeTuitionClassTab === 'UNPAID';
             moneySources = Array.isArray(data.sources) ? data.sources : [];
             feeCategories = Array.isArray(data.feeCategories) ? data.feeCategories : [];
             renderMoneySourceSelect();
             renderFeeFilterOptions();
+            renderTuitionClassTabs();
             currentMonthText = data.monthText || '';
             currentSheetName = data.sheetName || '';
 
@@ -347,6 +351,48 @@
       renderTable();
     }
 
+    function getTuitionClassNumber(item) {
+      const label = String((item && (item.tenLop || item.lop)) || '').trim();
+      const match = label.match(/(?:lớp|lop)\s*([1-9])/i) || label.match(/^([1-9])$/);
+      return match ? Number(match[1]) : 0;
+    }
+
+    function getTuitionPaidCount(list) {
+      return (list || []).filter(function (item) {
+        return !item.tamNghi && Number(item.soTienDaThu || 0) > 0;
+      }).length;
+    }
+
+    function renderTuitionClassTabs() {
+      const container = document.getElementById('tuitionClassTabs');
+      if (!container) return;
+      const buttons = [];
+      for (let classNumber = 1; classNumber <= 9; classNumber++) {
+        const classStudents = feeStudents.filter(item => getTuitionClassNumber(item) === classNumber);
+        const paidCount = getTuitionPaidCount(classStudents);
+        const key = String(classNumber);
+        buttons.push(`<button class="tuition-class-tab${activeTuitionClassTab === key ? ' active' : ''}" type="button" role="tab" aria-selected="${activeTuitionClassTab === key}" onclick="selectTuitionClassTab('${key}')">Lớp ${classNumber} (${paidCount}/${classStudents.length})</button>`);
+      }
+      const allPaidCount = getTuitionPaidCount(feeStudents);
+      buttons.push(`<button class="tuition-class-tab unpaid${activeTuitionClassTab === 'UNPAID' ? ' active' : ''}" type="button" role="tab" aria-selected="${activeTuitionClassTab === 'UNPAID'}" onclick="selectTuitionClassTab('UNPAID')">Chưa thu phí (${allPaidCount}/${feeStudents.length})</button>`);
+      container.innerHTML = buttons.join('');
+      container.hidden = false;
+    }
+
+    function selectTuitionClassTab(tabKey) {
+      const nextTab = tabKey === 'UNPAID' ? 'UNPAID' : String(Math.max(1, Math.min(9, Number(tabKey) || 1)));
+      if (nextTab === 'UNPAID' && !unpaidTuitionTabLoaded) {
+        // Chỉ tạo danh sách học sinh chưa nộp khi người dùng mở tab này lần đầu.
+        unpaidTuitionTabLoaded = true;
+      }
+      activeTuitionClassTab = nextTab;
+      document.getElementById('filterKhoi').value = 'ALL';
+      renderFeeClassFilterOptions();
+      document.getElementById('filterLop').value = 'ALL';
+      renderTuitionClassTabs();
+      renderTable();
+    }
+
     function switchFeeTab(tab) {
       currentFeeTab = ['LIST', 'CHART', 'SOURCE', 'DAILY'].indexOf(tab) !== -1 ? tab : 'LIST';
       const showChart = currentFeeTab === 'CHART';
@@ -392,6 +438,13 @@
       const classId = document.getElementById('filterLop').value;
 
       let list = feeStudents.slice();
+
+      if (activeTuitionClassTab === 'UNPAID') {
+        list = unpaidTuitionTabLoaded ? list.filter(item => !item.tamNghi && Number(item.soTienDaThu || 0) <= 0 && Number(item.hocPhi || 0) > 0) : [];
+      } else {
+        const selectedClassNumber = Number(activeTuitionClassTab);
+        list = list.filter(item => getTuitionClassNumber(item) === selectedClassNumber);
+      }
 
       if (grade !== 'ALL') list = list.filter(item => String(item.khoi || '') === grade);
       if (classId !== 'ALL') list = list.filter(item => String(item.lop || '') === classId);
@@ -1260,6 +1313,7 @@
             : 'Đã ghi nhận thu học phí.'), 'success');
 
           renderSummary(buildLocalFeeSummary());
+          renderTuitionClassTabs();
           renderTable();
 
           if (!chiCapNhatKhoanThu && printAfter && !tamNghi && savedItem.soPhieu && savedItem.soTienDaThu > 0) {
