@@ -43,6 +43,14 @@ for (const file of fs.readdirSync('.').filter(file => /\.(js|gs|html)$/.test(fil
 }
 const appRouter = fs.readFileSync('Code.js', 'utf8');
 assert.match(appRouter, /ngayVaoRaw:\s*row\.NgayVao\s*\|\|\s*studentMeta\.ngayVaoRaw/, 'Monthly tuition output must verify admission date from its snapshot row as well as the current student record');
+const tuitionSaveSource = appRouter.match(/function saveThuPhiHocSinh\([\s\S]*?\nfunction diffTuitionRosterForTerm_/)[0];
+assert.match(tuitionSaveSource, /findTuitionMonthStudentRow_\(/, 'Tuition save should read only the matching student row');
+assert.doesNotMatch(tuitionSaveSource, /sheet\.getDataRange\(\)\.getValues\(\)/, 'Tuition save must not read the entire monthly sheet');
+const tuitionLedgerSource = appRouter.match(/function upsertThuChiHocPhiNoLock_\([\s\S]*?\nfunction fillHocPhiLedgerRow_/)[0];
+assert.match(tuitionLedgerSource, /createTextFinder\(reference\)/, 'Tuition ledger upsert should locate the transaction reference directly');
+assert.match(tuitionLedgerSource, /getNextHocPhiReceiptNumber_\(/, 'Tuition receipt numbers should use the monthly sequence counter');
+assert.doesNotMatch(tuitionLedgerSource, /sheet\.getDataRange\(\)/, 'Tuition ledger upsert must not read the entire ledger');
+assert.match(appRouter, /TA_BRAND_LOGO_[\s\S]*cache\.put\(logoCacheKey/, 'Receipt logo should be cached between print requests');
 const appNavigation = fs.readFileSync('AppNavigation.html', 'utf8');
 assert.match(appRouter, /'QuanLyDangKyNguVan'/, 'Literature registration page must be protected and routable');
 assert.doesNotMatch(appNavigation, /data-page="QuanLyDangKyNguVan"/, 'Literature registration must open as a popup from tuition management, not a standalone navigation page');
